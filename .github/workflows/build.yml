@@ -83,12 +83,12 @@ jobs:
             "$PACKAGE_DIR/templates"
 
           # Copy the ROM documentation.
-          if [ ! -f "roms/README.md" ]; then
-            echo "ERROR: roms/README.md was not found."
+          if [ ! -f "roms/place_roms_here.txt" ]; then
+            echo "ERROR: roms/place_roms_here.txt was not found."
             exit 1
           fi
 
-          cp "roms/README.md" "$PACKAGE_DIR/roms/"
+          cp "roms/place_roms_here.txt" "$PACKAGE_DIR/roms/"
 
           # Copy all .p256tpl files directly from templates/.
           # Files in subdirectories are intentionally excluded.
@@ -171,7 +171,7 @@ jobs:
           unexpected_files="$(
             unzip -Z1 "$ZIP_NAME" \
               | grep -Ev \
-                '^(roms/README\.md|templates/[^/]+\.p256tpl|LICENSE\.md|p256_builder\.py|README\.md)$' \
+                '^(roms/place_roms_here\.txt|templates/[^/]+\.p256tpl|LICENSE\.md|p256_builder\.py|README\.md)$' \
               || true
           )"
 
