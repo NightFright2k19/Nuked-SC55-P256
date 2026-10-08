@@ -1,0 +1,129 @@
+name: Build Template Archive (Autobuild)
+
+on:
+  push:
+    paths:
+      - 'templates/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nuked-sc55-p256-autobuild
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Create template archive
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Determine next release number
+        id: version
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const releases = await github.paginate(
+              github.rest.repos.listReleases,
+              {
+                owner,
+                repo,
+                per_page: 100
+              }
+            );
+
+            let maxRevision = 0;
+
+            for (const release of releases) {
+              const match = release.tag_name.match(/^autobuild-r(\d+)$/);
+
+              if (match) {
+                maxRevision = Math.max(
+                  maxRevision,
+                  parseInt(match[1], 10)
+                );
+              }
+            }
+
+            const nextRevision = maxRevision + 1;
+
+            core.setOutput('revision', nextRevision);
+            core.setOutput('tag', `autobuild-r${nextRevision}`);
+            core.setOutput('zip', `nuked_sc55_p256_autobuild_r${nextRevision}.zip`);
+
+            console.log(`Latest successful autobuild: r${maxRevision}`);
+            console.log(`Next autobuild: r${nextRevision}`);
+
+      - name: Create ZIP archive
+        env:
+          ZIP_NAME: ${{ steps.version.outputs.zip }}
+        run: |
+          set -euo pipefail
+
+          shopt -s nullglob
+
+          files=(templates/*.p256tpl)
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "ERROR: No .p256tpl files found directly in the templates directory."
+            exit 1
+          fi
+
+          echo "Files to package:"
+          printf ' - %s\n' "${files[@]}"
+
+          rm -f "$ZIP_NAME"
+
+          # -j stores the files without the templates directory
+          # and therefore without any subdirectories.
+          zip -9 -j "$ZIP_NAME" "${files[@]}"
+
+      - name: Verify ZIP contents
+        env:
+          ZIP_NAME: ${{ steps.version.outputs.zip }}
+        run: |
+          set -euo pipefail
+
+          echo "ZIP contents:"
+          unzip -l "$ZIP_NAME"
+
+          echo
+          echo "Verifying archive contents..."
+
+          expected_files=$(find templates -maxdepth 1 -type f -name '*.p256tpl' -printf '%f\n' | sort)
+          actual_files=$(unzip -Z1 "$ZIP_NAME" | sort)
+
+          if [ "$expected_files" != "$actual_files" ]; then
+            echo "ERROR: ZIP contents do not match templates/*.p256tpl."
+            echo
+            echo "Expected:"
+            printf '%s\n' "$expected_files"
+            echo
+            echo "Actual:"
+            printf '%s\n' "$actual_files"
+            exit 1
+          fi
+
+          echo "ZIP contents verified successfully."
+
+      - name: Create GitHub release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.version.outputs.tag }}
+          name: Autobuild r${{ steps.version.outputs.revision }}
+          prerelease: true
+          artifacts: ${{ steps.version.outputs.zip }}
+          artifactErrorsFailBuild: true
+          body: |
+            This automated release contains latest template files for the generation of Nuked-SC55/SC88 CLAP/VST2 files.
+
+            Place these in a subdir called "templates", next to another one called "roms" which contains your SC-55/SC-88 ROM files.
+            The Python script (in the same dir which contains "templates" and "roms") must be executed afterwards as follows: python p256_builder.py
