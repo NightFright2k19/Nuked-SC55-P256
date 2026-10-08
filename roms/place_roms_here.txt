@@ -1,0 +1,2 @@
+Place your ROM files for the SC-55 v1.21, SC-55 MkII v1.01 and/or SC-88 Pro here.
+Subfolders within this folder are allowed. ROM file names do not matter.
