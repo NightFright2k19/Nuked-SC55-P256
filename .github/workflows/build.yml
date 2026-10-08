@@ -82,16 +82,19 @@ jobs:
             "$PACKAGE_DIR/roms" \
             "$PACKAGE_DIR/templates"
 
-          # Copy the ROM documentation.
+          echo "Preparing release package..."
+
+          # ROM placeholder
           if [ ! -f "roms/place_roms_here.txt" ]; then
             echo "ERROR: roms/place_roms_here.txt was not found."
             exit 1
           fi
 
-          cp "roms/place_roms_here.txt" "$PACKAGE_DIR/roms/"
+          cp \
+            "roms/place_roms_here.txt" \
+            "$PACKAGE_DIR/roms/"
 
-          # Copy all .p256tpl files directly from templates/.
-          # Files in subdirectories are intentionally excluded.
+          # Template files
           shopt -s nullglob
           template_files=(templates/*.p256tpl)
 
@@ -100,15 +103,22 @@ jobs:
             exit 1
           fi
 
+          echo
           echo "Template files to package:"
           printf ' - %s\n' "${template_files[@]}"
 
-          cp "${template_files[@]}" "$PACKAGE_DIR/templates/"
+          cp \
+            "${template_files[@]}" \
+            "$PACKAGE_DIR/templates/"
 
-          # Copy the required files into the ZIP root.
-          for file in LICENSE.md p256_builder.py README.md; do
+          # Required files in the ZIP root
+          for file in \
+            LICENSE.md \
+            p256_builder.py \
+            README.md
+          do
             if [ ! -f "$file" ]; then
-              echo "ERROR: Required root file '$file' was not found."
+              echo "ERROR: Required file '$file' was not found."
               exit 1
             fi
 
@@ -117,7 +127,13 @@ jobs:
 
           echo
           echo "Package contents:"
-          find "$PACKAGE_DIR" -type f -printf '%P\n' | sort
+          find "$PACKAGE_DIR" \
+            -type f \
+            -printf '%P\n' \
+            | sort
+
+          echo
+          echo "Creating ZIP archive..."
 
           (
             cd "$PACKAGE_DIR"
@@ -129,6 +145,10 @@ jobs:
               p256_builder.py \
               README.md
           )
+
+          echo
+          echo "ZIP archive created:"
+          ls -lh "$ZIP_NAME"
 
       - name: Verify ZIP contents
         env:
@@ -151,12 +171,12 @@ jobs:
               | sort
           )"
 
-          # unzip -Z1 also reports explicit directory entries
-          # such as "roms/" and "templates/". Ignore those because
+          # unzip -Z1 also reports directory entries such as
+          # "roms/" and "templates/". Ignore those because
           # expected_files contains files only.
           actual_files="$(
             unzip -Z1 "$ZIP_NAME" \
-              | grep -v '/$' \
+              | awk '!/\/$/ { print }' \
               | sort
           )"
 
@@ -171,7 +191,8 @@ jobs:
             exit 1
           fi
 
-          # Make sure no unexpected files are present.
+          # Make sure that only the intended file types and paths
+          # are present in the archive.
           unexpected_files="$(
             printf '%s\n' "$actual_files" \
               | grep -Ev \
@@ -185,7 +206,7 @@ jobs:
             exit 1
           fi
 
-          # Make sure no template files are stored in subdirectories.
+          # Make sure templates are not stored in subdirectories.
           template_subdirs="$(
             printf '%s\n' "$actual_files" \
               | grep '^templates/.*/' \
@@ -198,6 +219,7 @@ jobs:
             exit 1
           fi
 
+          echo
           echo "ZIP contents verified successfully."
 
       - name: Create GitHub release
@@ -212,8 +234,100 @@ jobs:
             This automated release contains latest template files for the generation of **Nuked-SC55/88** CLAP/VST2 files.
 
             **INSTRUCTIONS**
+            - Place these files in a subdir called "templates"
+            - Another directory called "roms" (next to "templates") must contain your SC-55/88 ROM files
+            - Execute the Python script (p256_builder.py, in the same dir as "templates" and "roms"): **python p256_builder.py**
+            - Converted files will end up in two new folders named "output/CLAP" and "output/VST2"
 
-            - Extract the attached zipfile to your hard drive
-            - Copy your SC-55/88 ROM files into the "roms" subdirectory
-            - Execute the Python script (p256_builder.py): **python p256_builder.py**
-            - Converted files will end up in two new folders, named "output/CLAP" and "output/VST2"
+      - name: Delete previous Autobuild releases and tags
+        uses: actions/github-script@v8
+        env:
+          CURRENT_REVISION: ${{ steps.version.outputs.revision }}
+          CURRENT_TAG: ${{ steps.version.outputs.tag }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const currentRevision = parseInt(
+              process.env.CURRENT_REVISION,
+              10
+            );
+
+            const currentTag = process.env.CURRENT_TAG;
+
+            const releases = await github.paginate(
+              github.rest.repos.listReleases,
+              {
+                owner,
+                repo,
+                per_page: 100
+              }
+            );
+
+            for (const release of releases) {
+              const match = release.tag_name.match(/^autobuild-r(\d+)$/);
+
+              if (!match) {
+                continue;
+              }
+
+              const revision = parseInt(match[1], 10);
+
+              // Never delete the release/tag that was just created.
+              if (release.tag_name === currentTag) {
+                console.log(
+                  `Keeping current Autobuild release ${release.tag_name}.`
+                );
+                continue;
+              }
+
+              // Only remove older Autobuild releases.
+              if (revision >= currentRevision) {
+                console.log(
+                  `Keeping Autobuild release ${release.tag_name} ` +
+                  `because it is not older than the current revision.`
+                );
+                continue;
+              }
+
+              console.log(
+                `Deleting old Autobuild release ${release.tag_name} ` +
+                `(release ID ${release.id}).`
+              );
+
+              await github.rest.repos.deleteRelease({
+                owner,
+                repo,
+                release_id: release.id
+              });
+
+              console.log(
+                `Deleted release ${release.tag_name}.`
+              );
+
+              // Delete the corresponding Git tag as well.
+              try {
+                await github.rest.git.deleteRef({
+                  owner,
+                  repo,
+                  ref: `tags/${release.tag_name}`
+                });
+
+                console.log(
+                  `Deleted Git tag ${release.tag_name}.`
+                );
+              } catch (error) {
+                if (error.status === 404) {
+                  console.log(
+                    `Git tag ${release.tag_name} was already absent.`
+                  );
+                } else {
+                  throw error;
+                }
+              }
+            }
+
+            console.log(
+              `Cleanup complete. Current Autobuild tag ${currentTag} is preserved.`
+            );
