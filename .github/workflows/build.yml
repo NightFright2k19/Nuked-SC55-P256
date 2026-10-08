@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'templates/**'
+      - 'p256_builder.py'
 
   workflow_dispatch:
 
@@ -231,7 +232,12 @@ jobs:
           artifacts: ${{ steps.version.outputs.zip }}
           artifactErrorsFailBuild: true
           body: |
-            This automated release contains latest template files for the generation of **Nuked-SC55/88** CLAP/VST2 files.
+            This automated release contains latest files for the generation of **Nuked-SC55/88** CLAP/VST2 files.
+
+            **SUPPORTED ROMS**
+            - SC-55 v1.21
+            - SC-55 MKII v1.01
+            - SC-88 Pro
 
             **INSTRUCTIONS**
             - Place these files in a subdir called "templates"
