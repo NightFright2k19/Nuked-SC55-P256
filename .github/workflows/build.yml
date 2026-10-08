@@ -59,34 +59,76 @@ jobs:
 
             core.setOutput('revision', nextRevision);
             core.setOutput('tag', `autobuild-r${nextRevision}`);
-            core.setOutput('zip', `nuked_sc55_p256_autobuild_r${nextRevision}.zip`);
+            core.setOutput(
+              'zip',
+              `nuked_sc55_p256_autobuild_r${nextRevision}.zip`
+            );
 
             console.log(`Latest successful autobuild: r${maxRevision}`);
             console.log(`Next autobuild: r${nextRevision}`);
 
-      - name: Create ZIP archive
+      - name: Prepare release package
         env:
           ZIP_NAME: ${{ steps.version.outputs.zip }}
         run: |
           set -euo pipefail
 
+          PACKAGE_DIR="$GITHUB_WORKSPACE/package"
+
+          rm -rf "$PACKAGE_DIR"
+          rm -f "$ZIP_NAME"
+
+          mkdir -p \
+            "$PACKAGE_DIR/roms" \
+            "$PACKAGE_DIR/templates"
+
+          # Copy the ROM documentation.
+          if [ ! -f "roms/README.md" ]; then
+            echo "ERROR: roms/README.md was not found."
+            exit 1
+          fi
+
+          cp "roms/README.md" "$PACKAGE_DIR/roms/"
+
+          # Copy all .p256tpl files directly from templates/.
+          # Files in subdirectories are intentionally excluded.
           shopt -s nullglob
+          template_files=(templates/*.p256tpl)
 
-          files=(templates/*.p256tpl)
-
-          if [ ${#files[@]} -eq 0 ]; then
+          if [ ${#template_files[@]} -eq 0 ]; then
             echo "ERROR: No .p256tpl files found directly in the templates directory."
             exit 1
           fi
 
-          echo "Files to package:"
-          printf ' - %s\n' "${files[@]}"
+          echo "Template files to package:"
+          printf ' - %s\n' "${template_files[@]}"
 
-          rm -f "$ZIP_NAME"
+          cp "${template_files[@]}" "$PACKAGE_DIR/templates/"
 
-          # -j stores the files without the templates directory
-          # and therefore without any subdirectories.
-          zip -9 -j "$ZIP_NAME" "${files[@]}"
+          # Copy the required files into the ZIP root.
+          for file in LICENSE.md p256_builder.py README.md; do
+            if [ ! -f "$file" ]; then
+              echo "ERROR: Required root file '$file' was not found."
+              exit 1
+            fi
+
+            cp "$file" "$PACKAGE_DIR/"
+          done
+
+          echo
+          echo "Package contents:"
+          find "$PACKAGE_DIR" -type f -printf '%P\n' | sort
+
+          (
+            cd "$PACKAGE_DIR"
+
+            zip -9 -r -X "../$ZIP_NAME" \
+              roms \
+              templates \
+              LICENSE.md \
+              p256_builder.py \
+              README.md
+          )
 
       - name: Verify ZIP contents
         env:
@@ -100,17 +142,55 @@ jobs:
           echo
           echo "Verifying archive contents..."
 
-          expected_files=$(find templates -maxdepth 1 -type f -name '*.p256tpl' -printf '%f\n' | sort)
-          actual_files=$(unzip -Z1 "$ZIP_NAME" | sort)
+          PACKAGE_DIR="$GITHUB_WORKSPACE/package"
+
+          expected_files="$(
+            find "$PACKAGE_DIR" \
+              -type f \
+              -printf '%P\n' \
+              | sort
+          )"
+
+          actual_files="$(
+            unzip -Z1 "$ZIP_NAME" \
+              | sort
+          )"
 
           if [ "$expected_files" != "$actual_files" ]; then
-            echo "ERROR: ZIP contents do not match templates/*.p256tpl."
+            echo "ERROR: ZIP contents do not match the release package."
             echo
             echo "Expected:"
             printf '%s\n' "$expected_files"
             echo
             echo "Actual:"
             printf '%s\n' "$actual_files"
+            exit 1
+          fi
+
+          # Make sure no unexpected files or directories are present.
+          unexpected_files="$(
+            unzip -Z1 "$ZIP_NAME" \
+              | grep -Ev \
+                '^(roms/README\.md|templates/[^/]+\.p256tpl|LICENSE\.md|p256_builder\.py|README\.md)$' \
+              || true
+          )"
+
+          if [ -n "$unexpected_files" ]; then
+            echo "ERROR: Unexpected files found in ZIP:"
+            printf '%s\n' "$unexpected_files"
+            exit 1
+          fi
+
+          # Make sure there are no template subdirectories.
+          template_subdirs="$(
+            unzip -Z1 "$ZIP_NAME" \
+              | grep '^templates/.*/' \
+              || true
+          )
+
+          if [ -n "$template_subdirs" ]; then
+            echo "ERROR: Template subdirectories found in ZIP:"
+            printf '%s\n' "$template_subdirs"
             exit 1
           fi
 
@@ -128,7 +208,8 @@ jobs:
             This automated release contains latest template files for the generation of **Nuked-SC55/88** CLAP/VST2 files.
 
             **INSTRUCTIONS**
-            - Place these files in a subdir called "templates"
-            - Another directory called "roms" (next to "templates") must contain your SC-55/88 ROM files
-            - Execute the Python script (p256_builder.py, in the same dir as "templates" and "roms"): **python p256_builder.py**
-            - Converted files will end up in two new folders named "output/CLAP" and "output/VST2"
+
+            - Extract the attached zipfile to your hard drive
+            - Copy your SC-55/88 ROM files into the "roms" subdirectory
+            - Execute the Python script (p256_builder.py): **python p256_builder.py**
+            - Converted files will end up in two new folders, named "output/CLAP" and "output/VST2"
