@@ -1,4 +1,4 @@
-name: Build Template Archive (Autobuild)
+name: Nuked-SC55 P256 Autobuild
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build:
-    name: Nuked-SC55 P256 Autobuild
+    name: Create template archive
     runs-on: ubuntu-24.04
 
     steps:
