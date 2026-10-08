@@ -1,0 +1,146 @@
+name: Build
+
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}-${{ matrix.arch }}
+
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        include:
+          - os: windows-2025
+            label: windows
+            arch: x64
+            triplet: x64-windows
+
+          - os: windows-2025
+            label: windows
+            arch: arm64
+            triplet: arm64-windows
+
+          - os: windows-2025
+            label: windows
+            arch: arm64ec
+            triplet: arm64ec-windows
+
+          - os: ubuntu-22.04
+            label: linux
+            arch: x64
+            triplet: x64-linux
+
+          - os: ubuntu-22.04-arm
+            label: linux
+            arch: arm64
+            triplet: arm64-linux
+
+          - os: macos-15
+            label: macos
+            arch: arm64
+            triplet: arm64-osx
+
+          - os: macos-15
+            label: macos
+            arch: x64
+            triplet: arm64-osx
+
+    env:
+      VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: ~4.4.0
+          ninjaVersion: latest
+
+      - name: Set up vcpkg
+        uses: lukka/run-vcpkg@v11
+        id: runvcpkg
+        with:
+          vcpkgDirectory: ${{ runner.workspace }}/vcpkg
+          vcpkgJsonGlob: '**/vcpkg.json'
+
+      - name: Dump workspace before build
+        shell: bash
+        run: find $RUNNER_WORKSPACE
+
+      - name: Print output of "run-vcpkg"
+        run: echo "root='${{ steps.runvcpkg.outputs.RUNVCPKG_VCPKG_ROOT_OUT }}', triplet='${{ steps.runvcpkg.outputs.RUNVCPKG_VCPKG_DEFAULT_TRIPLET_OUT }}'"
+
+      - name: Configure and build plug-in
+        uses: lukka/run-cmake@v10
+        with:
+          cmakeListsTxtPath: ${{ github.workspace }}/CMakeLists.txt
+          configurePreset: release-${{ matrix.label }}-${{ matrix.arch }}
+          buildPreset: release-${{ matrix.label }}-${{ matrix.arch }}
+
+      - name: Dump workpace after build
+        shell: bash
+        run: find $RUNNER_WORKSPACE
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Nuked-SC55-CLAP-${{ matrix.label }}-${{ matrix.arch }}
+          path: build/release-${{ matrix.label }}-${{ matrix.arch }}/Nuked-SC55.clap
+
+  build-macos-package:
+    name:    Create macOS universal package
+    needs:   build
+    runs-on: macos-15
+    steps:
+      - name: Download macOS build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: Nuked-SC55-CLAP-macos-*
+
+      - name: Dump workspace
+        shell: bash
+        run: find $RUNNER_WORKSPACE
+
+      - name: Create universal binary
+        run: |
+          set -x
+
+          mkdir -p "out/Nuked-SC55.clap"
+
+          X64_EXE="Nuked-SC55-CLAP-macos-x64/Contents/MacOS/Nuked-SC55"
+          ARM64_EXE="Nuked-SC55-CLAP-macos-arm64/Contents/MacOS/Nuked-SC55"
+
+          lipo "$X64_EXE" "$ARM64_EXE" -create -output Nuked-SC55-universal
+
+          mv Nuked-SC55-CLAP-macos-arm64/Contents out/Nuked-SC55.clap
+          mv -f Nuked-SC55-universal out/Nuked-SC55.clap/Contents/MacOS/Nuked-SC55
+
+
+      - name: Verify universal binary
+        run: |
+          ARCHS=$(lipo -archs out/Nuked-SC55.clap/Contents/MacOS/Nuked-SC55)
+
+          if [[ "$ARCHS" == "x86_64 arm64" ]]; then
+            echo "Success! Universal binary app bundle is in 'out/Nuked-SC55.clap'"
+          else
+            echo "Oops, something went wrong. Arch of the CLAP plugin is '$ARCHS'"
+            exit 1
+          fi
+
+
+      - name: Dump workspace
+        shell: bash
+        run: find $RUNNER_WORKSPACE
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: Nuked-SC55-CLAP-macos-universal
+          path: out
+

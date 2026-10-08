@@ -32,18 +32,19 @@ This document is the reference for the current state of the project: what change
 - [Known limitations and open points](#known-limitations-and-open-points)
 - [Known issues](#known-issues)
 - [Using the plug-ins](#using-the-plug-ins)
+- [Development and test tools](#development-and-test-tools)
 - [Credits and license](#credits-and-license)
 
 ---
 
 ## Changes compared to Nuked-SC55-CLAP
 
-This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.com/johnnovak/Nuked-SC55-CLAP). The original is a CLAP plug-in without a user interface that loads one emulated module from ROM files next to the plug-in. Below is the complete list of changes, grouped by topic. Details for each point are in the sections further down.
+This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.com/johnnovak/Nuked-SC55-CLAP) (base: commit `de2a799`, followed by 31 commits of its own). The original is a CLAP plug-in without a user interface that loads one emulated module from ROM files next to the plug-in. Below is the complete list of changes, grouped by topic. Details for each point are in the sections further down.
 
 ### Polyphony
 
-- **Multi-instance polyphony:** N identical, bit-exact emulators run in parallel and their outputs are summed. A note router decides which instance plays which note. Result: **264 voices** (SC-55 v1.21, 11 units), **280 voices** (SC-55mk2, 10 units), **256 voices** (SC-88 Pro, 4 units of 64).
-- **Dynamic instances:** only as many instances run as the music needs. Sleeping instances are brought up to date from a compact state log when they wake, and a background thread pre-synchronises the next sleeping units so that waking up never causes a dropout.
+- **Multi-instance polyphony:** N identical, bit-exact emulators run in parallel and their outputs are summed. A note router in `src/poly_router.h` decides which instance plays which note. Result: **264 voices** (SC-55 v1.21, 11 units), **280 voices** (SC-55mk2, 10 units), **256 voices** (SC-88 Pro, 4 units of 64).
+- **Dynamic instances:** only as many instances run as the music needs. Sleeping instances are brought up to date from a compact state log when they wake (`src/state_log.h`), and a background thread pre-synchronises the next sleeping units so that waking up never causes a dropout.
 - **Constant DC offset compensation:** every instance outputs a constant 1/32 of full scale; it is measured after boot and subtracted from all additional instances. With 24/28 voices or fewer, the output is **bit-identical** with a single module.
 - **Runtime voice limit** (SETUP menu): 24 / 48 / 64 / 96 / 128 / 160 / 192 / 224 / 256 (SC-55mk2: 28 / 56 / ...). Instances above the limit receive no new notes and go to sleep once silent.
 
@@ -54,13 +55,13 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 
 ### Formats and packaging
 
-- **VST2** (new): a bridge exposes the CLAP plug-in of the same file as a VST2 plug-in. The VST2 binary interface is described independently; **no Steinberg SDK** is used. One file serves as `.clap` and as `.dll`.
+- **VST2** (new): a bridge exposes the CLAP plug-in of the same file as a VST2 plug-in. The VST2 binary interface is described independently in `src/vst2/vst2_abi.h`; **no Steinberg SDK** is used. One file serves as `.clap` and as `.dll`.
 - **Single-file builds with embedded ROMs** (new, private use only) and **ROM-less templates** plus a Python builder that inserts your ROMs, so no compiler is needed.
 - **Settings only in the plug-in state:** no `.ini`, no registry, no file writes. The state is saved by the host (CLAP state / VST2 chunk), changes are reported to the host.
 
 ### Core and speed
 
-- **Bit-exact lazy timer evaluation**: event-free timer ticks only increment a counter. About **35-40 % less CPU** per instance, output identical to the original core.
+- **Bit-exact lazy timer evaluation** in `mcu_timer.cpp`: event-free timer ticks only increment a counter. About **35-40 % less CPU** per instance (with `-O3 -flto`), output identical to the original core.
 - **Packing and wake logic:** notes fill the lowest awake instance first; a single awake instance renders directly in the audio thread without any threading overhead.
 - **Memory:** wave ROMs are shared between SC-55 units (one block, untouched pages cost nothing); the unused 4 MB LCD pixel buffer per unit is gone; 88emu units share one decoded wave ROM.
 - **Faster loading:** SC-55 units are cloned from unit 0 instead of each booting itself (SC-55mk2 load time 6.4 s to 0.6 s under Wine); SC-88 Pro units boot in the background.
@@ -115,7 +116,7 @@ See [Building from source](#building-from-source).
 | SC-88 Pro | yes | 64 | 4 | 256 |
 | SC-55 v1.00 / v1.10 / v1.20 / v2.00 | source builds with external ROMs only | 24 | configurable | - |
 
-The ROMs are recognised **by content** (SHA-256), not by file name. Dumps of other versions are ignored. The hashes below are the first 16 digits.
+The ROMs are recognised **by content** (SHA-256), not by file name. Dumps of other versions are ignored. The hashes below are the first 16 digits; the full values are in `tools/p256_builder/p256_builder.py`.
 
 | Model | Role | Typical file name | SHA-256 (start) |
 | --- | --- | --- | --- |
@@ -164,7 +165,7 @@ The limit of 24 partials (SC-55) or 28 (SC-55mk2) is built into the PCM chip, wh
 
 All instances boot identically and receive identical controller and SysEx data. LFOs, chorus and reverb therefore run in lockstep, and the sum behaves (linearly) like the effect section of a single module.
 
-### Note router
+### Note router (`src/poly_router.h`)
 
 | Event | Handling |
 | --- | --- |
@@ -186,7 +187,7 @@ Every SC-55 instance outputs a constant 1/32 of full scale. It is measured after
 After boot, everything except `min_active` (1) sleeps.
 
 - **Going to sleep:** the output of an awake unit must stay below 2.5e-4 (about -72 dBFS after DC removal, which also covers reverb tails) for 1 s, **and** the remaining awake units must keep at least a quarter of a unit in reserve (or the unit is above the voice limit). The SC-55 mk1 emulation (v1.xx) toggles its output by one step (1.2e-4) even without a sounding voice, so the threshold has to be above that; the MkII does not show this residual noise. When a unit falls asleep, its note assignments are cleared.
-- **State log**: messages that a sleeping unit misses are logged compactly (last value per parameter, ordered by last occurrence) and replayed when it wakes. GS reset / GM on clears the log and gets 60 ms of settle time. Program changes are stored with the bank that was valid at the time, RPN/NRPN as a sequence; increment/decrement (96/97) and the "notes off" controllers are not logged.
+- **State log** (`src/state_log.h`): messages that a sleeping unit misses are logged compactly (last value per parameter, ordered by last occurrence) and replayed when it wakes. GS reset / GM on clears the log and gets 60 ms of settle time. Program changes are stored with the bank that was valid at the time, RPN/NRPN as a sequence; increment/decrement (96/97) and the "notes off" controllers are not logged.
 - **Replay speed:** 3000 MCU cycles per byte on the emulated UART (about 2.5 times MIDI speed), then the buffer is drained and 5 ms are added.
 - **Background warmer:** every 250 ms the audio thread hands the lowest of the **next two** sleeping units that is behind the state log, together with the missing log entries, to a separate thread (`try_lock` only, the audio thread never blocks). The warmer replays them. Result in the test song "grabbag": wake-up takes 0.3-0.9 ms with 0 bytes left to replay; without the warmer the first wake-up replayed 450 bytes (7.6 ms, more than the 11.6 ms block budget allowed).
 - **Rendering:** only awake instances are rendered and measured; one awake instance renders directly in the audio thread, several use a worker pool (the audio thread works with it).
@@ -211,10 +212,10 @@ With CTF, a module falls back to the capital (basic) tone of a program when the 
 
 ## SC-88 Pro engine (88emu)
 
-The SC-88 Pro variant does not use the Nuked core. It uses **88emu**, a low-level emulation of the SC-88 / SC-88VL / SC-88Pro / SC-8850 with the original firmware, written by The Usual Suspects and part of [Gearmulator](https://github.com/dsp56300/gearmulator).
+The SC-88 Pro variant does not use the Nuked core. It uses **88emu**, a low-level emulation of the SC-88 / SC-88VL / SC-88Pro / SC-8850 with the original firmware, written by The Usual Suspects and part of [Gearmulator](https://github.com/dsp56300/gearmulator) (marked "early access alpha" there, GPLv3).
 
-- **Pinned version:** Gearmulator `96deb437794baf109fb996a2f8806ce2ee949246`, with the submodules dsp56300 `c1d6593`, asmjit `3577608`, mc68k `cc3693a`, freetype `8289165`, lunasvg `f8aabfb` (+ plutovg `5e4712c`) and RmlUi `d2e83ba`.
-- **Patches**: `88emu-nuked-poly.patch` adds `emu88_get_active_voice_count` (voice counter), `emu88_set_sc88pro_rom_images` (a normalised ROM set from memory, bypassing the file scan), `emu88_dump_sc88pro_rom_images` (build tool) and `emu88_get_display_memory` (LCD). `dsp56300-mingw.patch` restricts SEH (`__try`) to MSVC.
+- **Pinned version:** Gearmulator `96deb437794baf109fb996a2f8806ce2ee949246`, with the submodules dsp56300 `c1d6593`, asmjit `3577608`, mc68k `cc3693a`, freetype `8289165`, lunasvg `f8aabfb` (+ plutovg `5e4712c`) and RmlUi `d2e83ba`. `tools/build_88emu.sh <target> <source>` fetches and builds exactly this state (about 8-10 min on one core).
+- **Patches** (`third_party/88emu/`): `88emu-nuked-poly.patch` adds `emu88_get_active_voice_count` (voice counter), `emu88_set_sc88pro_rom_images` (a normalised ROM set from memory, bypassing the file scan), `emu88_dump_sc88pro_rom_images` (build tool) and `emu88_get_display_memory` (LCD). `dsp56300-mingw.patch` restricts SEH (`__try`) to MSVC.
 - **Engine variant:** compile-time `NUKED_SC55_ENGINE_88PRO` (model index 6). All differences sit in `#ifdef` blocks at about ten coupling points, so the SC-55 code is unchanged.
 - **Units:** 64 voices per unit, 4 units. 88emu renders at the device rate of 32 kHz, which goes through the existing resampler. Boot takes about 0.7 s per unit.
 - **Port:** only port A (16 parts). The real SC-88 Pro has 32 parts on two ports; VST2 offers only one.
@@ -248,7 +249,7 @@ Both panels are Windows-only (Win32/GDI), 30 frames per second, and read the eng
 
 ### SC-88 Pro panel
 
-- **Graphics:** derived from the panel art of 88emu (GPLv3, The Usual Suspects). An internal script halves it, replaces the 88emu branding by "NUKED-SC88 PRO" and the playlist / EFX fields by VOICES, SETUP, TONE MAP, UNITS and MAX VOICES. The controls (ALL, MUTE, SC-55, SC-88, PART arrows, PREVIEW, VOLUME knob with 31 positions) come from the 88emu player assets (`tools/make_sc88_sprites.py`).
+- **Graphics:** derived from the panel art of 88emu (GPLv3, The Usual Suspects). `tools/make_sc88_panel.py` halves it, replaces the 88emu branding by "NUKED-SC88 PRO" and the playlist / EFX fields by VOICES, SETUP, TONE MAP, UNITS and MAX VOICES. The controls (ALL, MUTE, SC-55, SC-88, PART arrows, PREVIEW, VOLUME knob with 31 positions) come from the 88emu player assets (`tools/make_sc88_sprites.py`).
 - **TONE MAP keys:** SC-55 / SC-88; the green LED shows the active map, both off means SC-88 Pro.
 - **VOLUME:** 0..1, characteristic off / -60 ... 0 dB, applied at the output after resampling with a ramp per block; at 1.0 there is no multiplication (bit-identical). Drag the knob or use the mouse wheel.
 - **MUTE:** per part (bit = MIDI channel). Note ons of that channel are dropped, a newly muted part gets CC 120. The mute state is **not** part of the plug-in state (like on the device).
@@ -257,7 +258,7 @@ Both panels are Windows-only (Win32/GDI), 30 frames per second, and read the eng
 ### LCD details
 
 - Text (`45 10 00 xx`) and bitmap messages (`45 10 01 xx`, 64 bytes) are shown by the emulated firmware; the plug-in does not interpret them.
-- The renderer is shared by both device families. The glass (741 x 268 px from Nuked's `lcd_back.h`) is drawn once. Characters are 5 x 7 dots on a grid of 6, the L/R lamp comes from DDRAM 58, the 16 x 16 matrix from DDRAM 20-23 / 60-63. Lit dots are `#000000`, unlit ones `#e2600a`.
+- The renderer (`src/gui/lcd_render.inc`) is shared by both device families. The glass (741 x 268 px from Nuked's `lcd_back.h`) is drawn once. Characters are 5 x 7 dots on a grid of 6, the L/R lamp comes from DDRAM 58, the 16 x 16 matrix from DDRAM 20-23 / 60-63. Lit dots are `#000000`, unlit ones `#e2600a`.
 - To keep the dots evenly thick at small sizes, the complete LCD is drawn at 741 x 268 and reduced with a separable box filter. Only changed characters, matrix dots and the lamp are redrawn and reduced again; partial and full updates use the same function and are pixel-identical (600 frames compared).
 - With several units: text and fields come from unit 0, the matrix is the OR over all awake units, which equals the peak level per part.
 - Nuked discards LCD writes without a registered backend, so the plug-in registers an empty one (the sound is unchanged).
@@ -312,7 +313,7 @@ Build-time options (CMake cache variable or compiler define):
 | `NUKED_SC55_POLY_TARGET_VOICES` | polyphony target (default 128 in CMake, 256 in the shipped builds) |
 | `NUKED_SC55_ONLY_MODEL=<0..6>` | single-model build: 0 = v1.00, 1 = v1.10, 2 = v1.20, 3 = v1.21, 4 = v2.00, 5 = mk2 v1.01, 6 = SC-88 Pro |
 | `NUKED_SC55_ENGINE_88PRO` | use the 88emu engine |
-| `NUKED_SC55_EMBED_ROMS` | embedded ROMs |
+| `NUKED_SC55_EMBED_ROMS` | embedded ROMs (with a source from `tools/gen_embedded_roms.py`) |
 | `NUKED_SC55_DISPLAY_NAME`, `NUKED_SC55_VST2_NAME`, `NUKED_SC55_VST2_ID` | names and VST2 unique ID |
 
 ---
@@ -352,6 +353,8 @@ A template is the finished plug-in without ROMs. At the place where the ROMs bel
 > [!WARNING]
 > The generated plug-ins **contain your ROMs**. Do not share them.
 
+A short German version of the instructions is in `tools/p256_builder/LIESMICH.txt`, the English one in `tools/p256_builder/README-EN.txt`.
+
 ---
 
 ## Building from source
@@ -367,7 +370,7 @@ A template is the finished plug-in without ROMs. At the place where the ROMs bel
 
 ### Single-file build with embedded ROMs (private use only)
 
-1. An internal script creates a C++ source that includes each ROM with `.incbin` for its slot (SC-55: 0 = rom1, 1 = rom2, 3/4/5 = wave ROMs; SC-55mk2: 0 = rom1, 1 = rom2 (CTF), 2 = rom_sm, 3/4 = wave ROMs).
+1. `tools/gen_embedded_roms.py` creates a C++ source that includes each ROM with `.incbin` for its slot (SC-55: 0 = rom1, 1 = rom2, 3/4/5 = wave ROMs; SC-55mk2: 0 = rom1, 1 = rom2 (CTF), 2 = rom_sm, 3/4 = wave ROMs).
 2. Compile with `-DNUKED_SC55_EMBED_ROMS`, `-DNUKED_SC55_ONLY_MODEL=<n>` and the display name / VST2 ID, `-O3 -flto`, and link `src/gui/editor_win32.cpp` and the version resource (`src/vst2/version.rc.in` with the placeholders `@NAME@`, `@FILE@`, `@VER_STR@`, `@VER_NUM@`, `@VENDOR@`, `@COMMENT@`). `tools/build-embedded-win64.sh.inc` contains the build function.
 3. For a **template** instead, call `gen_embedded_roms.py --slot <out.cpp> <romset> <name> <capacity>` (the build function does this when `NK_SLOT_CAP` is set) and run `tools/p256_builder/compact_template.py` on the result.
 
@@ -393,10 +396,10 @@ fetches Gearmulator in the pinned state, applies the patches in `third_party/88e
 
 | Song | Original | Poly before optimisation | Current |
 | --- | --- | --- | --- |
-| E1M1.mid (Doom) | 4.6 % | 12.4 % | **3.8 %** |
-| Animus.mid | 5.4 % | 16.6 % | **12.3 %** |
+| E1M1 (Doom) | 4.6 % | 12.4 % | **3.8 %** |
+| Animus | 5.4 % | 16.6 % | **12.3 %** |
 
-Animus.mid needs 32-41 voices, which means 2-3 units (the original steals the rest). One SC-55 instance took about 19 % (v1.21) / 30 % (MkII) of one core before the optimisation (sandbox, one core). An SC-88 Pro unit costs about 11-12 % of one core. The interface thread with the editor open takes 3.3 % (SC-55) or 2.9 % (SC-88 Pro) of a core under Wine, while a song plays in real time.
+"Animus" needs 32-41 voices, which means 2-3 units (the original steals the rest). One SC-55 instance took about 19 % (v1.21) / 30 % (MkII) of one core before the optimisation (sandbox, one core). An SC-88 Pro unit costs about 11-12 % of one core. The interface thread with the editor open takes 3.3 % (SC-55) or 2.9 % (SC-88 Pro) of a core under Wine, while a song plays in real time.
 
 ### Core optimisation (bit-exact)
 
@@ -430,8 +433,8 @@ Only SC-55 unit 0 boots; the others take a bit-exact copy of its state (`Emulato
 
 ### Method
 
-- **Reference:** the unchanged upstream core and recorded **golden values**: hashes and CPU times for the core of v1.21 and mk2, for the three plug-ins on the plug-in level, and for the prepared SC-88 Pro ROM set. They are generated with `tools/make_golden.sh` and renewed after every deliberate change of the sound.
-- **Test material:** the polyphony test `SC55-Polyphonie-Test.mid`, game music (E1M1.mid, Animus.mid, Grabbag.mid), and LCD test files (StarGame.mid, 3X3EYES.mid).
+- **Reference:** the unchanged upstream core (`tools/exact/core_orig`) and recorded **golden values** (`tests/golden.json`): hashes and CPU times for the core of v1.21 and mk2, for the three plug-ins on the plug-in level, and for the prepared SC-88 Pro ROM set. They are generated with `tools/make_golden.sh` and renewed after every deliberate change of the sound.
+- **Test material:** the polyphony test `SC55-Polyphonie-Test.mid` (generated by `tools/midi/gen.py`), game music (E1M1, Animus, Duke Nukem 3D "grabbag"), and LCD test files (StarGame, 3X3EYES).
 - **Environment:** the automated tests ran under Wine on Linux. The author confirmed playback on Windows (CPU measurements above, glitch-free playback of the "grabbag" song with both SC-55 variants, running back to a single unit); the SC-88 Pro and its map switch run on the author's machine. Wider testing in different DAWs is still open.
 
 ### Polyphony test
@@ -448,8 +451,8 @@ Awake instances per round (v1.21, dynamic): 1 / 2 / 3 / 5 / 6 / 7 / 9 / 11 / 11.
 
 ### Bit-exactness
 
-- E1M1 on v1.00 / v1.21 / v2.00 and the polyphony test on v1.21 / MkII: identical to the original core.
-- The timer optimisation, the memory changes (shared wave ROM, LCD buffer), the state copy, the volume stage at 1.0 and the incremental LCD are checked against internal script: identical.
+- E1M1 on v1.00 / v1.21 / v2.00 and the polyphony test on v1.21 / MkII: identical to the original core (`tools/exact/verify.sh`, 5 combinations).
+- The timer optimisation, the memory changes (shared wave ROM, LCD buffer), the state copy, the volume stage at 1.0 and the incremental LCD are checked against `tests/golden.json`: identical.
 - With 24 / 28 voices or fewer, plug-in output equals a single module (hash).
 - The SC-55 code with the SC-88 Pro engine added is byte-identical to the version before it.
 - SC-88 Pro: three runs with embedded ROMs equal the golden value; the voice counter and the map switch were tested separately.
@@ -475,7 +478,7 @@ These are limits of the approach, or things that are not done yet.
 - **16 parts only.** The SC-55 has one MIDI port; the SC-88 Pro has 32 parts on two ports, but VST2 only offers one. A second port for parts B01-B16 (CLAP only) is possible.
 - **SC-88 Pro:** uses much more memory (166 MB) and larger files (about 27 MB) than the SC-55 variants. 88emu is an early access alpha and models the analog output stages for SC-55 mk1/mk2 too (`AnalogOutputMode`), which might become a sound option later.
 - **64-bit only, Windows only for the editor and single-file builds.** There is no 32-bit build yet; 32-bit programs can use a MIDI driver that hosts VST plug-ins (see [Using the plug-ins](#using-the-plug-ins)).
-- **Not yet decided:** Language selection in SETUP menu (automatic / English / German, stored in the state); a 48-voice variant for lower peak load (available today through SETUP); other 88emu devices (SC-88, SC-8850); more CPU work (resampler, about 11 % of the plug-in share, not bit-exact; mixing overhead with several instances); HiDPI scaling and fonts of the editor.
+- **Not yet decided:** a language selection in the SETUP menu (automatic / English / German, stored in the state); a 48-voice variant for lower peak load (available today through SETUP); other 88emu devices (SC-88, SC-8850); more CPU work (resampler, about 11 % of the plug-in share, not bit-exact; mixing overhead with several instances); HiDPI scaling and fonts of the editor.
 
 ---
 
@@ -497,12 +500,33 @@ These are limits of the approach, or things that are not done yet.
 
 ---
 
+## Development and test tools
+
+The development workbench contains the source, the complete patch series (`patches/`, 31 `git format-patch` files on `de2a799`), and all tools that were used for the measurements. The most important ones:
+
+| Tool | Purpose |
+| --- | --- |
+| `tools/exact/ref_orig`, `ref_new`, `verify.sh` | one emulator without plug-in: renders an event list and prints an FNV hash and CPU time; same hash = bit-exact |
+| `tools/test/play`, `e1`, `host`, `diag`, `peaks` | CLAP-level tests: polyphony test per round, event lists with CPU and voices per 10 s, scenarios (single note, 160-note flood, CTF, 256 retriggers, runtime limit), wake/sleep log with replay bytes and block time |
+| `tools/test/diag88`, `play88`, `peaks88`, `map88`, `tools/sc88probe/` | the same against the SC-88 Pro engine, including the map transitions |
+| `tools/winbuild/vsthost.exe`, `hostw.exe`, `clapgui.exe`, `guihost.exe`, `lcdhost.exe`, `guiload.exe` | Windows test hosts (run under Wine): VST2 / CLAP host, editor test with screenshots and menu, LCD screenshots at song times, CPU of the interface thread |
+| `tools/test/lcdtest`, `lcddump` | LCD renderer (incremental vs. full, must give 0 differences), character memory dump |
+| `tools/test/mem`, `act`, `idle` | memory, load time and idle load of a plug-in |
+| `tools/make_golden.sh`, `tests/golden.json` | reference hashes and CPU times |
+| `tools/upstream_check.sh` | `report`: new relevant commits in Nuked-SC55-CLAP and Gearmulator since the pinned state (`upstream.lock`); `trial`: build the new state with our patches and compare with the golden values |
+| `tools/midi/gen.py`, `smf2ev.py` | polyphony test MIDI file, SMF to event list |
+
+### Keeping up with upstream
+
+`upstream.lock` pins the observed states: Nuked-SC55-CLAP `de2a799` (paths `src/`, CMake, vcpkg) and Gearmulator `96deb437794b` (88lib, XP chip, panel graphics, CPU cores including dsp56300, synthLib / hardwareLib / baseLib). Our own changes to the Nuked core are also kept as a single patch, `third_party/nuked-core/nuked-core-timers.patch` (timers, memory, state copy), so that it can be checked on its own against a new upstream. A new state is taken over by changing the pin, adapting the patches if needed, rebuilding and renewing the golden values. A GitHub Actions template for a weekly report as an issue is in `ci/`.
+
+---
+
 ## Credits and license
 
 - **NukeYKT** - [Nuked-SC55](https://github.com/nukeykt/Nuked-SC55), the low-level SC-55 emulation this project is built on
 - **John Novak** - [Nuked-SC-55-CLAP](https://github.com/johnnovak/Nuked-SC55-CLAP), the CLAP plug-in this project forked from
 - **dsp56300** - [Gearmulator](https://github.com/dsp56300/gearmulator), including the 88emu core used for the SC-88 Pro
-- **shingo45endo** - [SC55MK2-CTF-Patcher](https://github.com/shingo45endo/sc55mk2-ctf-patcher), tool to modify the SC-55mkII firmware for CTF support
 - **Falcosoft** - Falcosoft MIDI Player and Falcosoft VST MIDI Driver ([falcosoft.hu](https://falcosoft.hu/))
 - **Roland** - [Roland](https://www.roland.com), the SC-55, SC-55mk2 and SC-88 Pro sound modules
 

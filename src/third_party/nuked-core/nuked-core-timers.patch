@@ -1,0 +1,539 @@
+diff --git a/src/nuked-sc55/backend/emu.cpp b/src/nuked-sc55/backend/emu.cpp
+index 33319dc..abfbe5f 100644
+--- a/src/nuked-sc55/backend/emu.cpp
++++ b/src/nuked-sc55/backend/emu.cpp
+@@ -1,3 +1,5 @@
++#include <cstring>
++#include <new>
+ /*
+  * Copyright (C) 2021, 2024 nukeykt
+  *
+@@ -214,15 +216,15 @@ std::span<uint8_t> Emulator::MapBuffer(RomLocation location)
+     case RomLocation::ROM2:
+         return GetMCU().rom2;
+     case RomLocation::WAVEROM1:
+-        return GetPCM().waverom1;
++        return std::span<uint8_t>(GetPCM().waverom1, pcm_t::WAVEROM1_SIZE);
+     case RomLocation::WAVEROM2:
+-        return GetPCM().waverom2;
++        return std::span<uint8_t>(GetPCM().waverom2, pcm_t::WAVEROM2_SIZE);
+     case RomLocation::WAVEROM3:
+-        return GetPCM().waverom3;
++        return std::span<uint8_t>(GetPCM().waverom3, pcm_t::WAVEROM3_SIZE);
+     case RomLocation::WAVEROM_CARD:
+-        return GetPCM().waverom_card;
++        return std::span<uint8_t>(GetPCM().waverom_card, pcm_t::WAVEROM_CARD_SIZE);
+     case RomLocation::WAVEROM_EXP:
+-        return GetPCM().waverom_exp;
++        return std::span<uint8_t>(GetPCM().waverom_exp, pcm_t::WAVEROM_EXP_SIZE);
+     case RomLocation::SMROM:
+         return m_sm->rom;
+     }
+@@ -257,3 +259,58 @@ bool Emulator::LoadRom(RomLocation location, std::span<const uint8_t> source)
+ 
+     return true;
+ }
++
++// Bitwise copy of a state struct whose only non-trivial members are restored by the caller.
++template <class T>
++static void RawCopy(T& dst, const T& src)
++{
++    std::memcpy(static_cast<void*>(&dst), static_cast<const void*>(&src), sizeof(T));
++}
++
++void Emulator::CopyStateFrom(const Emulator& other)
++{
++    // CPU: keep the links to our own components and our sample callback.
++    {
++        mcu_t& d = *m_mcu;
++        submcu_t* sm = d.sm; pcm_t* pcm = d.pcm; mcu_timer_t* timer = d.timer; lcd_t* lcd = d.lcd;
++        void* ud = d.callback_userdata; const auto cb = d.sample_callback;
++        RawCopy(d, *other.m_mcu); // std::atomic<uint32_t> button_pressed: lock-free, copies as a value
++        d.sm = sm; d.pcm = pcm; d.timer = timer; d.lcd = lcd;
++        d.callback_userdata = ud; d.sample_callback = cb;
++    }
++    // Sub-CPU and timers: plain data plus a back link.
++    {
++        mcu_t* m = m_sm->mcu;
++        RawCopy(*m_sm, *other.m_sm);
++        m_sm->mcu = m;
++    }
++    {
++        mcu_t* m = m_timer->mcu;
++        RawCopy(*m_timer, *other.m_timer);
++        m_timer->mcu = m;
++    }
++    // PCM chip: the wave ROM block is reference counted and must not be copied bitwise.
++    {
++        pcm_t& d = *m_pcm;
++        mcu_t* m = d.mcu;
++        std::shared_ptr<uint8_t> keep = std::move(d.waverom_block);
++        RawCopy(d, *other.m_pcm);
++        new (&d.waverom_block) std::shared_ptr<uint8_t>(std::move(keep)); // overwrite the raw bytes
++        d.share_waveroms_from(d);  // re-derive our own wave ROM pointers
++        d.mcu = m;
++    }
++    // LCD: controller registers and memory only (mutex, backend and pixel buffer stay ours).
++    {
++        lcd_t& d = *m_lcd;
++        const lcd_t& s = *other.m_lcd;
++        d.color1 = s.color1; d.color2 = s.color2;
++        d.LCD_DL = s.LCD_DL; d.LCD_N = s.LCD_N; d.LCD_F = s.LCD_F; d.LCD_D = s.LCD_D;
++        d.LCD_C = s.LCD_C; d.LCD_B = s.LCD_B; d.LCD_ID = s.LCD_ID; d.LCD_S = s.LCD_S;
++        d.LCD_DD_RAM = s.LCD_DD_RAM; d.LCD_AC = s.LCD_AC; d.LCD_CG_RAM = s.LCD_CG_RAM;
++        d.LCD_RAM_MODE = s.LCD_RAM_MODE;
++        std::memcpy(d.LCD_Data, s.LCD_Data, sizeof(d.LCD_Data));
++        std::memcpy(d.LCD_CG, s.LCD_CG, sizeof(d.LCD_CG));
++        d.enable = s.enable.load();
++        d.width = s.width; d.height = s.height;
++    }
++}
+diff --git a/src/nuked-sc55/backend/emu.h b/src/nuked-sc55/backend/emu.h
+index 8d5bcfd..5e74c5e 100644
+--- a/src/nuked-sc55/backend/emu.h
++++ b/src/nuked-sc55/backend/emu.h
+@@ -106,6 +106,13 @@ public:
+ 
+     mcu_t& GetMCU() { return *m_mcu; }
+     pcm_t& GetPCM() { return *m_pcm; }
++    // Share the (identical, read-only) wave ROMs of another emulator that was
++    // loaded with the same ROM set; frees this emulator's own copy.
++    void ShareWaveRomsFrom(const Emulator& other) { m_pcm->share_waveroms_from(*other.m_pcm); }
++    // Make this emulator an exact copy of another one loaded with the same ROM set (CPU,
++    // sub-CPU, timers, PCM chip and LCD state). Own links, callbacks, LCD backend/mutex and
++    // the shared wave ROMs are kept. Used to start several identical units from one boot.
++    void CopyStateFrom(const Emulator& other);
+     lcd_t& GetLCD() { return *m_lcd; }
+ 
+ private:
+diff --git a/src/nuked-sc55/backend/lcd.cpp b/src/nuked-sc55/backend/lcd.cpp
+index c819955..5473541 100644
+--- a/src/nuked-sc55/backend/lcd.cpp
++++ b/src/nuked-sc55/backend/lcd.cpp
+@@ -158,6 +158,11 @@ bool LCD_Start(lcd_t& lcd)
+ {
+     bool success = true;
+ 
++    if (!lcd.buffer)
++    {
++        lcd.buffer = new uint32_t[lcd_height_max][lcd_width_max]();
++    }
++
+     if (lcd.mcu->romset == Romset::JV880)
+     {
+         lcd.width = 820;
+@@ -330,7 +335,7 @@ void LCD_FontRenderLR(lcd_t& lcd, uint8_t* LCD_CG, uint8_t ch)
+ 
+ void LCD_Render(lcd_t& lcd)
+ {
+-    if (!lcd.backend)
++    if (!lcd.backend || !lcd.buffer)
+     {
+         return;
+     }
+@@ -358,7 +363,7 @@ void LCD_Render(lcd_t& lcd)
+ 
+         if (!lcd.enable && !lcd.mcu->is_jv880)
+         {
+-            memset(lcd.buffer, 0, sizeof(lcd.buffer));
++            memset(lcd.buffer, 0, sizeof(uint32_t) * lcd_height_max * lcd_width_max);
+         }
+         else
+         {
+diff --git a/src/nuked-sc55/backend/lcd.h b/src/nuked-sc55/backend/lcd.h
+index 57cd02b..e0d6afb 100644
+--- a/src/nuked-sc55/backend/lcd.h
++++ b/src/nuked-sc55/backend/lcd.h
+@@ -79,7 +79,11 @@ struct lcd_t {
+     // updated by MCU via LCD_Enable
+     std::atomic<bool> enable = false;
+ 
+-    uint32_t buffer[lcd_height_max][lcd_width_max]{};
++    // Pixel buffer of the built-in renderer (LCD_Render). Allocated by
++    // LCD_Start only: frontends that render the LCD memory themselves
++    // (Nuked SC-55 Poly) never start it and save 4 MB per emulator.
++    uint32_t (*buffer)[lcd_width_max] = nullptr;
++    ~lcd_t() { delete[] buffer; }
+ 
+     std::mutex mutex;
+ 
+diff --git a/src/nuked-sc55/backend/mcu_timer.cpp b/src/nuked-sc55/backend/mcu_timer.cpp
+index 1ebd98f..c0fea53 100644
+--- a/src/nuked-sc55/backend/mcu_timer.cpp
++++ b/src/nuked-sc55/backend/mcu_timer.cpp
+@@ -34,6 +34,7 @@
+ 
+ #include "mcu_timer.h"
+ #include "mcu.h"
++#include <bit>
+ #include <cstdint>
+ 
+ enum TMR_TCR_Bits : uint8_t
+@@ -99,6 +100,8 @@ enum FRT_Field_Offset : uint8_t
+     REG_ICRL  = 0x09,
+ };
+ 
++static void TIMER_Sync(mcu_timer_t& timer);
++
+ void TIMER_Init(mcu_timer_t& timer, mcu_t& mcu)
+ {
+     timer.mcu = &mcu;
+@@ -106,6 +109,11 @@ void TIMER_Init(mcu_timer_t& timer, mcu_t& mcu)
+ 
+ void TIMER_Reset(mcu_timer_t& timer)
+ {
++    TIMER_Sync(timer);
++    for (bool& d : timer.frt_dirty) d = true;
++    timer.tmr_dirty  = true;
++    timer.next_event = 0;
++
+     for (int i = 0; i < 3; ++i)
+     {
+         timer.frt[i] = {
+@@ -130,10 +138,13 @@ void TIMER_Reset(mcu_timer_t& timer)
+ 
+ void TIMER_Write(mcu_timer_t& timer, uint32_t address, uint8_t data)
+ {
++    TIMER_Sync(timer);
++    timer.next_event = 0;
+     uint32_t t = (address >> 4) - 1;
+     if (t > 2)
+         return;
+     frt_t& frt = timer.frt[t];
++    timer.frt_dirty[t] = true;
+ 
+     address &= 0x0f;
+     switch (address)
+@@ -186,6 +197,7 @@ void TIMER_Write(mcu_timer_t& timer, uint32_t address, uint8_t data)
+ 
+ uint8_t TIMER_Read(mcu_timer_t& timer, uint32_t address)
+ {
++    TIMER_Sync(timer);
+     uint32_t t = (address >> 4) - 1;
+     if (t > 2)
+         return 0xff;
+@@ -225,7 +237,10 @@ uint8_t TIMER_Read(mcu_timer_t& timer, uint32_t address)
+ 
+ void TIMER2_Write(mcu_timer_t& timer, uint32_t address, uint8_t data)
+ {
++    TIMER_Sync(timer);
++    timer.next_event = 0;
+     tmr_t& tmr = timer.tmr;
++    timer.tmr_dirty = true;
+ 
+     switch (address)
+     {
+@@ -268,6 +283,7 @@ void TIMER2_Write(mcu_timer_t& timer, uint32_t address, uint8_t data)
+ 
+ uint8_t TIMER_Read2(mcu_timer_t& timer, uint32_t address)
+ {
++    TIMER_Sync(timer);
+     tmr_t& tmr = timer.tmr;
+ 
+     switch (address)
+@@ -289,15 +305,11 @@ uint8_t TIMER_Read2(mcu_timer_t& timer, uint32_t address)
+     return 0xff;
+ }
+ 
+-inline void TIMER_ClockFrt(mcu_timer_t& timer, int frt_id)
++// One complete FRT tick (original logic, without the clock gate).
++static inline void TIMER_TickFrt(mcu_timer_t& timer, int frt_id)
+ {
+     frt_t& frt = timer.frt[frt_id];
+ 
+-    if (timer.cycles & timer.frt_step_table[frt.tcr & (FRT_TCR_CKS0 | FRT_TCR_CKS1)])
+-    {
+-        return;
+-    }
+-
+     const bool matcha = frt.frc == frt.ocra;
+     const bool matchb = frt.frc == frt.ocrb;
+     if ((frt.tcsr & FRT_TCSR_CCLRA) && matcha) // CCLRA
+@@ -327,22 +339,11 @@ inline void TIMER_ClockFrt(mcu_timer_t& timer, int frt_id)
+         MCU_Interrupt_SetRequest(*timer.mcu, (MCU_Interrupt_Source)(INTERRUPT_SOURCE_FRT0_OCIB + frt_id * 4), 1);
+ }
+ 
+-inline void TIMER_ClockTmr(mcu_timer_t& timer)
++// One complete 8-bit timer tick (original logic, without the clock gate).
++static inline void TIMER_TickTmr(mcu_timer_t& timer)
+ {
+     tmr_t& tmr = timer.tmr;
+ 
+-    const uint16_t step_mask = timer.tmr_step_table[tmr.tcr & (TMR_TCR_CKS0 | TMR_TCR_CKS1 | TMR_TCR_CKS2)];
+-
+-    if (step_mask == 0)
+-    {
+-        return;
+-    }
+-
+-    if (timer.cycles & step_mask)
+-    {
+-        return;
+-    }
+-
+     const bool matcha = tmr.tcnt == tmr.tcora;
+     const bool matchb = tmr.tcnt == tmr.tcorb;
+     if ((tmr.tcr & (TMR_TCR_CCLR0 | TMR_TCR_CCLR1)) == TMR_TCR_CCLR0 && matcha)
+@@ -376,18 +377,161 @@ inline void TIMER_ClockTmr(mcu_timer_t& timer)
+         MCU_Interrupt_SetRequest(*timer.mcu, INTERRUPT_SOURCE_TIMER_CMIB, 1);
+ }
+ 
+-void TIMER_Clock(mcu_timer_t& timer, uint64_t cycles)
++// Number of timer cycles c in [t0, t1) with (c & mask) == 0
++static inline uint64_t TIMER_TicksIn(uint64_t t0, uint64_t t1, uint64_t mask)
++{
++    const int sh = std::popcount(mask); // mask = 2^sh - 1
++    return ((t1 + mask) >> sh) - ((t0 + mask) >> sh);
++}
++
++// Bit-exact equivalent of stepping every timer cycle (original loop):
++// The timers are independent of each other and only set interrupt-pending
++// bits, which the MCU evaluates before its next instruction. So the ticks of
++// one timer within this call can be processed in bulk. A tick is uneventful
++// if the counter matches neither compare register and does not overflow, and
++// the timer's registers were not written since its last full tick (a write
++// may enable an interrupt whose flag is already set, which the next tick
++// must raise). Uneventful ticks only increment the counter; all other ticks
++// run the original logic.
++// --- Per-timer bulk advance -------------------------------------------------
++// Bit-exact equivalent of stepping every timer cycle (original loop):
++// The timers are independent of each other and only set interrupt-pending
++// bits, which the MCU evaluates before its next instruction. A tick is
++// uneventful if the counter matches neither compare register and does not
++// overflow, and the timer's registers were not written since its last full
++// tick (a write may enable an interrupt whose flag is already set, which the
++// next tick must raise). Uneventful ticks only increment the counter; all
++// other ticks run the original logic. Each timer is advanced lazily: only
++// when its next eventful tick is due or when the MCU accesses the timers.
++
++static void TIMER_AdvanceFrt(mcu_timer_t& timer, int i, uint64_t t1)
+ {
+-    while (timer.cycles * 2 < cycles) // FIXME
++    const uint64_t t0 = timer.tpos[i];
++    if (t1 <= t0) return;
++    frt_t& frt = timer.frt[i];
++    const uint64_t mask = timer.frt_step_table[frt.tcr & (FRT_TCR_CKS0 | FRT_TCR_CKS1)];
++    uint64_t n = TIMER_TicksIn(t0, t1, mask);
++    while (n > 0)
+     {
+-        for (int i = 0; i < 3; i++)
++        if (timer.frt_dirty[i] || frt.frc == frt.ocra || frt.frc == frt.ocrb || frt.frc == 0xffff)
+         {
+-            TIMER_ClockFrt(timer, i);
++            TIMER_TickFrt(timer, i);
++            timer.frt_dirty[i] = false;
++            --n;
++            continue;
+         }
++        const uint64_t da = (uint16_t)(frt.ocra - frt.frc);
++        const uint64_t db = (uint16_t)(frt.ocrb - frt.frc);
++        const uint64_t dv = (uint16_t)(0xffff - frt.frc);
++        uint64_t k = da < db ? da : db;
++        if (dv < k) k = dv;
++        if (n < k) k = n;
++        frt.frc = (uint16_t)(frt.frc + k);
++        n -= k;
++    }
++    timer.tpos[i] = t1;
++}
+ 
+-        TIMER_ClockTmr(timer);
++static void TIMER_AdvanceTmr(mcu_timer_t& timer, uint64_t t1)
++{
++    const uint64_t t0 = timer.tpos[3];
++    if (t1 <= t0) return;
++    tmr_t& tmr = timer.tmr;
++    const uint64_t mask = timer.tmr_step_table[tmr.tcr & (TMR_TCR_CKS0 | TMR_TCR_CKS1 | TMR_TCR_CKS2)];
++    if (mask != 0)
++    {
++        uint64_t n = TIMER_TicksIn(t0, t1, mask);
++        while (n > 0)
++        {
++            if (timer.tmr_dirty || tmr.tcnt == tmr.tcora || tmr.tcnt == tmr.tcorb || tmr.tcnt == 0xff)
++            {
++                TIMER_TickTmr(timer);
++                timer.tmr_dirty = false;
++                --n;
++                continue;
++            }
++            const uint64_t da = (uint8_t)(tmr.tcora - tmr.tcnt);
++            const uint64_t db = (uint8_t)(tmr.tcorb - tmr.tcnt);
++            const uint64_t dv = (uint8_t)(0xff - tmr.tcnt);
++            uint64_t k = da < db ? da : db;
++            if (dv < k) k = dv;
++            if (n < k) k = n;
++            tmr.tcnt = (uint8_t)(tmr.tcnt + k);
++            n -= k;
++        }
++    }
++    timer.tpos[3] = t1;
++}
++
++// Earliest timer cycle with an eventful tick for one timer (from its tpos)
++static uint64_t TIMER_NextEventOf(const mcu_timer_t& timer, int i)
++{
++    const uint64_t t = timer.tpos[i];
++    if (i < 3)
++    {
++        const frt_t&   frt  = timer.frt[i];
++        const uint64_t mask = timer.frt_step_table[frt.tcr & (FRT_TCR_CKS0 | FRT_TCR_CKS1)];
++        const uint64_t first = (t + mask) & ~mask; // first tick cycle >= t
++        uint64_t d = 0;
++        if (!timer.frt_dirty[i] && frt.frc != frt.ocra && frt.frc != frt.ocrb && frt.frc != 0xffff)
++        {
++            const uint64_t da = (uint16_t)(frt.ocra - frt.frc);
++            const uint64_t db = (uint16_t)(frt.ocrb - frt.frc);
++            const uint64_t dv = (uint16_t)(0xffff - frt.frc);
++            d = da < db ? da : db;
++            if (dv < d) d = dv;
++        }
++        return first + d * (mask + 1);
++    }
++    const tmr_t&   tmr  = timer.tmr;
++    const uint64_t mask = timer.tmr_step_table[tmr.tcr & (TMR_TCR_CKS0 | TMR_TCR_CKS1 | TMR_TCR_CKS2)];
++    if (mask == 0) return UINT64_MAX;
++    const uint64_t first = (t + mask) & ~mask;
++    uint64_t d = 0;
++    if (!timer.tmr_dirty && tmr.tcnt != tmr.tcora && tmr.tcnt != tmr.tcorb && tmr.tcnt != 0xff)
++    {
++        const uint64_t da = (uint8_t)(tmr.tcora - tmr.tcnt);
++        const uint64_t db = (uint8_t)(tmr.tcorb - tmr.tcnt);
++        const uint64_t dv = (uint8_t)(0xff - tmr.tcnt);
++        d = da < db ? da : db;
++        if (dv < d) d = dv;
++    }
++    return first + d * (mask + 1);
++}
+ 
+-        ++timer.cycles;
++static inline void TIMER_AdvanceOne(mcu_timer_t& timer, int i, uint64_t t1)
++{
++    if (i < 3) TIMER_AdvanceFrt(timer, i, t1);
++    else TIMER_AdvanceTmr(timer, t1);
++    timer.tnext[i] = TIMER_NextEventOf(timer, i);
++}
++
++static inline void TIMER_UpdateNextEvent(mcu_timer_t& timer)
++{
++    uint64_t ne = timer.tnext[0];
++    for (int i = 1; i < 4; i++) if (timer.tnext[i] < ne) ne = timer.tnext[i];
++    timer.next_event = ne;
++}
++
++// Bring ALL timers up to timer.target (state the original code would have
++// here); used before any timer register access.
++static void TIMER_Sync(mcu_timer_t& timer)
++{
++    for (int i = 0; i < 4; i++) TIMER_AdvanceOne(timer, i, timer.target);
++    timer.cycles = timer.target;
++    TIMER_UpdateNextEvent(timer);
++}
++
++void TIMER_Clock(mcu_timer_t& timer, uint64_t cycles)
++{
++    timer.target = (cycles + 1) / 2; // original: while (timer.cycles * 2 < cycles)
++    // A tick at cycle c is processed once target > c; only advance the
++    // timers whose event is due.
++    if (timer.target > timer.next_event)
++    {
++        for (int i = 0; i < 4; i++)
++            if (timer.target > timer.tnext[i]) TIMER_AdvanceOne(timer, i, timer.target);
++        TIMER_UpdateNextEvent(timer);
+     }
+ }
+ 
+@@ -404,4 +548,5 @@ void TIMER_NotifyRomsetChange(mcu_timer_t& timer)
+     const bool is_mk1    = timer.mcu->is_mk1;
+     timer.frt_step_table = is_mk1 ? FRT_STEP_TABLE_MK1 : FRT_STEP_TABLE_GENERIC;
+     timer.tmr_step_table = is_mk1 ? TMR_STEP_TABLE_MK1 : TMR_STEP_TABLE_GENERIC;
++    timer.next_event     = 0;
+ }
+diff --git a/src/nuked-sc55/backend/mcu_timer.h b/src/nuked-sc55/backend/mcu_timer.h
+index 0e61a8b..6ec5d64 100644
+--- a/src/nuked-sc55/backend/mcu_timer.h
++++ b/src/nuked-sc55/backend/mcu_timer.h
+@@ -75,6 +75,20 @@ struct mcu_timer_t
+     frt_t   frt[3]{};
+     tmr_t   tmr{};
+     uint8_t tempreg = 0;
++
++    // Optimization: timers whose registers were written (or reset) must
++    // process their next tick in full; afterwards uneventful ticks are
++    // accounted in bulk (see TIMER_Clock).
++    bool frt_dirty[3] = {true, true, true};
++    bool tmr_dirty    = true;
++
++    // Lazy evaluation: timers are only advanced when an event is due
++    // (next_event) or when the MCU accesses a timer register.
++    uint64_t target     = 0; // timer cycle the timers should have reached
++    uint64_t next_event = 0; // earliest timer cycle with an eventful tick
++    // Per timer (0-2 = FRT, 3 = TMR): own synced position and next event
++    uint64_t tpos[4]    = {0, 0, 0, 0};
++    uint64_t tnext[4]   = {0, 0, 0, 0};
+ };
+ 
+ void TIMER_Init(mcu_timer_t& timer, mcu_t& mcu);
+diff --git a/src/nuked-sc55/backend/pcm.h b/src/nuked-sc55/backend/pcm.h
+index 4f67432..f97ba26 100644
+--- a/src/nuked-sc55/backend/pcm.h
++++ b/src/nuked-sc55/backend/pcm.h
+@@ -35,6 +35,8 @@
+ #pragma once
+ 
+ #include <cstdint>
++#include <cstdlib>
++#include <memory>
+ 
+ struct mcu_t;
+ 
+@@ -52,6 +54,13 @@ struct PCM_Config
+     uint8_t reg_slots = 1;
+ };
+ 
++// Zero-filled block for all wave ROMs; calloc leaves untouched pages unbacked.
++inline std::shared_ptr<uint8_t> pcm_alloc_waverom_block()
++{
++    constexpr size_t total = 0x200000 + 0x200000 + 0x100000 + 0x200000 + 0x800000;
++    return std::shared_ptr<uint8_t>(static_cast<uint8_t*>(std::calloc(total, 1)), [](uint8_t* p) { std::free(p); });
++}
++
+ struct pcm_t
+ {
+     uint32_t ram1[32][8]{};
+@@ -80,11 +89,31 @@ struct pcm_t
+ 
+     uint16_t eram[0x4000]{};
+ 
+-    uint8_t waverom1[0x200000]{};
+-    uint8_t waverom2[0x200000]{};
+-    uint8_t waverom3[0x100000]{};
+-    uint8_t waverom_card[0x200000]{};
+-    uint8_t waverom_exp[0x800000]{};
++    // Wave ROMs (read-only after loading). They live in one block that is
++    // allocated zero-filled without touching it (unused areas such as the card
++    // or JV-880 expansion ROM therefore occupy no physical memory) and can be
++    // shared between several emulators running the same ROM set
++    // (Nuked SC-55 Poly: one copy for all units). Access is unchanged:
++    // pcm.waverom1[address] etc.
++    static constexpr size_t WAVEROM1_SIZE = 0x200000, WAVEROM2_SIZE = 0x200000, WAVEROM3_SIZE = 0x100000,
++                             WAVEROM_CARD_SIZE = 0x200000, WAVEROM_EXP_SIZE = 0x800000;
++    std::shared_ptr<uint8_t> waverom_block = pcm_alloc_waverom_block();
++    uint8_t* waverom1     = waverom_block.get();
++    uint8_t* waverom2     = waverom1 + WAVEROM1_SIZE;
++    uint8_t* waverom3     = waverom2 + WAVEROM2_SIZE;
++    uint8_t* waverom_card = waverom3 + WAVEROM3_SIZE;
++    uint8_t* waverom_exp  = waverom_card + WAVEROM_CARD_SIZE;
++
++    // Use the (already loaded) wave ROMs of another emulator; frees our own block.
++    void share_waveroms_from(const pcm_t& other)
++    {
++        waverom_block = other.waverom_block;
++        waverom1      = waverom_block.get();
++        waverom2      = waverom1 + WAVEROM1_SIZE;
++        waverom3      = waverom2 + WAVEROM2_SIZE;
++        waverom_card  = waverom3 + WAVEROM3_SIZE;
++        waverom_exp   = waverom_card + WAVEROM_CARD_SIZE;
++    }
+ 
+     bool enable_oversampling = true;
+ };
