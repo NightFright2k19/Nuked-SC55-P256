@@ -531,7 +531,7 @@ The development workbench contains the source, the complete patch series (`patch
 
 ### License
 
-This project is licensed under the **GNU General Public License v3.0** (see [LICENSE](LICENSE), the same license text as [Gearmulator's LICENSE.md](https://github.com/dsp56300/gearmulator/blob/main/LICENSE.md)).
+This project is licensed under the **GNU General Public License v3.0** (see [LICENSE](LICENSE.md), the same license text as [Gearmulator's LICENSE.md](https://github.com/dsp56300/gearmulator/blob/main/LICENSE.md)).
 
 Parts of the code come from other projects and keep their own notices:
 
