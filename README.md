@@ -1,9 +1,9 @@
 # Nuked SC-55 P256
 
 <p align="center">
-<img width="392" height="210" alt="sc55_v121_small" src="https://github.com/user-attachments/assets/420003d2-30f8-4e6d-aa3d-be321ee51622" />
-<img width="392" height="210" alt="sc55_mk2_small" src="https://github.com/user-attachments/assets/a5707ad1-42aa-45c0-8978-1e65ce7e49e3" />
-<img width="460" height="180" alt="sc88_pro_small" src="https://github.com/user-attachments/assets/40b538d1-3abf-49ad-9ab8-93e738933c85" />
+<img width="392" height="212" alt="sc55_v121_small" src="https://github.com/user-attachments/assets/859b9674-e517-4f3e-a5d2-8553150ff9f4" />
+<img width="392" height="212" alt="sc55_mk2_small" src="https://github.com/user-attachments/assets/937acc28-0fc0-4842-a254-99cfff0bee26" />
+<img width="461" height="181" alt="sc88_pro_small" src="https://github.com/user-attachments/assets/57ad5fbe-1a62-442c-b1ef-22388b6181c3" />
 </p>
 
 Single-file **CLAP** and **VST2** plug-ins (Windows x64) for the Roland **SC-55 (v1.21)**, **SC-55mk2 (v1.01, with Capital Tone Fallback)** and **SC-88 Pro**, built on the low-level emulation of [Nuked SC-55](https://github.com/nukeykt/Nuked-SC55) and [88emu](https://github.com/dsp56300/gearmulator). The original modules stop at 24 (SC-55) or 28 (SC-55mk2) simultaneous voices. These plug-ins run several bit-identical emulator instances side by side and distribute the MIDI notes among them, which raises the limit to **256-280 voices** without changing how a single module sounds.
