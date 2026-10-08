@@ -8,8 +8,6 @@
 
 Single-file **CLAP** and **VST2** plug-ins (Windows x64) for the Roland **SC-55 (v1.21)**, **SC-55mk2 (v1.01, with Capital Tone Fallback)** and **SC-88 Pro**, built on the low-level emulation of [Nuked SC-55](https://github.com/nukeykt/Nuked-SC55) and [88emu](https://github.com/dsp56300/gearmulator). The original modules stop at 24 (SC-55) or 28 (SC-55mk2) simultaneous voices. These plug-ins run several bit-identical emulator instances side by side and distribute the MIDI notes among them, which raises the limit to **256-280 voices** without changing how a single module sounds.
 
-This document is the reference for the current state of the project: what changed compared to Nuked-SC55-CLAP, supported models and ROM sets, how to get the plug-ins (with the builder or from source), how the polyphony engine works, what the panels do, how the results were checked, and what is still open.
-
 > [!IMPORTANT]
 > The plug-ins aim to preserve an important part of DOS gaming history for all to enjoy. They are only intended for **personal use** (retro gaming, writing music as a hobby) and **research purposes**. **No ROM files are included in this repository.** Plug-ins that contain your ROMs (everything the builder produces) are for **private use only** and must not be shared.
 
