@@ -125,7 +125,10 @@ jobs:
           artifacts: ${{ steps.version.outputs.zip }}
           artifactErrorsFailBuild: true
           body: |
-            This automated release contains latest template files for the generation of Nuked-SC55/SC88 CLAP/VST2 files.
+            This automated release contains latest template files for the generation of **Nuked-SC55/88** CLAP/VST2 files.
 
-            Place these in a subdir called "templates", next to another one called "roms" which contains your SC-55/SC-88 ROM files.
-            The Python script (in the same dir which contains "templates" and "roms") must be executed afterwards as follows: python p256_builder.py
+            **INSTRUCTIONS**
+            - Place these files in a subdir called "templates"
+            - Another directory called "roms" (next to "templates") must contain your SC-55/88 ROM files
+            - Execute the Python script (p256_builder.py, in the same dir as "templates" and "roms"): **python p256_builder.py**
+            - Converted files will end up in two new folders named "output/CLAP" and "output/VST2"
