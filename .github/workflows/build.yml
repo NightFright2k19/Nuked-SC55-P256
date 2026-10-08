@@ -151,25 +151,29 @@ jobs:
               | sort
           )"
 
+          # unzip -Z1 also reports explicit directory entries
+          # such as "roms/" and "templates/". Ignore those because
+          # expected_files contains files only.
           actual_files="$(
             unzip -Z1 "$ZIP_NAME" \
+              | grep -v '/$' \
               | sort
           )"
 
           if [ "$expected_files" != "$actual_files" ]; then
             echo "ERROR: ZIP contents do not match the release package."
             echo
-            echo "Expected:"
+            echo "Expected files:"
             printf '%s\n' "$expected_files"
             echo
-            echo "Actual:"
+            echo "Actual files:"
             printf '%s\n' "$actual_files"
             exit 1
           fi
 
-          # Make sure no unexpected files or directories are present.
+          # Make sure no unexpected files are present.
           unexpected_files="$(
-            unzip -Z1 "$ZIP_NAME" \
+            printf '%s\n' "$actual_files" \
               | grep -Ev \
                 '^(roms/place_roms_here\.txt|templates/[^/]+\.p256tpl|LICENSE\.md|p256_builder\.py|README\.md)$' \
               || true
@@ -181,15 +185,15 @@ jobs:
             exit 1
           fi
 
-          # Make sure there are no template subdirectories.
+          # Make sure no template files are stored in subdirectories.
           template_subdirs="$(
-            unzip -Z1 "$ZIP_NAME" \
+            printf '%s\n' "$actual_files" \
               | grep '^templates/.*/' \
               || true
-          )
+          )"
 
           if [ -n "$template_subdirs" ]; then
-            echo "ERROR: Template subdirectories found in ZIP:"
+            echo "ERROR: Template files found in subdirectories:"
             printf '%s\n' "$template_subdirs"
             exit 1
           fi
