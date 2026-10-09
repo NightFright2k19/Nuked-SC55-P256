@@ -11,6 +11,9 @@
 // Ordering by last occurrence keeps the semantics of resets too: e.g.
 // "CC1=100, Reset All Controllers" replays in that order, while
 // "Reset All Controllers, CC1=100" keeps CC1 after the reset.
+//
+// Devices with two MIDI inputs (SC-88 Pro): every entry remembers its input
+// port and is replayed on it; channel state is kept per port.
 
 #include <array>
 #include <cstdint>
@@ -24,6 +27,7 @@ public:
 		uint64_t seq;
 		bool is_reset; // GS reset / GM on: needs settle time after replay
 		std::vector<uint8_t> bytes;
+		uint8_t port = 0; // MIDI input to replay on
 	};
 
 	void Clear()
@@ -55,34 +59,38 @@ public:
 		}
 	}
 
-	void AddShort(const uint8_t* d)
+	void AddShort(const uint8_t* d, int port = 0)
 	{
 		const uint8_t status = d[0] & 0xf0;
+		port                 = port & 1;
 		const int ch         = d[0] & 0x0f;
+		const int lch        = port * 16 + ch; // logical channel: state slot
+		cur_port             = uint8_t(port);
 
 		switch (status) {
-		case 0xb0: AddCC(ch, d[1] & 0x7f, d[2] & 0x7f); break;
+		case 0xb0: AddCC(lch, d[1] & 0x7f, d[2] & 0x7f); break;
 		case 0xc0: { // store with the bank that was valid at that time
-			const uint8_t b[] = {uint8_t(0xb0 | ch), 0, bank_msb[ch],
-			                     uint8_t(0xb0 | ch), 32, bank_lsb[ch],
+			const uint8_t b[] = {uint8_t(0xb0 | ch), 0, bank_msb[lch],
+			                     uint8_t(0xb0 | ch), 32, bank_lsb[lch],
 			                     d[0], uint8_t(d[1] & 0x7f)};
-			Put(Key(2, ch, 0), b);
+			Put(Key(2, lch, 0), b);
 		} break;
 		case 0xd0: {
 			const uint8_t b[] = {d[0], uint8_t(d[1] & 0x7f)};
-			Put(Key(3, ch, 0), b);
+			Put(Key(3, lch, 0), b);
 		} break;
 		case 0xe0: {
 			const uint8_t b[] = {d[0], uint8_t(d[1] & 0x7f), uint8_t(d[2] & 0x7f)};
-			Put(Key(4, ch, 0), b);
+			Put(Key(4, lch, 0), b);
 		} break;
 		default: break; // notes, poly AT, realtime: not state
 		}
 	}
 
-	void AddSysEx(std::span<const uint8_t> m)
+	void AddSysEx(std::span<const uint8_t> m, int port = 0)
 	{
 		if (m.size() < 2) return;
+		cur_port = uint8_t(port & 1);
 
 		const bool gm_on = m.size() >= 6 && m[1] == 0x7e && m[3] == 0x09;
 		const bool roland_dt1 = m.size() >= 10 && m[1] == 0x41 &&
@@ -97,20 +105,22 @@ public:
 			return;
 		}
 		if (roland_dt1) {
-			// last write per (address, length) wins
+			// last write per (port, address, length) wins
 			const uint64_t addr = (uint64_t(m[5]) << 16) | (uint64_t(m[6]) << 8) | m[7];
-			Put(Key(7, 0, (addr << 16) | (m.size() & 0xffff)), m);
+			Put(Key(7, cur_port, (addr << 16) | (m.size() & 0xffff)), m);
 			return;
 		}
-		Put(Key(8, 0, Hash(m)), m);
+		Put(Key(8, cur_port, Hash(m)), m);
 	}
 
 private:
 	std::vector<Entry> entries;
 	uint64_t seq = 0;
-	std::array<uint8_t, 16> bank_msb{}, bank_lsb{};
-	std::array<uint8_t, 16> rpn_msb{}, rpn_lsb{};
-	std::array<bool, 16> rpn_is_nrpn{};
+	uint8_t cur_port = 0; // port of the message being added
+	// per logical channel (port * 16 + MIDI channel)
+	std::array<uint8_t, 32> bank_msb{}, bank_lsb{};
+	std::array<uint8_t, 32> rpn_msb{}, rpn_lsb{};
+	std::array<bool, 32> rpn_is_nrpn{};
 
 	static uint64_t Key(uint64_t type, uint64_t ch, uint64_t param)
 	{
@@ -132,12 +142,12 @@ private:
 				break;
 			}
 		}
-		entries.push_back({key, ++seq, is_reset, {bytes.begin(), bytes.end()}});
+		entries.push_back({key, ++seq, is_reset, {bytes.begin(), bytes.end()}, cur_port});
 	}
 
-	void AddCC(int ch, int cc, int val)
+	void AddCC(int ch, int cc, int val) // ch = logical channel
 	{
-		const uint8_t st = uint8_t(0xb0 | ch);
+		const uint8_t st = uint8_t(0xb0 | (ch & 0x0f));
 		switch (cc) {
 		case 0: bank_msb[ch] = uint8_t(val); break;
 		case 32: bank_lsb[ch] = uint8_t(val); break;

@@ -155,22 +155,39 @@ void BuildBackground88(Editor& e)
     lcdview::DrawGlass(e.bg_dc, P88_LCD); // original LCD glass with printed labels
 }
 
+// Part shown in the firmware's part field (DDRAM 0..2, "A01".."B16"), else -1
+int LcdPart88(const uint8_t* dd)
+{
+    if ((dd[0] != 'A' && dd[0] != 'B') || dd[1] < '0' || dd[1] > '1' || dd[2] < '0' || dd[2] > '9') return -1;
+    const int n = (dd[1] - '0') * 10 + (dd[2] - '0');
+    if (n < 1 || n > 16) return -1;
+    return (dd[0] == 'B' ? 16 : 0) + n - 1;
+}
+
 void Draw88(Editor& e, HDC dc)
 {
     NukedSc55& p = *e.plugin;
     if (!e.bg_dc) BuildBackground88(e);
     BitBlt(dc, 0, 0, Width, Height, e.bg_dc, 0, 0, SRCCOPY);
 
+    // --- LCD as driven by the firmware (text and bitmap SysEx messages included). The
+    // selected part follows the part the firmware shows ("A01".."B16"), so the value windows
+    // match the LCD after the PART buttons; a click on a matrix column selects a part of the
+    // shown port without changing the LCD.
+    {
+        lcdview::View view;
+        if (GatherLcd(p, view)) {
+            lcdview::DrawDots(dc, P88_LCD, view, e.lcd_cache);
+            if (const int lp = LcdPart88(view.dd); lp >= 0 && lp != e.lcd_part) {
+                e.lcd_part = lp;
+                e.part     = lp;
+            }
+        }
+    }
     const auto& pt    = p.ui_parts[e.part];
     const bool rhythm = pt.rhythm.load();
     const int prog = pt.prog.load(), bank = pt.bank.load();
     char v[96];
-
-    // --- LCD as driven by the firmware (text and bitmap SysEx messages included)
-    {
-        lcdview::View view;
-        if (GatherLcd(p, view)) lcdview::DrawDots(dc, P88_LCD, view, e.lcd_cache);
-    }
     const int pan = pt.pan.load() - 64;
     const int ks  = pt.key_shift.load() - 0x40;
 
@@ -189,7 +206,7 @@ void Draw88(Editor& e, HDC dc)
     Box88(e, dc, P88_CHORUS, v, C88_LED, true);
     std::snprintf(v, sizeof(v), ks == 0 ? "0" : "%+d", ks);
     Box88(e, dc, P88_KSHIFT, v, C88_LED, true);
-    std::snprintf(v, sizeof(v), "A%02d", e.part + 1);
+    std::snprintf(v, sizeof(v), "%c%02d", e.part < 16 ? 'A' : 'B', e.part % 16 + 1);
     Box88(e, dc, P88_MIDICH, v, C88_LED, true);
 
     // --- Original controls: lit map / MUTE buttons, pressed tint, GAIN knob position

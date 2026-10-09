@@ -94,6 +94,7 @@ private:
 		uint32_t frame;      // render-frame offset in the current block
 		uint32_t offset;     // into midi_bytes
 		uint32_t size;
+		uint8_t port = 0;    // MIDI input (SC-88 Pro: 0 = IN A, 1 = IN B)
 	};
 	struct Instance {
 		std::unique_ptr<Emulator> emu;
@@ -166,7 +167,7 @@ private:
 	void E88ApplyMapSync(Instance& inst, int map);
 	void E88Drain(Instance& inst, size_t bytes, double extra_seconds);
 #endif
-	void UiTrackShort(const uint8_t* d);
+	void UiTrackShort(const uint8_t* d, int port = 0);
 	void UiResetParts();
 	void HandleUiCommands();
 	uint32_t panel_button_bits = 0;  // emulated front-panel button held on unit 0
@@ -193,7 +194,7 @@ private:
 
 	void ProcessEvent(const clap_event_header_t* event, uint32_t render_frame);
 	void QueueMidi(PolyRouter::Mask mask, const uint8_t* data, size_t size,
-	               uint32_t render_frame);
+	               uint32_t render_frame, uint8_t port = 0);
 	void MeasureLoad();
 	void RenderInstance(Instance& inst, uint32_t num_frames);
 
@@ -228,7 +229,14 @@ public:
 		std::atomic<uint8_t> key_shift{0x40}; // GS 40 1x 16, 0x40 = 0 semitones
 		std::atomic<bool> rhythm{false};
 	};
-	std::array<UiPart, 16> ui_parts;
+	// Parts: SC-55 1..16; SC-88 Pro A01..A16 (MIDI IN A) and B01..B16 (IN B)
+#ifdef NUKED_SC55_ENGINE_88PRO
+	static constexpr int kNumPorts = 2;
+#else
+	static constexpr int kNumPorts = 1;
+#endif
+	static constexpr int kNumParts = kNumPorts * 16;
+	std::array<UiPart, kNumParts> ui_parts;
 	std::atomic<int> ui_voices{0};      // sounding partials (all instances)
 	std::atomic<int> ui_awake{1};       // awake emulator instances
 	std::atomic<int> max_voices{256};   // user limit (setup menu)
@@ -266,9 +274,9 @@ public:
 	// SC-88 Pro front panel (GUI thread writes, audio thread reads)
 	std::atomic<float> gain_db{0.0f};      // GAIN knob in dB, kGainMinDb..kGainMaxDb; 0 = default
 	std::atomic<int> preview_note{60};     // system parameter "Prevw Note" 0..127 (C-1..G9), C4 = 60
-	std::atomic<uint32_t> mute_mask{0};    // MUTE per part (bit = part = MIDI channel), not stored
+	std::atomic<uint32_t> mute_mask{0};    // MUTE per part (bit = part = port * 16 + MIDI channel), not stored
 	std::atomic<int> ui_preview{0};        // 1 = PREVIEW pressed, 2 = released
-	std::atomic<int> ui_preview_part{0};
+	std::atomic<int> ui_preview_part{0};   // 0..31 = A01..B16
 	static constexpr float kGainMinDb   = -12.0f, kGainMaxDb = 12.0f;
 	// 88emu's output (DAC full scale = 1.0) sits about 5 dB under the SC-55 plugins (RMS and
 	// peaks of the same songs); at GAIN 0 dB the SC-88 Pro is raised to their level.
@@ -277,10 +285,13 @@ public:
 	static float GainFromLegacyVolume(int vol);       // old state "vol=0..1000" -> GAIN dB, same loudness
 private:
 	float applied_gain     = -1.0f; // < 0: not applied yet
-	int preview_ch         = -1, preview_key = -1;
+	int preview_ch         = -1, preview_key = -1, preview_port = 0;
 	uint32_t applied_mutes = 0;
 	bool injecting         = false;
-	void InjectShort(uint8_t s, uint8_t d1, uint8_t d2);
+	// MIDI input selected by "F5 nn" port-select messages (nn = 1: IN A, 2: IN B);
+	// applies to events of the first CLAP note port and to VST2 (one MIDI input)
+	uint8_t selected_port  = 0;
+	void InjectShort(uint8_t s, uint8_t d1, uint8_t d2, uint16_t port = 0);
 public:
 #endif
 	static constexpr bool HasToneMap()
