@@ -742,18 +742,23 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	{   // PREVIEW: note of the selected part while the button is held
 		const int pv = ui_preview.exchange(0);
 		if ((pv == 1 || pv == 2) && preview_ch >= 0) {
-			InjectShort(static_cast<uint8_t>(0x80 | preview_ch), static_cast<uint8_t>(preview_key), 0);
+			InjectShort(static_cast<uint8_t>(0x80 | preview_ch), static_cast<uint8_t>(preview_key), 0,
+			            static_cast<uint16_t>(preview_port));
 			preview_ch = preview_key = -1;
 		}
 		if (pv == 1) {
-			preview_ch  = std::clamp(ui_preview_part.load(), 0, 15);
-			preview_key = std::clamp(preview_note.load(), 0, 127);
-			InjectShort(static_cast<uint8_t>(0x90 | preview_ch), static_cast<uint8_t>(preview_key), 100);
+			const int part = std::clamp(ui_preview_part.load(), 0, kNumParts - 1);
+			preview_ch   = part % 16;
+			preview_port = part / 16;
+			preview_key  = std::clamp(preview_note.load(), 0, 127);
+			InjectShort(static_cast<uint8_t>(0x90 | preview_ch), static_cast<uint8_t>(preview_key), 100,
+			            static_cast<uint16_t>(preview_port));
 		}
 		// MUTE: newly muted parts fall silent at once (All Sound Off); new notes are dropped
 		const uint32_t mutes = mute_mask.load();
-		for (int ch = 0; ch < 16; ++ch)
-			if ((mutes & ~applied_mutes) & (1u << ch)) InjectShort(static_cast<uint8_t>(0xB0 | ch), 120, 0);
+		for (int part = 0; part < kNumParts; ++part)
+			if ((mutes & ~applied_mutes) & (1u << part))
+				InjectShort(static_cast<uint8_t>(0xB0 | (part % 16)), 120, 0, static_cast<uint16_t>(part / 16));
 		applied_mutes = mutes;
 	}
 	{
@@ -980,7 +985,7 @@ constexpr uint8_t PitchBend       = 0xe0;
 }
 
 void NukedSc55::QueueMidi(const PolyRouter::Mask mask, const uint8_t* data,
-                          const size_t size, const uint32_t render_frame)
+                          const size_t size, const uint32_t render_frame, const uint8_t port)
 {
 	const auto offset = static_cast<uint32_t>(midi_bytes.size());
 	midi_bytes.insert(midi_bytes.end(), data, data + size);
@@ -988,7 +993,7 @@ void NukedSc55::QueueMidi(const PolyRouter::Mask mask, const uint8_t* data,
 	for (int i = 0; i < NumInstances(); ++i) {
 		if ((mask & (PolyRouter::Mask{1} << i)) && instances[i].awake) {
 			instances[i].queue.push_back(
-			        {render_frame, offset, static_cast<uint32_t>(size)});
+			        {render_frame, offset, static_cast<uint32_t>(size), port});
 		}
 	}
 }
@@ -1016,16 +1021,26 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 				len = 1; // realtime/system: forward status only
 			}
 
+			uint8_t port = 0;
 #ifdef NUKED_SC55_ENGINE_88PRO
+			if (midi_event->data[0] == 0xf5) { // port select: F5 01 = IN A, F5 02 = IN B
+				if (midi_event->data[1] == 1 || midi_event->data[1] == 2)
+					selected_port = static_cast<uint8_t>(midi_event->data[1] - 1);
+				break; // not passed on to the device
+			}
+			// second CLAP note port = IN B; otherwise the port chosen by F5
+			// (panel actions name their port directly)
+			if (injecting) port = static_cast<uint8_t>(midi_event->port_index & 1);
+			else port = (midi_event->port_index == 1) ? 1 : selected_port;
 			if (!injecting && status == NoteOn && midi_event->data[2] != 0 &&
-			    (applied_mutes & (1u << (midi_event->data[0] & 0x0f)))) {
+			    (applied_mutes & (1u << (port * 16 + (midi_event->data[0] & 0x0f))))) {
 				break; // MUTE: part silenced
 			}
 #endif
-			state_log.AddShort(midi_event->data);
-			UiTrackShort(midi_event->data);
-			const auto mask = router.RouteShort(midi_event->data);
-			QueueMidi(mask, midi_event->data, len, render_frame);
+			state_log.AddShort(midi_event->data, port);
+			UiTrackShort(midi_event->data, port);
+			const auto mask = router.RouteShort(midi_event->data, port);
+			QueueMidi(mask, midi_event->data, len, render_frame, port);
 #ifdef DEBUG
 			log_midi_message(midi_event);
 #endif
@@ -1036,22 +1051,29 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 			        reinterpret_cast<const clap_event_midi_sysex*>(event);
 
 			const std::span msg{sysex_event->buffer, sysex_event->size};
-			state_log.AddSysEx(msg);
+			uint8_t port = 0;
+#ifdef NUKED_SC55_ENGINE_88PRO
+			port = (sysex_event->port_index == 1) ? 1 : selected_port;
+#endif
+			state_log.AddSysEx(msg, port);
 			{
 				const bool gm_on = msg.size() >= 6 && msg[1] == 0x7e && msg[3] == 0x09;
 				const bool gs_reset = msg.size() >= 10 && msg[1] == 0x41 && msg[4] == 0x12 &&
 				                      msg[5] == 0x40 && msg[6] == 0x00 && msg[7] == 0x7f;
 				if (gm_on || gs_reset) UiResetParts();
-				// GS part parameter "Pitch Key Shift" (40 1x 16), for the panel display
+				// GS part parameter "Pitch Key Shift" (40 1x 16), for the panel display;
+				// SC-88 Pro: 50 1x 16 or 40 1x 16 received on IN B = B part
 				if (msg.size() >= 10 && msg[1] == 0x41 && msg[3] == 0x42 && msg[4] == 0x12 &&
-				    msg[5] == 0x40 && (msg[6] & 0xf0) == 0x10 && msg[7] == 0x16) {
+				    (msg[5] == 0x40 || (kNumPorts > 1 && msg[5] == 0x50)) &&
+				    (msg[6] & 0xf0) == 0x10 && msg[7] == 0x16) {
 					const int x    = msg[6] & 0x0f;
-					const int part = (x == 0) ? 9 : (x <= 9 ? x - 1 : x);
+					const int part = ((msg[5] == 0x50 || port == 1) ? 16 : 0) +
+					                 ((x == 0) ? 9 : (x <= 9 ? x - 1 : x));
 					ui_parts[part].key_shift = msg[8];
 				}
 			}
-			const auto mask = router.RouteSysEx(msg);
-			QueueMidi(mask, msg.data(), msg.size(), render_frame);
+			const auto mask = router.RouteSysEx(msg, port);
+			QueueMidi(mask, msg.data(), msg.size(), render_frame, port);
 
 			log("SysEx message, length: %d", sysex_event->size);
 		} break;
@@ -1133,7 +1155,7 @@ void NukedSc55::RenderInstance(Instance& inst, const uint32_t num_frames)
 #ifdef NUKED_SC55_ENGINE_88PRO
 	for (const auto& ev : inst.queue) {
 		if (available() < ev.frame) E88RenderFrames(inst, ev.frame - available());
-		emu88_parse_stream(inst.ctx, midi_bytes.data() + ev.offset, ev.size);
+		emu88_parse_stream_on_port(inst.ctx, ev.port, midi_bytes.data() + ev.offset, ev.size);
 	}
 	inst.queue.clear();
 	if (available() < num_frames) E88RenderFrames(inst, num_frames - available());
@@ -1223,10 +1245,10 @@ void NukedSc55::UiResetParts()
 	}
 }
 
-void NukedSc55::UiTrackShort(const uint8_t* d)
+void NukedSc55::UiTrackShort(const uint8_t* d, const int port)
 {
 	const int ch = d[0] & 0x0f;
-	auto& p      = ui_parts[ch];
+	auto& p      = ui_parts[(port % kNumPorts) * 16 + ch];
 	switch (d[0] & 0xf0) {
 	case 0x90:
 		if (d[2] != 0) {
@@ -1281,11 +1303,13 @@ void NukedSc55::HandleUiCommands()
 		return;
 	}
 	if (cmd == 1) { // all sound off + all notes off + reset controllers
-		for (uint8_t ch = 0; ch < 16; ++ch) {
-			for (uint8_t cc : {120, 123}) {
-				const uint8_t m[3] = {uint8_t(0xb0 | ch), cc, 0};
-				state_log.AddShort(m);
-				QueueMidi(router.RouteShort(m), m, 3, 0);
+		for (uint8_t port = 0; port < kNumPorts; ++port) {
+			for (uint8_t ch = 0; ch < 16; ++ch) {
+				for (uint8_t cc : {120, 123}) {
+					const uint8_t m[3] = {uint8_t(0xb0 | ch), cc, 0};
+					state_log.AddShort(m, port);
+					QueueMidi(router.RouteShort(m, port), m, 3, 0, port);
+				}
 			}
 		}
 	} else if (cmd == 2) { // GS reset
@@ -1398,9 +1422,10 @@ void NukedSc55::JoinBootThreads()
 }
 
 // A short MIDI message from the panel (PREVIEW, MUTE), routed like host input.
-void NukedSc55::InjectShort(const uint8_t s, const uint8_t d1, const uint8_t d2)
+void NukedSc55::InjectShort(const uint8_t s, const uint8_t d1, const uint8_t d2, const uint16_t port)
 {
 	clap_event_midi_t ev{};
+	ev.port_index      = port; // 1 = IN B (same as the second CLAP note port)
 	ev.header.size     = sizeof(ev);
 	ev.header.time     = 0;
 	ev.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
@@ -1537,7 +1562,7 @@ void NukedSc55::ReplayInto(Instance& inst, const std::vector<StateLog::Entry>& e
 	E88ApplyMapSync(inst, tone_map.load());
 	size_t bytes = 0;
 	for (const auto& e : entries) {
-		emu88_parse_stream(inst.ctx, e.bytes.data(), static_cast<uint32_t>(e.bytes.size()));
+		emu88_parse_stream_on_port(inst.ctx, e.port, e.bytes.data(), static_cast<uint32_t>(e.bytes.size()));
 		bytes += e.bytes.size();
 		if (e.is_reset) {
 			E88Drain(inst, bytes, 0.06);
@@ -1703,7 +1728,7 @@ void NukedSc55::Wake(const int i)
 	{
 		size_t bytes = 0;
 		state_log.ForEachSince(inst.sleep_seq, [&](const StateLog::Entry& e) {
-			emu88_parse_stream(inst.ctx, e.bytes.data(), static_cast<uint32_t>(e.bytes.size()));
+			emu88_parse_stream_on_port(inst.ctx, e.port, e.bytes.data(), static_cast<uint32_t>(e.bytes.size()));
 			bytes += e.bytes.size();
 			replayed_bytes += static_cast<int>(e.bytes.size());
 			if (e.is_reset) {

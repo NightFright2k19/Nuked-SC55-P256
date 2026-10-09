@@ -49,7 +49,7 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 ### Models
 
 - **SC-55mk2 with CTF:** the plug-in prefers a `rom2.bin` patched with Capital Tone Fallback (the original plug-in always loads the unpatched one). In the single-file builds, the CTF `rom2.bin` is built in.
-- **SC-88 Pro** (new): a second engine based on the 88emu core from the Gearmulator project, with the SC-55 / SC-88 / SC-88 Pro tone map switch of the hardware, volume, mute and preview. The SC-55 code is untouched by this (audio compared byte by byte).
+- **SC-88 Pro** (new): a second engine based on the 88emu core from the Gearmulator project, with the SC-55 / SC-88 / SC-88 Pro tone map switch of the hardware, gain, mute and preview, and both MIDI inputs (32 parts A01-A16 / B01-B16: port select `F5 01` / `F5 02`, or the second CLAP note port "MIDI IN B"). The SC-55 code is untouched by this (audio compared byte by byte).
 
 ### Formats and packaging
 

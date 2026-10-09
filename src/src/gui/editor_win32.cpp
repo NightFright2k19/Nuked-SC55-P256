@@ -132,7 +132,8 @@ struct Editor {
     HGDIOBJ bg_old  = nullptr;
 
     float disp[16]  = {};
-    int part        = 0;     // selected part (0-15)
+    int part        = 0;     // selected part (0-15; SC-88 Pro 0-31 = A01-B16)
+    int lcd_part    = -1;    // SC-88 Pro: part last shown by the firmware LCD
     int hover_btn   = 0;
     int flash[12]   = {};    // button LED flash frames
     void* lcd_cache = nullptr; // lcdview::Cache of this editor (incremental LCD rendering)
@@ -712,8 +713,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             const int hb = HitButton(x, y);
             if (hb) e->flash[hb] = 6;
             switch (hb) {
+#ifdef NUKED_SC55_ENGINE_88PRO
+            // PART </>: press the device's buttons; the selected part follows the part the
+            // firmware shows (A01..A16, B01..B16, no wrap-around, fast presses may be ignored)
+            case 1: e->plugin->ui_command = 3; break;
+            case 2: e->plugin->ui_command = 4; break;
+#else
             case 1: e->part = (e->part + 15) % 16; e->plugin->ui_command = 3; break; // PART <
             case 2: e->part = (e->part + 1) % 16; e->plugin->ui_command = 4; break;  // PART >
+#endif
             case 3: e->plugin->ui_command = 1; e->flash[3] = 12; break;
             case 4: ShowSetupMenu(*e); break;
 #ifdef NUKED_SC55_ENGINE_88PRO
@@ -755,7 +763,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 break;
 #endif
             default:
-                if (const int c = HitPart(x, y); c >= 0) e->part = c;
+                // column of the shown port (A or B, the one of the selected part)
+                if (const int c = HitPart(x, y); c >= 0) e->part = e->part / 16 * 16 + c;
             }
         }
         return 0;
@@ -772,7 +781,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
         }
 #endif
-        if (e) e->part = (e->part + (GET_WHEEL_DELTA_WPARAM(wp) > 0 ? 15 : 1)) % 16;
+        if (e) e->part = (e->part + (GET_WHEEL_DELTA_WPARAM(wp) > 0 ? NukedSc55::kNumParts - 1 : 1)) %
+                         NukedSc55::kNumParts;
         return 0;
     case WM_DESTROY:
         KillTimer(hwnd, 1);

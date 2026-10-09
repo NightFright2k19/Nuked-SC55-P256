@@ -18,6 +18,9 @@
 //  - Everything else (CC, program change, pitch bend, channel pressure,
 //    SysEx, resets) is broadcast to all instances, so all instances always
 //    share the same part/effect state.
+//  - Devices with two MIDI inputs (SC-88 Pro: IN A / IN B, parts A01-A16 /
+//    B01-B16) are tracked per port: a "logical channel" is port * 16 + MIDI
+//    channel. Single-port devices only ever use port 0.
 
 #include <algorithm>
 #include <array>
@@ -32,6 +35,8 @@ public:
 	// A routed message: target bitmask over the instances.
 	using Mask = uint64_t;
 	static constexpr int MaxInstances = 64;
+	static constexpr int MaxPorts     = 2;
+	static constexpr int NumChannels  = MaxPorts * 16; // logical channels
 
 	void SetCapacity(int partials_per_instance) { capacity = partials_per_instance; }
 	// Packing: fill the lowest instance first (lets upper ones go idle and
@@ -79,7 +84,7 @@ public:
 			return;
 		}
 		// Release pins that point at an instance that goes to sleep
-		for (int ch = 0; ch < 16; ++ch) {
+		for (int ch = 0; ch < NumChannels; ++ch) {
 			if (drum_home[ch] == i) drum_home[ch] = -1;
 			if (pinned[ch] == i) {
 				pinned[ch] = -1;
@@ -114,11 +119,11 @@ public:
 		pending[instance] = 0;
 	}
 
-	// Short (1-3 byte) channel message. Returns target mask.
-	Mask RouteShort(const uint8_t* d)
+	// Short (1-3 byte) channel message on MIDI input `port`. Returns target mask.
+	Mask RouteShort(const uint8_t* d, int port = 0)
 	{
 		const uint8_t status = d[0] & 0xf0;
-		const int ch         = d[0] & 0x0f;
+		const int ch         = (port & (MaxPorts - 1)) * 16 + (d[0] & 0x0f);
 
 		switch (status) {
 		case 0x90:
@@ -136,9 +141,9 @@ public:
 	}
 
 	// SysEx is always broadcast; we only snoop it to track GS state.
-	Mask RouteSysEx(std::span<const uint8_t> msg)
+	Mask RouteSysEx(std::span<const uint8_t> msg, int port = 0)
 	{
-		SnoopSysEx(msg);
+		SnoopSysEx(msg, port & (MaxPorts - 1));
 		return all;
 	}
 
@@ -158,27 +163,30 @@ private:
 	std::vector<bool> awake;
 	int rr = 0;
 
-	std::array<std::array<Mask, 128>, 16> owners{};
-	std::array<int, 16> pinned{};
-	std::array<bool, 16> mono{}, portamento{};
-	std::array<int, 16> drum_home{};
+	// Indexed by logical channel (port * 16 + MIDI channel)
+	std::array<std::array<Mask, 128>, NumChannels> owners{};
+	std::array<int, NumChannels> pinned{};
+	std::array<bool, NumChannels> mono{}, portamento{};
+	std::array<int, NumChannels> drum_home{};
 
-	// GS part state (part index 0..15 = part 1..16)
-	std::array<int, 16> part_rx_ch{};
-	std::array<bool, 16> part_rhythm{};
+	// GS part state (part index 0..15 = part A01..A16, 16..31 = B01..B16);
+	// a part receives on its own port
+	std::array<int, NumChannels> part_rx_ch{};
+	std::array<bool, NumChannels> part_rhythm{};
 
 	void ResetGsParts()
 	{
-		for (int p = 0; p < 16; ++p) {
-			part_rx_ch[p]  = p;
-			part_rhythm[p] = (p == 9);
+		for (int p = 0; p < NumChannels; ++p) {
+			part_rx_ch[p]  = p % 16;
+			part_rhythm[p] = (p % 16 == 9);
 		}
 	}
 
-	bool IsRhythmChannel(int ch) const
+	bool IsRhythmChannel(int lch) const
 	{
-		for (int p = 0; p < 16; ++p)
-			if (part_rhythm[p] && part_rx_ch[p] == ch) return true;
+		const int base = lch / 16 * 16;
+		for (int p = base; p < base + 16; ++p)
+			if (part_rhythm[p] && part_rx_ch[p] == lch % 16) return true;
 		return false;
 	}
 
@@ -298,7 +306,7 @@ private:
 		}
 	}
 
-	void SnoopSysEx(std::span<const uint8_t> m)
+	void SnoopSysEx(std::span<const uint8_t> m, int port)
 	{
 		// GM System On: F0 7E xx 09 01 F7
 		if (m.size() >= 6 && m[0] == 0xf0 && m[1] == 0x7e && m[3] == 0x09) {
@@ -317,11 +325,14 @@ private:
 			Reset();
 			return;
 		}
-		if (a != 0x40 || (b & 0xf0) != 0x10) return;
+		// 40 1x = part on the receiving port (a 40-block DT1 on IN B edits a
+		// B part), 50 1x = B part (SC-88 family, also from IN A)
+		if ((a != 0x40 && a != 0x50) || (b & 0xf0) != 0x10) return;
 
 		// block x: 0 → part 10, 1..9 → parts 1..9, A..F → parts 11..16
 		const int x    = b & 0x0f;
-		const int part = (x == 0) ? 9 : (x <= 9 ? x - 1 : x);
+		const int part = ((a == 0x50 || port == 1) ? 16 : 0) +
+		                 ((x == 0) ? 9 : (x <= 9 ? x - 1 : x));
 
 		for (size_t i = 0; i < data.size(); ++i) {
 			const int addr = c + static_cast<int>(i);

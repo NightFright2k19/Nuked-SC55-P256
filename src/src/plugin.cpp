@@ -119,23 +119,28 @@ static const clap_plugin_descriptor_t plugin_descriptor_sc88pro = {
 
 static const clap_plugin_note_ports_t extension_note_ports = {
         .count = [](const clap_plugin_t* plugin, bool is_input) -> uint32_t {
-	        return is_input ? 1 : 0;
+	        // SC-88 Pro: MIDI IN A (parts A01-A16) and MIDI IN B (B01-B16)
+	        return is_input ? NukedSc55::kNumPorts : 0;
         },
 
         .get = [](const clap_plugin_t* plugin, uint32_t index, bool is_input,
                   clap_note_port_info_t* info) -> bool {
-	        if (!is_input || index) {
+	        if (!is_input || index >= NukedSc55::kNumPorts) {
 		        return false;
 	        }
 
-	        info->id = 0;
+	        info->id = index;
 
 	        // We don't support CLAP_NOTE_DIALECT_CLAP because we want to
 	        // force the sending of RAW MIDI messages at all times.
 	        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI;
 	        info->preferred_dialect  = CLAP_NOTE_DIALECT_MIDI;
 
-	        snprintf(info->name, sizeof(info->name), "%s", "Note Port");
+	        if (NukedSc55::kNumPorts > 1) {
+		        snprintf(info->name, sizeof(info->name), "%s", index ? "MIDI IN B" : "MIDI IN A");
+	        } else {
+		        snprintf(info->name, sizeof(info->name), "%s", "Note Port");
+	        }
 
 	        return true;
         }};
