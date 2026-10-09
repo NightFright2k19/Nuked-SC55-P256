@@ -62,7 +62,7 @@ public:
 	void AddShort(const uint8_t* d, int port = 0)
 	{
 		const uint8_t status = d[0] & 0xf0;
-		port                 = port & 1;
+		port                 = port & 3;
 		const int ch         = d[0] & 0x0f;
 		const int lch        = port * 16 + ch; // logical channel: state slot
 		cur_port             = uint8_t(port);
@@ -90,7 +90,7 @@ public:
 	void AddSysEx(std::span<const uint8_t> m, int port = 0)
 	{
 		if (m.size() < 2) return;
-		cur_port = uint8_t(port & 1);
+		cur_port = uint8_t(port & 3);
 
 		const bool gm_on = m.size() >= 6 && m[1] == 0x7e && m[3] == 0x09;
 		const bool roland_dt1 = m.size() >= 10 && m[1] == 0x41 &&
@@ -118,9 +118,9 @@ private:
 	uint64_t seq = 0;
 	uint8_t cur_port = 0; // port of the message being added
 	// per logical channel (port * 16 + MIDI channel)
-	std::array<uint8_t, 32> bank_msb{}, bank_lsb{};
-	std::array<uint8_t, 32> rpn_msb{}, rpn_lsb{};
-	std::array<bool, 32> rpn_is_nrpn{};
+	std::array<uint8_t, 64> bank_msb{}, bank_lsb{};
+	std::array<uint8_t, 64> rpn_msb{}, rpn_lsb{};
+	std::array<bool, 64> rpn_is_nrpn{};
 
 	static uint64_t Key(uint64_t type, uint64_t ch, uint64_t param)
 	{

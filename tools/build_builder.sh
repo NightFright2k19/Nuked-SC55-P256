@@ -11,6 +11,7 @@ NK_SLOT_CAP=3772416 build "Nuked-SC55_MkII" "Nuked-SC55 MkII" 5 0x5335504D 0 "SC
 if [ -f $WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ]; then
   export GM=$WB/gearmulator LIBW=$WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a; . ./build88.sh
   NK_SLOT_CAP=22085632 build88
+  . ./build8850.sh; NK_SLOT_CAP=36765696 build8850   # 64 KiB + 1 MiB + 2 MiB + 32 MiB
 fi
 rm -rf $K && mkdir -p $K/templates $K/roms
 cp $S/tools/p256_builder/p256_builder.py $S/tools/p256_builder/LIESMICH.txt $S/tools/p256_builder/README-EN.txt $K/

@@ -6,11 +6,13 @@
 // EFX labels replaced) and linked in as raw BGRA pixels. Everything dynamic
 // (LCD content, value windows, map LEDs, voices) is drawn on top of it.
 
+#ifndef NUKED_SC55_DEVICE_8850 // the SC-8850 panel (editor_sc8850.inc) has its own art
 extern "C" const unsigned char nk_panel88_b[] asm("nk_panel88_b");
 extern "C" const unsigned char nk_panel88_e[] asm("nk_panel88_e");
 // Original 88emu controls, prepared by tools/make_sc88_sprites.py (premultiplied BGRA, fixed order)
 extern "C" const unsigned char nk_sprites88_b[] asm("nk_sprites88_b");
 extern "C" const unsigned char nk_sprites88_e[] asm("nk_sprites88_e");
+#endif
 
 namespace {
 
@@ -80,6 +82,7 @@ void Box88(Editor& e, HDC dc, const RECT& r, const char* s, COLORREF col = C88_L
                                  DT_END_ELLIPSIS);
 }
 
+#ifndef NUKED_SC55_DEVICE_8850
 void BuildSprites88()
 {
     if (g_sp_dc) return;
@@ -117,6 +120,8 @@ void Sprite88(HDC dc, SpriteId88 id, POINT c, bool pressed = false, int frame = 
     AlphaBlend(dc, c.x - sz / 2, c.y - sz / 2, sz, sz, g_sp_dc, 0, SP_Y[id] + frame * sz, sz, sz, bf);
 }
 
+#endif
+
 const char* NoteName88(int n, char* buf, size_t len) // Roland: C-1 = 0, C4 = 60, G9 = 127
 {
     static const char* names[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
@@ -134,6 +139,41 @@ void Flash88(HDC dc, POINT c, int rad)
     DeleteObject(p);
 }
 
+// Voices window (the player's playlist) and the UNITS slot under it
+void DrawVoices88(Editor& e, HDC dc, const RECT& win, const RECT& units_box)
+{
+    NukedSc55& p = *e.plugin;
+    char v[32];
+    const int voices   = p.ui_voices.load();
+    const int maxv     = p.max_voices.load();
+    const int cap      = p.PartialsPerInstance();
+    const int units    = (maxv + cap - 1) / cap;
+    const int capacity = units * cap;
+    if (voices >= e.peak) { e.peak = (float)voices; e.peak_hold = 45; }
+    else if (e.peak_hold > 0) --e.peak_hold;
+    else e.peak = std::max((float)voices, e.peak - 1.5f);
+    std::snprintf(v, sizeof(v), "%03d", voices);
+    Text(dc, e.f_big, C88_LED, win.left, win.top + 8, v, DT_CENTER, win.right - win.left, 34);
+    std::snprintf(v, sizeof(v), "of %d", capacity);
+    Text(dc, e.f_tiny, RGB(0x9a, 0x9e, 0xa6), win.left, win.top + 44, v, DT_CENTER, win.right - win.left, 14);
+    {   // vertical-ish meter: 20 segments across the window
+        const int segs = 20, mx = win.left + 8, my = win.top + 66, sw = 4, sg = 1;
+        const int lit  = std::min(segs, (int)std::ceil(voices * (float)segs / std::max(1, capacity)));
+        const int pk   = std::min(segs - 1, (int)(e.peak * segs / std::max(1, capacity)));
+        for (int s = 0; s < segs; ++s) {
+            COLORREF c = C88_LED_DIM;
+            if (s < lit) c = (s >= segs * 9 / 10) ? RGB(0xff, 0x58, 0x30) : C88_LED;
+            if (s == pk && e.peak > 0) c = RGB(0xff, 0x58, 0x30);
+            Fill(dc, mx + s * (sw + sg), my, sw, 22, c);
+        }
+    }
+    const int awake = p.ui_awake.load();
+    if (awake > units) std::snprintf(v, sizeof(v), "UNITS %d->%d", awake, units);
+    else std::snprintf(v, sizeof(v), "UNITS %d/%d", awake, units);
+    Box88(e, dc, units_box, v, C88_LED, true);
+}
+
+#ifndef NUKED_SC55_DEVICE_8850
 void BuildBackground88(Editor& e)
 {
     HDC screen = GetDC(nullptr);
@@ -228,35 +268,12 @@ void Draw88(Editor& e, HDC dc)
     }
 
     // --- Voices window (former playlist)
-    const int voices   = p.ui_voices.load();
+    DrawVoices88(e, dc, P88_VOICES, P88_UNITS);
     const int maxv     = p.max_voices.load();
     const int cap      = p.PartialsPerInstance();
     const int units    = (maxv + cap - 1) / cap;
     const int capacity = units * cap;
-    if (voices >= e.peak) { e.peak = (float)voices; e.peak_hold = 45; }
-    else if (e.peak_hold > 0) --e.peak_hold;
-    else e.peak = std::max((float)voices, e.peak - 1.5f);
-    std::snprintf(v, sizeof(v), "%03d", voices);
-    Text(dc, e.f_big, C88_LED, P88_VOICES.left, P88_VOICES.top + 8, v, DT_CENTER,
-         P88_VOICES.right - P88_VOICES.left, 34);
-    std::snprintf(v, sizeof(v), "of %d", capacity);
-    Text(dc, e.f_tiny, RGB(0x9a, 0x9e, 0xa6), P88_VOICES.left, P88_VOICES.top + 44, v, DT_CENTER,
-         P88_VOICES.right - P88_VOICES.left, 14);
-    {   // vertical-ish meter: 20 segments across the window
-        const int segs = 20, mx = P88_VOICES.left + 8, my = P88_VOICES.top + 66, sw = 4, sg = 1;
-        const int lit  = std::min(segs, (int)std::ceil(voices * (float)segs / std::max(1, capacity)));
-        const int pk   = std::min(segs - 1, (int)(e.peak * segs / std::max(1, capacity)));
-        for (int s = 0; s < segs; ++s) {
-            COLORREF c = C88_LED_DIM;
-            if (s < lit) c = (s >= segs * 9 / 10) ? RGB(0xff, 0x58, 0x30) : C88_LED;
-            if (s == pk && e.peak > 0) c = RGB(0xff, 0x58, 0x30);
-            Fill(dc, mx + s * (sw + sg), my, sw, 22, c);
-        }
-    }
-    const int awake = p.ui_awake.load();
-    if (awake > units) std::snprintf(v, sizeof(v), "UNITS %d->%d", awake, units);
-    else std::snprintf(v, sizeof(v), "UNITS %d/%d", awake, units);
-    Box88(e, dc, P88_UNITS, v, C88_LED, true);
+    const int awake    = p.ui_awake.load();
 
     // --- Status windows (former EFX section)
     Box88(e, dc, P88_SETUP, e.menu_open ? "SETUP  \x85" : "SETUP  >", C88_LED, true);
@@ -267,6 +284,8 @@ void Draw88(Editor& e, HDC dc)
     std::snprintf(v, sizeof(v), "%d (%d)", maxv, capacity);
     Box88(e, dc, P88_MAXBOX, v, C88_LED, true);
 }
+
+#endif // !NUKED_SC55_DEVICE_8850
 
 // 1/2 = part left/right, 3 = ALL (all notes off), 4 = SETUP, 5 = SC-55 MAP,
 // 6 = SC-88 MAP, 7 = tone map window (opens the menu as well), 8 = MUTE,

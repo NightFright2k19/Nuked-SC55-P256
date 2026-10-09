@@ -13,7 +13,9 @@
 constexpr auto NumPlugins = 6;
 
 // Product family in the plugin names (each build only contains its own family name)
-#ifdef NUKED_SC55_ENGINE_88PRO
+#if defined(NUKED_SC55_DEVICE_8850)
+#define NUKED_PLUGIN_FAMILY "Nuked SC-8850 P256"
+#elif defined(NUKED_SC55_ENGINE_88PRO)
 #define NUKED_PLUGIN_FAMILY "Nuked SC-88 P256"
 #else
 #define NUKED_PLUGIN_FAMILY "Nuked SC-55 P256"
@@ -110,6 +112,17 @@ static const clap_plugin_descriptor_t plugin_descriptor_sc88pro = {
         .version      = Version,
         .description = "Roland SC-88 Pro emulation (88emu core) with extended polyphony",
         .features = Features};
+static const clap_plugin_descriptor_t plugin_descriptor_sc8850 = {
+        .clap_version = CLAP_VERSION_INIT,
+        .id           = "net.nuked_sc55_poly_clap.sc8850",
+        .name         = NUKED_PLUGIN_FAMILY " — Roland SC-8850",
+        .vendor       = Vendor,
+        .url          = Url,
+        .manual_url   = Url,
+        .support_url  = Url,
+        .version      = Version,
+        .description = "Roland SC-8850 emulation (88emu core) with extended polyphony",
+        .features = Features};
 #endif
 
 
@@ -119,7 +132,7 @@ static const clap_plugin_descriptor_t plugin_descriptor_sc88pro = {
 
 static const clap_plugin_note_ports_t extension_note_ports = {
         .count = [](const clap_plugin_t* plugin, bool is_input) -> uint32_t {
-	        // SC-88 Pro: MIDI IN A (parts A01-A16) and MIDI IN B (B01-B16)
+	        // SC-88 Pro: MIDI IN A (parts A01-A16) and MIDI IN B (B01-B16); SC-8850: IN A..D
 	        return is_input ? NukedSc55::kNumPorts : 0;
         },
 
@@ -137,7 +150,7 @@ static const clap_plugin_note_ports_t extension_note_ports = {
 	        info->preferred_dialect  = CLAP_NOTE_DIALECT_MIDI;
 
 	        if (NukedSc55::kNumPorts > 1) {
-		        snprintf(info->name, sizeof(info->name), "%s", index ? "MIDI IN B" : "MIDI IN A");
+		        snprintf(info->name, sizeof(info->name), "MIDI IN %c", static_cast<char>('A' + index));
 	        } else {
 		        snprintf(info->name, sizeof(info->name), "%s", "Note Port");
 	        }
@@ -619,6 +632,12 @@ static const clap_plugin_t my_plugin_class_sc88pro = {
         },
 
         .on_main_thread = [](const clap_plugin* plugin) {}};
+// SC-8850: the same callbacks, its own descriptor
+static const clap_plugin_t my_plugin_class_sc8850 = [] {
+	clap_plugin_t c = my_plugin_class_sc88pro;
+	c.desc          = &plugin_descriptor_sc8850;
+	return c;
+}();
 #endif
 
 
@@ -659,6 +678,7 @@ static const clap_plugin_factory_t plugin_factory = {
 			        case 4: orig = &plugin_descriptor_sc55_v2_00; break;
 #ifdef NUKED_SC55_ENGINE_88PRO
 			        case 6: orig = &plugin_descriptor_sc88pro; break;
+			        case 7: orig = &plugin_descriptor_sc8850; break;
 #endif
 			        default: orig = &plugin_descriptor_sc55mk2_v1_01; break;
 			        }
@@ -690,6 +710,8 @@ static const clap_plugin_factory_t plugin_factory = {
 #ifdef NUKED_SC55_ENGINE_88PRO
 	        } else if (index == 6) {
 		        return &plugin_descriptor_sc88pro;
+	        } else if (index == 7) {
+		        return &plugin_descriptor_sc8850;
 #endif
 
 	        } else {
@@ -743,6 +765,8 @@ static const clap_plugin_factory_t plugin_factory = {
 #ifdef NUKED_SC55_ENGINE_88PRO
 	        } else if (strcmp(plugin_id, plugin_descriptor_sc88pro.id) == 0) {
 		        the_plugin = new NukedSc55(my_plugin_class_sc88pro, host, NukedSc55::Model::Sc88Pro);
+	        } else if (strcmp(plugin_id, plugin_descriptor_sc8850.id) == 0) {
+		        the_plugin = new NukedSc55(my_plugin_class_sc8850, host, NukedSc55::Model::Sc8850);
 #endif
 	        } else {
 		        return nullptr;
