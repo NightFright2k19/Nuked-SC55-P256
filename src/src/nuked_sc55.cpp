@@ -834,18 +834,16 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	}
 
 #ifdef NUKED_SC55_ENGINE_88PRO
-	{   // VOLUME knob: analog-style output level after the emulation; unity at the
-		// default position (no multiplication, bit-identical output)
-		const float target = VolumeGain(volume.load(std::memory_order_relaxed));
-		if (target != 1.0f || applied_gain != 1.0f) {
-			const float step = (target - applied_gain) / static_cast<float>(std::max<uint32_t>(1, num_frames));
-			for (uint32_t i = 0; i < num_frames; ++i) {
-				const float g = applied_gain + step * static_cast<float>(i + 1);
-				out_left[i] *= g;
-				out_right[i] *= g;
-			}
-			applied_gain = target;
+	{   // GAIN knob: analog-style output level after the emulation, ramped over the block
+		const float target = GainFactor(gain_db.load(std::memory_order_relaxed));
+		if (applied_gain < 0.0f) applied_gain = target; // first block: no ramp
+		const float step = (target - applied_gain) / static_cast<float>(std::max<uint32_t>(1, num_frames));
+		for (uint32_t i = 0; i < num_frames; ++i) {
+			const float g = (step == 0.0f) ? target : applied_gain + step * static_cast<float>(i + 1);
+			out_left[i] *= g;
+			out_right[i] *= g;
 		}
+		applied_gain = target;
 	}
 #endif
 
@@ -873,7 +871,11 @@ bool NukedSc55::LoadState([[maybe_unused]] const clap_istream_t* stream)
 		if (const char* m = std::strstr(buf, "map="); m && m[4] >= '0' && m[4] <= '2') {
 			tone_map = m[4] - '0';
 		}
-		if (const char* m = std::strstr(buf, "vol="); m) volume = std::clamp(std::atoi(m + 4), 0, 1000) / 1000.0f;
+		if (const char* m = std::strstr(buf, "gain="); m) {
+			gain_db = std::clamp(std::atoi(m + 5) / 10.0f, kGainMinDb, kGainMaxDb);
+		} else if (const char* v = std::strstr(buf, "vol="); v) {
+			gain_db = GainFromLegacyVolume(std::atoi(v + 4));
+		}
 		if (const char* m = std::strstr(buf, "pnote="); m) preview_note = std::clamp(std::atoi(m + 6), 0, 127);
 #endif
 		return true;
@@ -889,9 +891,9 @@ bool NukedSc55::SaveState([[maybe_unused]] const clap_ostream_t* stream)
 
 	char buf[64];
 #ifdef NUKED_SC55_ENGINE_88PRO
-	const int n = std::snprintf(buf, sizeof(buf), "NSC55P1 max_voices=%d map=%d vol=%d pnote=%d",
+	const int n = std::snprintf(buf, sizeof(buf), "NSC55P1 max_voices=%d map=%d gain=%d pnote=%d",
 	                            max_voices.load(), tone_map.load(),
-	                            static_cast<int>(std::lround(volume.load() * 1000.0f)), preview_note.load());
+	                            static_cast<int>(std::lround(gain_db.load() * 10.0f)), preview_note.load());
 #else
 	const int n = std::snprintf(buf, sizeof(buf), "NSC55P1 max_voices=%d", max_voices.load());
 #endif
@@ -1333,11 +1335,17 @@ void NukedSc55::NotifyStateChanged()
 
 #ifdef NUKED_SC55_ENGINE_88PRO
 // Audio taper of the VOLUME knob: fully left = off, then -60 dB .. 0 dB (right).
-float NukedSc55::VolumeGain(const float pos)
+float NukedSc55::GainFactor(const float gain_db)
 {
-	if (pos >= 0.9995f) return 1.0f;
-	if (pos <= 0.0005f) return 0.0f;
-	return std::pow(10.0f, (pos - 1.0f) * 60.0f / 20.0f);
+	return std::pow(10.0f, (std::clamp(gain_db, kGainMinDb, kGainMaxDb) + kLevelMatchDb) / 20.0f);
+}
+
+float NukedSc55::GainFromLegacyVolume(const int vol)
+{
+	// The old VOLUME knob: 0 = off, else -60 dB .. 0 dB without level matching
+	if (vol <= 0) return kGainMinDb;
+	const float old_db = (std::min(vol, 1000) / 1000.0f - 1.0f) * 60.0f;
+	return std::clamp(old_db - kLevelMatchDb, kGainMinDb, kGainMaxDb);
 }
 
 // Boot one SC-88 Pro unit: create the device, set the selected tone map on its panel,
