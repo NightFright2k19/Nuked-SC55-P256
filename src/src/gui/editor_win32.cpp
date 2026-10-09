@@ -137,7 +137,7 @@ struct Editor {
     int flash[12]   = {};    // button LED flash frames
     void* lcd_cache = nullptr; // lcdview::Cache of this editor (incremental LCD rendering)
 #ifdef NUKED_SC55_ENGINE_88PRO
-    bool drag_vol     = false; // VOLUME knob being turned
+    bool drag_vol     = false; // GAIN knob being turned
     int drag_x = 0, drag_y = 0;
     float drag_v0     = 1.0f;
     bool preview_down = false; // PREVIEW held
@@ -669,7 +669,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 #ifdef NUKED_SC55_ENGINE_88PRO
         if (e && e->drag_vol) { // right / up = louder, left / down = quieter
             const int dx = (short)LOWORD(lp) - e->drag_x, dy = (short)HIWORD(lp) - e->drag_y;
-            e->plugin->volume = std::clamp(e->drag_v0 + float(dx - dy) / 200.0f, 0.0f, 1.0f);
+            // 200 px = full range; snaps to 0 dB within 0.4 dB so unity is easy to find
+            const float span = NukedSc55::kGainMaxDb - NukedSc55::kGainMinDb;
+            float g = std::clamp(e->drag_v0 + float(dx - dy) / 200.0f * span, NukedSc55::kGainMinDb,
+                                 NukedSc55::kGainMaxDb);
+            if (std::fabs(g) < 0.4f) g = 0.0f;
+            e->plugin->gain_db = std::round(g * 10.0f) / 10.0f; // state stores 0.1 dB steps
             return 0;
         }
 #endif
@@ -691,7 +696,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (e && e->drag_vol) {
             e->drag_vol = false;
             if (msg == WM_LBUTTONUP) ReleaseCapture();
-            e->plugin->NotifyStateChanged(); // VOLUME is stored in the plugin state
+            e->plugin->NotifyStateChanged(); // GAIN is stored in the plugin state
         }
         if (e && e->preview_down) {
             e->preview_down        = false;
@@ -736,11 +741,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 e->preview_down            = true;
                 SetCapture(hwnd);
                 break;
-            case 10: // VOLUME knob: drag
+            case 10: // GAIN knob: drag; double-click = 0 dB
+                if (msg == WM_LBUTTONDBLCLK) {
+                    e->plugin->gain_db = 0.0f;
+                    e->plugin->NotifyStateChanged();
+                    break;
+                }
                 e->drag_vol = true;
                 e->drag_x   = x;
                 e->drag_y   = y;
-                e->drag_v0  = e->plugin->volume.load();
+                e->drag_v0  = e->plugin->gain_db.load();
                 SetCapture(hwnd);
                 break;
 #endif
@@ -751,12 +761,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_MOUSEWHEEL:
 #ifdef NUKED_SC55_ENGINE_88PRO
-        if (e) { // over the VOLUME knob: one step (of 31) per notch
+        if (e) { // over the GAIN knob: one knob position (of 31, 0.8 dB) per notch
             POINT pt{(short)LOWORD(lp), (short)HIWORD(lp)};
             ScreenToClient(hwnd, &pt);
             if (HitButton(pt.x, pt.y) == 10) {
-                const float step = (GET_WHEEL_DELTA_WPARAM(wp) > 0 ? 1.0f : -1.0f) / 30.0f;
-                e->plugin->volume = std::clamp(e->plugin->volume.load() + step, 0.0f, 1.0f);
+                const int f = GainKnobFrame(e->plugin->gain_db.load()) + (GET_WHEEL_DELTA_WPARAM(wp) > 0 ? 1 : -1);
+                e->plugin->gain_db = GainOfKnobFrame(f);
                 e->plugin->NotifyStateChanged();
                 return 0;
             }

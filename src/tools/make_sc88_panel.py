@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Bereitet die 88emu-Panelgrafik (sc88pro_panel.png, GPLv3, The Usual Suspects) fuer das
 # Nuked-SC88-Pro-Poly-Panel auf: halbe Groesse (918x280), Branding und EFX-Beschriftungen
-# ersetzt, Playlist-Kopf ersetzt. Ausgabe: rohe BGRA-Pixel (918*280*4 Byte) fuer .incbin.
+# ersetzt, Playlist-Kopf ersetzt, VOLUME -> GAIN. Ausgabe: rohe BGRA-Pixel (918*280*4 Byte) fuer .incbin.
 # usage: make_sc88_panel.py <sc88pro_panel.png> <out.bgra> [preview.png]
 import sys
 from PIL import Image, ImageDraw, ImageFont
@@ -105,6 +105,9 @@ texture_fill((452, 197, 892, 246), (200, 415), feather=6, sides="lr")  # Vorlage
 # Weisser Winkel rechts neben dem SETUP-Fenster (ohne Funktion): Struktur aus der Luecke zwischen
 # TONE MAP und UNITS (gleiche Zeilen); die Fensterkanten bleiben stehen
 texture_fill((552, 241, 580, 259), (677, 692), feather=2, sides="rb")
+# Pegelknopf: "VOLUME" -> "GAIN" (Issue #3); Struktur aus der schriftfreien Flaeche rechts daneben
+texture_fill((161, 15, 219, 29), (219, 228), feather=2)
+center_text(189.5, 16, "GAIN", font(12, False), (226, 230, 236))
 # Bezeichner auf den orangen Feldern (schwarz), Felder vorher leeren
 for (x0, x1), t in zip(((464, 551), (585, 673), (695, 782), (804, 892)), ("SETUP", "TONE MAP", "UNITS", "MAX VOICES")):
     d.rectangle((x0 + 2, 266, x1 - 2, 275), fill=(244, 106, 28))

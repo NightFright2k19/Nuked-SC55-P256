@@ -37,8 +37,21 @@ constexpr RECT P88_MAXBOX    = {804, 248, 892, 263};
 constexpr POINT P88_BTN_ALL  = {642, 33}, P88_BTN_MUTE = {642, 72};
 constexpr POINT P88_BTN_55   = {642, 111}, P88_BTN_88 = {642, 150};
 constexpr POINT P88_PART_L   = {718, 31}, P88_PART_R = {760, 31};
-constexpr POINT P88_PREVIEW  = {189, 132}, P88_VOLUME = {189, 57};
-constexpr int P88_BTN_R = 12, P88_PART_RAD = 10, P88_PREVIEW_R = 15, P88_VOLUME_R = 21;
+constexpr POINT P88_PREVIEW  = {189, 132}, P88_GAIN = {189, 57};
+constexpr int P88_BTN_R = 12, P88_PART_RAD = 10, P88_PREVIEW_R = 15, P88_GAIN_R = 21;
+constexpr int P88_GAIN_TEXT_Y = 81; // GAIN readout (dB) under the knob
+
+// GAIN knob: 31 sprite positions across kGainMinDb..kGainMaxDb, 0 dB = middle position (15)
+int GainKnobFrame(float db)
+{
+    const float span = NukedSc55::kGainMaxDb - NukedSc55::kGainMinDb;
+    return std::clamp(static_cast<int>(std::lround((db - NukedSc55::kGainMinDb) / span * 30.0f)), 0, 30);
+}
+float GainOfKnobFrame(int frame)
+{
+    const float span = NukedSc55::kGainMaxDb - NukedSc55::kGainMinDb;
+    return NukedSc55::kGainMinDb + std::clamp(frame, 0, 30) * span / 30.0f;
+}
 
 // Sprite sheet (one DIB, sprites stacked): id -> (y offset, size)
 enum SpriteId88 { SP_ALL, SP_ROUND, SP_LED, SP_PART_L, SP_PART_R, SP_PREVIEW, SP_KNOB };
@@ -179,7 +192,7 @@ void Draw88(Editor& e, HDC dc)
     std::snprintf(v, sizeof(v), "A%02d", e.part + 1);
     Box88(e, dc, P88_MIDICH, v, C88_LED, true);
 
-    // --- Original controls: lit map / MUTE buttons, pressed tint, VOLUME knob position
+    // --- Original controls: lit map / MUTE buttons, pressed tint, GAIN knob position
     const int tm      = p.tone_map.load();
     const bool muted  = (p.mute_mask.load() >> e.part) & 1u;
     Sprite88(dc, SP_ALL, P88_BTN_ALL, e.flash[3] > 0);
@@ -189,8 +202,13 @@ void Draw88(Editor& e, HDC dc)
     Sprite88(dc, SP_PART_L, P88_PART_L, e.flash[1] > 0);
     Sprite88(dc, SP_PART_R, P88_PART_R, e.flash[2] > 0);
     Sprite88(dc, SP_PREVIEW, P88_PREVIEW, e.preview_down);
-    Sprite88(dc, SP_KNOB, P88_VOLUME, false,
-             std::clamp(static_cast<int>(std::lround(p.volume.load() * 30.0f)), 0, 30));
+    const float gain = p.gain_db.load();
+    Sprite88(dc, SP_KNOB, P88_GAIN, false, GainKnobFrame(gain));
+    {   // GAIN readout under the knob
+        char g[16];
+        std::snprintf(g, sizeof(g), "%+.1f dB", std::fabs(gain) < 0.05f ? 0.0f : gain);
+        Text(dc, e.f_tiny, RGB(0xd8, 0xdc, 0xe2), P88_GAIN.x - 30, P88_GAIN_TEXT_Y, g, DT_CENTER, 60, 12);
+    }
 
     // --- Voices window (former playlist)
     const int voices   = p.ui_voices.load();
@@ -235,7 +253,7 @@ void Draw88(Editor& e, HDC dc)
 
 // 1/2 = part left/right, 3 = ALL (all notes off), 4 = SETUP, 5 = SC-55 MAP,
 // 6 = SC-88 MAP, 7 = tone map window (opens the menu as well), 8 = MUTE,
-// 9 = PREVIEW, 10 = VOLUME knob
+// 9 = PREVIEW, 10 = GAIN knob
 int HitButton88(int x, int y)
 {
     if (InCircle(P88_PART_L, P88_PART_RAD, x, y)) return 1;
@@ -247,7 +265,7 @@ int HitButton88(int x, int y)
     if (InRect(P88_TONEMAP, x, y)) return 7;
     if (InCircle(P88_BTN_MUTE, P88_BTN_R, x, y)) return 8;
     if (InCircle(P88_PREVIEW, P88_PREVIEW_R, x, y)) return 9;
-    if (InCircle(P88_VOLUME, P88_VOLUME_R, x, y)) return 10;
+    if (InCircle(P88_GAIN, P88_GAIN_R, x, y)) return 10;
     return 0;
 }
 

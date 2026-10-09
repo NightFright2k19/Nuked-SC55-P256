@@ -399,9 +399,9 @@ intptr_t Dispatcher(AEffect* fx, int32_t opcode, int32_t index, intptr_t value,
 		if (auto ns = b->Engine(); ns && ptr) {
 #ifdef NUKED_SC55_ENGINE_88PRO
 			const int n = std::snprintf(b->state_chunk, sizeof(b->state_chunk),
-			                            "NSC55P1 max_voices=%d map=%d vol=%d pnote=%d", ns->max_voices.load(),
+			                            "NSC55P1 max_voices=%d map=%d gain=%d pnote=%d", ns->max_voices.load(),
 			                            ns->tone_map.load(),
-			                            static_cast<int>(std::lround(ns->volume.load() * 1000.0f)),
+			                            static_cast<int>(std::lround(ns->gain_db.load() * 10.0f)),
 			                            ns->preview_note.load());
 #else
 			const int n = std::snprintf(b->state_chunk, sizeof(b->state_chunk),
@@ -420,8 +420,10 @@ intptr_t Dispatcher(AEffect* fx, int32_t opcode, int32_t index, intptr_t value,
 #ifdef NUKED_SC55_ENGINE_88PRO
 			if (const char* m = std::strstr(buf, "map="); m && m[4] >= '0' && m[4] <= '2')
 				ns->tone_map = m[4] - '0';
-			if (const char* m = std::strstr(buf, "vol="); m)
-				ns->volume = std::clamp(std::atoi(m + 4), 0, 1000) / 1000.0f;
+			if (const char* m = std::strstr(buf, "gain="); m)
+				ns->gain_db = std::clamp(std::atoi(m + 5) / 10.0f, NukedSc55::kGainMinDb, NukedSc55::kGainMaxDb);
+			else if (const char* v = std::strstr(buf, "vol="); v)
+				ns->gain_db = NukedSc55::GainFromLegacyVolume(std::atoi(v + 4));
 			if (const char* m = std::strstr(buf, "pnote="); m)
 				ns->preview_note = std::clamp(std::atoi(m + 6), 0, 127);
 #endif

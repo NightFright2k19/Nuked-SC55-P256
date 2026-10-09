@@ -264,14 +264,19 @@ public:
 	int last_tone_map = 1;
 #ifdef NUKED_SC55_ENGINE_88PRO
 	// SC-88 Pro front panel (GUI thread writes, audio thread reads)
-	std::atomic<float> volume{1.0f};       // VOLUME knob 0..1; 1 = unity (default, bit-identical)
+	std::atomic<float> gain_db{0.0f};      // GAIN knob in dB, kGainMinDb..kGainMaxDb; 0 = default
 	std::atomic<int> preview_note{60};     // system parameter "Prevw Note" 0..127 (C-1..G9), C4 = 60
 	std::atomic<uint32_t> mute_mask{0};    // MUTE per part (bit = part = MIDI channel), not stored
 	std::atomic<int> ui_preview{0};        // 1 = PREVIEW pressed, 2 = released
 	std::atomic<int> ui_preview_part{0};
-	static float VolumeGain(float pos);    // audio taper: 0 = off, -60 dB .. 0 dB
+	static constexpr float kGainMinDb   = -12.0f, kGainMaxDb = 12.0f;
+	// 88emu's output (DAC full scale = 1.0) sits about 5 dB under the SC-55 plugins (RMS and
+	// peaks of the same songs); at GAIN 0 dB the SC-88 Pro is raised to their level.
+	static constexpr float kLevelMatchDb = 5.0f;
+	static float GainFactor(float gain_db);           // output factor incl. kLevelMatchDb
+	static float GainFromLegacyVolume(int vol);       // old state "vol=0..1000" -> GAIN dB, same loudness
 private:
-	float applied_gain     = 1.0f;
+	float applied_gain     = -1.0f; // < 0: not applied yet
 	int preview_ch         = -1, preview_key = -1;
 	uint32_t applied_mutes = 0;
 	bool injecting         = false;
