@@ -54,7 +54,8 @@ public:
 		Sc55mk2_v1_01,
 #ifdef NUKED_SC55_ENGINE_88PRO
 		Sc88Pro,
-		Sc8850
+		Sc8850,
+		Sc88
 #endif
 	};
 
@@ -104,7 +105,7 @@ private:
 		std::vector<QueuedMidi> queue;   // events for the current block
 		float dc_l = 0.0f, dc_r = 0.0f;  // idle output offset to cancel
 #ifdef NUKED_SC55_ENGINE_88PRO
-		emu88_context ctx = nullptr;     // SC-88 Pro / SC-8850 unit (88emu)
+		emu88_context ctx = nullptr;     // SC-88 Pro / SC-8850 / SC-88 unit (88emu)
 		std::shared_ptr<std::atomic<bool>> booted = std::make_shared<std::atomic<bool>>(false);
 		int applied_map   = -1;          // tone map set on this unit's panel
 		// pending panel-button sequence (non-blocking, advanced while rendering)
@@ -284,8 +285,9 @@ public:
 	static constexpr float kGainMinDb   = -12.0f, kGainMaxDb = 12.0f;
 	// 88emu's output (DAC full scale = 1.0) sits about 5 dB under the SC-55 plugins (RMS and
 	// peaks of the same songs); at GAIN 0 dB the SC-88 Pro is raised to their level. The SC-8850
-	// sits another ~2.3 dB lower (RMS of e1m1/animus/grabbag vs. SC-88 Pro and SC-55).
-#ifdef NUKED_SC55_DEVICE_8850
+	// sits another ~2.3 dB lower (RMS of e1m1/animus/grabbag vs. SC-88 Pro and SC-55); the SC-88
+	// matches the SC-88 Pro with the same 5 dB (-20.8/-17.0/-18.6 dBFS vs. -20.8/-17.0/-18.5).
+#if defined(NUKED_SC55_DEVICE_8850)
 	static constexpr float kLevelMatchDb = 7.5f;
 #else
 	static constexpr float kLevelMatchDb = 5.0f;
@@ -303,17 +305,36 @@ private:
 	void InjectShort(uint8_t s, uint8_t d1, uint8_t d2, uint16_t port = 0);
 public:
 #endif
-#ifdef NUKED_SC55_DEVICE_8850
-	// SC-8850 front panel: the GUI drives unit 0's own panel (firmware menus, LCD, LEDs).
-	// Edits made there are read back from unit 0 (GS data requests) and passed on to the
-	// other units; MUTE and SOLO are taken from unit 0 and applied to all units.
-	std::atomic<uint32_t> ui_panel_buttons{0}; // switches held in the GUI (bit = 88emu Sc8850Button)
-	std::atomic<int> ui_encoder{0};            // VALUE encoder detents not yet passed on
-	bool GetLcdDots(uint8_t* dots, size_t size, bool& on); // unit 0, 160 x 64, one byte per dot
-	uint32_t PanelLeds() const;                // unit 0: EDIT, DRUM, EFFECTS, SHIFT, SOLO, MUTE
-	static constexpr int kLcdW = 160, kLcdH = 64;
+#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88)
+	// Front panel of the SC-8850 / SC-88: the GUI drives unit 0's own panel (firmware menus,
+	// LCD, LEDs). Edits made there are passed on to the other units and the state log.
+	std::atomic<uint32_t> ui_panel_buttons{0}; // switches held in the GUI (bit = 88emu button)
+	uint32_t PanelLeds() const;                // unit 0's panel lamps (88emu bit order)
 private:
 	uint32_t applied_buttons = 0;
+	void E88PanelInput();
+	void E88Forward(uint8_t port, const uint8_t* msg, size_t size);
+	void E88PanelMutes();
+public:
+#endif
+#ifdef NUKED_SC55_DEVICE_88
+private:
+	// SC-88: the firmware logs every panel edit as a GS parameter change (a ring in its work
+	// RAM); the plugin reads the new entries after each block and passes them on as DT1.
+	int edit_cursor  = -1;   // next unread byte of the log (-1: start at the current end)
+	uint32_t gui_buttons = 0; // switches held in the GUI as last seen (ALL-mode handling)
+	bool all_eq_on   = true; // ALL + EQ: EQ switch of all parts (applied as GS parameters)
+	void E88EditPump();
+	void E88SendAll(uint8_t port, const uint8_t* msg, size_t size);
+public:
+#endif
+#ifdef NUKED_SC55_DEVICE_8850
+	// SC-8850: edits are read back from unit 0 with GS data requests; MUTE and SOLO are taken
+	// from unit 0 and applied to all units.
+	std::atomic<int> ui_encoder{0};            // VALUE encoder detents not yet passed on
+	bool GetLcdDots(uint8_t* dots, size_t size, bool& on); // unit 0, 160 x 64, one byte per dot
+	static constexpr int kLcdW = 160, kLcdH = 64;
+private:
 	struct SyncReq {
 		uint8_t port, a0, a1, a2, size;
 		uint8_t tries = 0;
@@ -326,18 +347,15 @@ private:
 	std::array<uint64_t, kNumParts + 1> host_change{}; // render frame of the host's last state change (part / [kNumParts] = SysEx)
 	bool sync_dirty = false;               // panel input since the last pass started
 	uint64_t panel_frame = 0;              // render frame of the last panel input
-	void E88PanelInput();
 	void E88SyncStart(bool boot);
 	void E88SyncPump(Instance& inst, bool forward, uint64_t now);
 	void E88SyncAnswer(const SyncReq& req, const uint8_t* data, int n, bool forward);
 	void E88SyncBoot(Instance& inst);
-	void E88Forward(uint8_t port, const uint8_t* msg, size_t size);
-	void E88PanelMutes();
 public:
 #endif
 	static constexpr bool HasToneMap()
 	{
-#if defined(NUKED_SC55_DEVICE_8850)
+#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88)
 		return false; // INST MAP on the panel, per part (synchronised like other panel edits)
 #elif defined(NUKED_SC55_ENGINE_88PRO)
 		return true;

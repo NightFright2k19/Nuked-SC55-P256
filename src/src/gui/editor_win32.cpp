@@ -18,6 +18,8 @@
 // Window class name of the editor (one per editor instance)
 #if defined(NUKED_SC55_DEVICE_8850)
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC8850P256Editor_"
+#elif defined(NUKED_SC55_DEVICE_88)
+#define NUKED_SC55_WNDCLASS_PREFIX "NukedSC88oP256Editor_"
 #elif defined(NUKED_SC55_ENGINE_88PRO)
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC88P256Editor_"
 #else
@@ -145,10 +147,12 @@ struct Editor {
     float drag_v0     = 1.0f;
     bool preview_down = false; // PREVIEW held
 #endif
-#ifdef NUKED_SC55_DEVICE_8850
-    uint32_t held85 = 0;       // panel switches held with the mouse (bit = 88emu Sc8850Button)
+#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88)
+    uint32_t held85 = 0;       // panel switches held with the mouse (bit = 88emu button)
     bool release85  = false;   // mouse released, switches let go after the minimum hold
     DWORD press85   = 0;       // tick of the press
+#endif
+#ifdef NUKED_SC55_DEVICE_8850
     int push85      = 0;       // VALUE push pulse, timer frames left
     int value85     = 0;       // VALUE knob position (detents; 4 knurl phases)
     bool drag85     = false, moved85 = false; // VALUE being turned / moved since the press
@@ -440,11 +444,17 @@ bool GatherLcd(NukedSc55& p, lcdview::View& view)
 #ifdef NUKED_SC55_DEVICE_8850
 #include "editor_sc8850.inc"
 #endif
+#ifdef NUKED_SC55_DEVICE_88
+#include "editor_sc88orig.inc"
+#endif
 
 void Draw(Editor& e, HDC dc)
 {
 #if defined(NUKED_SC55_DEVICE_8850)
     Draw8850(e, dc);
+    return;
+#elif defined(NUKED_SC55_DEVICE_88)
+    Draw88o(e, dc);
     return;
 #elif defined(NUKED_SC55_ENGINE_88PRO)
     Draw88(e, dc);
@@ -514,6 +524,8 @@ int HitButton(int x, int y)
 {
 #if defined(NUKED_SC55_DEVICE_8850)
     return Hit8850(x, y);
+#elif defined(NUKED_SC55_DEVICE_88)
+    return Hit88o(x, y);
 #elif defined(NUKED_SC55_ENGINE_88PRO)
     return HitButton88(x, y);
 #endif
@@ -577,7 +589,7 @@ void ShowSetupMenu(Editor& e)
         const bool checked = (cur + cap - 1) / cap == units;
         AppendMenuW(m, MF_STRING | (checked ? MF_CHECKED : 0), 100 + v, s);
     }
-#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850)
+#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88)
     HMENU pv_menu = CreatePopupMenu(); // "Prevw Note" C-1 .. G9 (Roland numbering, C4 = 60)
     {
         const int pn = p.preview_note.load();
@@ -626,6 +638,10 @@ void ShowSetupMenu(Editor& e)
     (void)b;
     const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTALIGN | TPM_BOTTOMALIGN,
                                    r.left + E85_SETUP.right, r.top + E85_SETUP.top - 2, 0, e.hwnd, nullptr);
+#elif defined(NUKED_SC55_DEVICE_88)
+    (void)b;
+    const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_BOTTOMALIGN,
+                                   r.left + E88O_SETUP.left, r.top + E88O_SETUP.top - 2, 0, e.hwnd, nullptr);
 #elif defined(NUKED_SC55_ENGINE_88PRO)
     (void)b;
     const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_BOTTOMALIGN,
@@ -666,6 +682,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     auto* e = reinterpret_cast<Editor*>(GetWindowLongPtrA(hwnd, GWLP_USERDATA));
 #ifdef NUKED_SC55_DEVICE_8850
     if (e && Mouse8850(*e, hwnd, msg, wp, lp)) return 0;
+#endif
+#ifdef NUKED_SC55_DEVICE_88
+    if (e && Mouse88o(*e, hwnd, msg, wp, lp)) return 0;
 #endif
     switch (msg) {
     case WM_CREATE: {

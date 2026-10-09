@@ -2,6 +2,8 @@
 # Baut die beiden ausgelieferten Ein-Datei-Plugins (ROMs eingebettet, NUR PRIVAT) nach tools/winbuild/out2/:
 #   Nuked-SC55_v121.clap/.dll   und   Nuked-SC55_MkII.clap/.dll  (MkII mit CTF-rom2.bin)
 #   sowie, falls 88emu gebaut ist (setup_wb.sh mit sc88pro.zip): Nuked-SC88_Pro.clap/.dll
+#   und mit SC-8850-ROMs (setup_wb.sh, 4. Argument): Nuked-SC8850.clap/.dll
+#   und mit SC-88-ROMs (setup_wb.sh, 5. Argument): Nuked-SC88.clap/.dll
 set -e
 WB=/home/claude/wb; S=$WB/src; R=$WB/roms; CXX=x86_64-w64-mingw32-g++-posix
 cd $WB/tools/winbuild && mkdir -p gen out2 && . ./build2.sh
@@ -19,5 +21,10 @@ if [ -f $WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ] && [ -f
   echo "SC-8850 (88emu):"
   export GM=$WB/gearmulator LIBW=$WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ROM8850=$WB/rom8850
   . ./build8850.sh; build8850
+fi
+if [ -f $WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ] && [ -f $WB/rom88sc/sc88_wave3.bin ]; then
+  echo "SC-88 (88emu):"
+  export GM=$WB/gearmulator LIBW=$WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ROM88O=$WB/rom88sc
+  . ./build88o.sh; build88o
 fi
 ls -la out2

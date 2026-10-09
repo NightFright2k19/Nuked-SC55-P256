@@ -16,6 +16,7 @@ Gebaut wird alles, wofuer ein vollstaendiger ROM-Satz gefunden wird:
   SC-55 v1.21     rom1 (32 KB), rom2 (256 KB), waverom1-3 (je 1 MB)    -> Nuked-SC55_v121
   SC-55mk2 v1.01  rom1 (32 KB), rom2 (512 KB), rom_sm (4 KB),
                   waverom1 (2 MB), waverom2 (1 MB)                       -> Nuked-SC55_MkII
+  SC-88           control (512 KB), wave0-3 (je 2 MB)                 -> Nuked-SC88
   SC-88 Pro       control (1 MB), wave0 (8 MB), wave1 (8 MB), wave2 (4 MB) -> Nuked-SC88_Pro
   SC-8850         internal (64 KB), program (1 MB), data (2 MB), wave (32 MB) -> Nuked-SC8850
 
@@ -25,9 +26,9 @@ Pruefsumme der CTF-Fassung.
 
 Hinweise
 - Eine Original-"Nuked-SC55.clap" wird nicht benoetigt: Die P256-Funktionen (Mehrfach-
-  Einheiten, Panels, SC-88-Pro-/SC-8850-Kern) sind neuer Programmcode, die Original-Datei laesst
+  Einheiten, Panels, SC-88-/SC-88-Pro-/SC-8850-Kern) sind neuer Programmcode, die Original-Datei laesst
   sich nicht dahin patchen.
 - Unbekannte Dateien (andere ROM-Versionen, fremde Dateien) werden uebersprungen.
 - Die .p256tpl-Dateien sind keine nutzbaren Plugins (keine ladbaren DLLs).
 - Die erzeugten Plugins enthalten deine ROMs und sind nur fuer den privaten Gebrauch.
-  88emu und die SC-88-Pro-/SC-8850-Panelgrafik (The Usual Suspects) stehen unter GPLv3.
+  88emu und die SC-88-/SC-88-Pro-/SC-8850-Panelgrafik (The Usual Suspects) stehen unter GPLv3.

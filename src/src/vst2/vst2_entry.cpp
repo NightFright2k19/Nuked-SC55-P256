@@ -399,7 +399,7 @@ intptr_t Dispatcher(AEffect* fx, int32_t opcode, int32_t index, intptr_t value,
 
 	case effGetChunk:
 		if (auto ns = b->Engine(); ns && ptr) {
-#if defined(NUKED_SC55_DEVICE_8850)
+#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88)
 			const int n = std::snprintf(b->state_chunk, sizeof(b->state_chunk), "NSC55P1 max_voices=%d gain=%d",
 			                            ns->max_voices.load(),
 			                            static_cast<int>(std::lround(ns->gain_db.load() * 10.0f)));
