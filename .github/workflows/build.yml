@@ -2,6 +2,7 @@ name: Nuked-SC55 P256 Autobuild
 
 on:
   push:
+    branches: [main]
     paths:
       - 'templates/**'
       - 'p256_builder.py'
