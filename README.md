@@ -3,7 +3,7 @@
 <p align="center">
 <img width="587" height="256" alt="sc55_v121" src="https://github.com/user-attachments/assets/8edc288c-b546-45f8-a545-86653f200ef6" />
 <img width="588" height="257" alt="sc55_mk2" src="https://github.com/user-attachments/assets/c82088b1-2c79-4ec0-87df-da444537797b" />
-<img width="691" height="210" alt="sc88_pro" src="https://github.com/user-attachments/assets/6c130f6c-574c-44d2-804c-e4a0ee6d53d3" />
+<img width="918" height="280" alt="sc88_pro" src="https://github.com/user-attachments/assets/2bd6fad3-9ade-4ba5-b277-848c4eca746b" />
 </p>
 
 Single-file **CLAP** and **VST2** plug-ins (Windows x64) for the Roland **SC-55 (v1.21)**, **SC-55mk2 (v1.01, with Capital Tone Fallback)** and **SC-88 Pro**, built on the low-level emulation of [Nuked SC-55](https://github.com/nukeykt/Nuked-SC55) and [88emu](https://github.com/dsp56300/gearmulator). The original modules stop at 24 (SC-55) or 28 (SC-55mk2) simultaneous voices. These plug-ins run several bit-identical emulator instances side by side and distribute the MIDI notes among them, which raises the limit to **256-280 voices** without changing how a single module sounds.
