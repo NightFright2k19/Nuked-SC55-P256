@@ -238,11 +238,13 @@ jobs:
             **SUPPORTED ROMS**
             - SC-55 v1.21
             - SC-55 MKII v1.01
+            - SC-88
             - SC-88 Pro
+            - SC-8850
 
             **INSTRUCTIONS**
             - Place these files in a subdir called "templates"
-            - Another directory called "roms" (next to "templates") must contain your SC-55/88 ROM files
+            - Another directory called "roms" (next to "templates") must contain your SC-55/88/8850 ROM files
             - Execute the Python script (p256_builder.py, in the same dir as "templates" and "roms"): **python p256_builder.py**
             - Converted files will end up in two new folders named "output/CLAP" and "output/VST2"
 
