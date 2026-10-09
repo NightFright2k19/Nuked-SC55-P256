@@ -35,7 +35,7 @@ public:
 	// A routed message: target bitmask over the instances.
 	using Mask = uint64_t;
 	static constexpr int MaxInstances = 64;
-	static constexpr int MaxPorts     = 2;
+	static constexpr int MaxPorts     = 4; // SC-8850: IN A..D (USB cables)
 	static constexpr int NumChannels  = MaxPorts * 16; // logical channels
 
 	void SetCapacity(int partials_per_instance) { capacity = partials_per_instance; }
@@ -326,12 +326,12 @@ private:
 			return;
 		}
 		// 40 1x = part on the receiving port (a 40-block DT1 on IN B edits a
-		// B part), 50 1x = B part (SC-88 family, also from IN A)
+		// B part), 50 1x = B part (SC-88 family and SC-8850, from any input)
 		if ((a != 0x40 && a != 0x50) || (b & 0xf0) != 0x10) return;
 
 		// block x: 0 → part 10, 1..9 → parts 1..9, A..F → parts 11..16
 		const int x    = b & 0x0f;
-		const int part = ((a == 0x50 || port == 1) ? 16 : 0) +
+		const int part = ((a == 0x50) ? 16 : port * 16) +
 		                 ((x == 0) ? 9 : (x <= 9 ? x - 1 : x));
 
 		for (size_t i = 0; i < data.size(); ++i) {

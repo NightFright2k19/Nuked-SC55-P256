@@ -29,7 +29,9 @@
 #endif
 
 // Product family / vendor shown by VST2 hosts
-#ifdef NUKED_SC55_ENGINE_88PRO
+#if defined(NUKED_SC55_DEVICE_8850)
+#define NUKED_SC55_FAMILY "Nuked SC-8850 P256"
+#elif defined(NUKED_SC55_ENGINE_88PRO)
 #define NUKED_SC55_FAMILY "Nuked SC-88 P256"
 #else
 #define NUKED_SC55_FAMILY "Nuked SC-55 P256"
@@ -397,7 +399,11 @@ intptr_t Dispatcher(AEffect* fx, int32_t opcode, int32_t index, intptr_t value,
 
 	case effGetChunk:
 		if (auto ns = b->Engine(); ns && ptr) {
-#ifdef NUKED_SC55_ENGINE_88PRO
+#if defined(NUKED_SC55_DEVICE_8850)
+			const int n = std::snprintf(b->state_chunk, sizeof(b->state_chunk), "NSC55P1 max_voices=%d gain=%d",
+			                            ns->max_voices.load(),
+			                            static_cast<int>(std::lround(ns->gain_db.load() * 10.0f)));
+#elif defined(NUKED_SC55_ENGINE_88PRO)
 			const int n = std::snprintf(b->state_chunk, sizeof(b->state_chunk),
 			                            "NSC55P1 max_voices=%d map=%d gain=%d pnote=%d", ns->max_voices.load(),
 			                            ns->tone_map.load(),
@@ -418,7 +424,7 @@ intptr_t Dispatcher(AEffect* fx, int32_t opcode, int32_t index, intptr_t value,
 			int v = 0;
 			if (std::sscanf(buf, "NSC55P1 max_voices=%d", &v) == 1) ns->SetMaxVoices(v);
 #ifdef NUKED_SC55_ENGINE_88PRO
-			if (const char* m = std::strstr(buf, "map="); m && m[4] >= '0' && m[4] <= '2')
+			if (const char* m = std::strstr(buf, "map="); NukedSc55::HasToneMap() && m && m[4] >= '0' && m[4] <= '2')
 				ns->tone_map = m[4] - '0';
 			if (const char* m = std::strstr(buf, "gain="); m)
 				ns->gain_db = std::clamp(std::atoi(m + 5) / 10.0f, NukedSc55::kGainMinDb, NukedSc55::kGainMaxDb);

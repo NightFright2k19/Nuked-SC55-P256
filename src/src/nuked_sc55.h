@@ -53,7 +53,8 @@ public:
 		Sc55_v2_00,
 		Sc55mk2_v1_01,
 #ifdef NUKED_SC55_ENGINE_88PRO
-		Sc88Pro
+		Sc88Pro,
+		Sc8850
 #endif
 	};
 
@@ -94,7 +95,7 @@ private:
 		uint32_t frame;      // render-frame offset in the current block
 		uint32_t offset;     // into midi_bytes
 		uint32_t size;
-		uint8_t port = 0;    // MIDI input (SC-88 Pro: 0 = IN A, 1 = IN B)
+		uint8_t port = 0;    // MIDI input (SC-88 Pro: 0 = IN A, 1 = IN B; SC-8850: 0..3 = A..D)
 	};
 	struct Instance {
 		std::unique_ptr<Emulator> emu;
@@ -103,7 +104,7 @@ private:
 		std::vector<QueuedMidi> queue;   // events for the current block
 		float dc_l = 0.0f, dc_r = 0.0f;  // idle output offset to cancel
 #ifdef NUKED_SC55_ENGINE_88PRO
-		emu88_context ctx = nullptr;     // SC-88 Pro unit (88emu)
+		emu88_context ctx = nullptr;     // SC-88 Pro / SC-8850 unit (88emu)
 		std::shared_ptr<std::atomic<bool>> booted = std::make_shared<std::atomic<bool>>(false);
 		int applied_map   = -1;          // tone map set on this unit's panel
 		// pending panel-button sequence (non-blocking, advanced while rendering)
@@ -229,8 +230,11 @@ public:
 		std::atomic<uint8_t> key_shift{0x40}; // GS 40 1x 16, 0x40 = 0 semitones
 		std::atomic<bool> rhythm{false};
 	};
-	// Parts: SC-55 1..16; SC-88 Pro A01..A16 (MIDI IN A) and B01..B16 (IN B)
-#ifdef NUKED_SC55_ENGINE_88PRO
+	// Parts: SC-55 1..16; SC-88 Pro A01..A16 (MIDI IN A) and B01..B16 (IN B);
+	// SC-8850 A01..D16 (IN A..D, the four USB cables)
+#if defined(NUKED_SC55_DEVICE_8850)
+	static constexpr int kNumPorts = 4;
+#elif defined(NUKED_SC55_ENGINE_88PRO)
 	static constexpr int kNumPorts = 2;
 #else
 	static constexpr int kNumPorts = 1;
@@ -274,29 +278,68 @@ public:
 	// SC-88 Pro front panel (GUI thread writes, audio thread reads)
 	std::atomic<float> gain_db{0.0f};      // GAIN knob in dB, kGainMinDb..kGainMaxDb; 0 = default
 	std::atomic<int> preview_note{60};     // system parameter "Prevw Note" 0..127 (C-1..G9), C4 = 60
-	std::atomic<uint32_t> mute_mask{0};    // MUTE per part (bit = part = port * 16 + MIDI channel), not stored
+	std::atomic<uint64_t> mute_mask{0};    // MUTE per part (bit = part = port * 16 + MIDI channel), not stored
 	std::atomic<int> ui_preview{0};        // 1 = PREVIEW pressed, 2 = released
 	std::atomic<int> ui_preview_part{0};   // 0..31 = A01..B16
 	static constexpr float kGainMinDb   = -12.0f, kGainMaxDb = 12.0f;
 	// 88emu's output (DAC full scale = 1.0) sits about 5 dB under the SC-55 plugins (RMS and
-	// peaks of the same songs); at GAIN 0 dB the SC-88 Pro is raised to their level.
+	// peaks of the same songs); at GAIN 0 dB the SC-88 Pro is raised to their level. The SC-8850
+	// sits another ~2.3 dB lower (RMS of e1m1/animus/grabbag vs. SC-88 Pro and SC-55).
+#ifdef NUKED_SC55_DEVICE_8850
+	static constexpr float kLevelMatchDb = 7.5f;
+#else
 	static constexpr float kLevelMatchDb = 5.0f;
+#endif
 	static float GainFactor(float gain_db);           // output factor incl. kLevelMatchDb
 	static float GainFromLegacyVolume(int vol);       // old state "vol=0..1000" -> GAIN dB, same loudness
 private:
 	float applied_gain     = -1.0f; // < 0: not applied yet
 	int preview_ch         = -1, preview_key = -1, preview_port = 0;
-	uint32_t applied_mutes = 0;
+	uint64_t applied_mutes = 0;
 	bool injecting         = false;
-	// MIDI input selected by "F5 nn" port-select messages (nn = 1: IN A, 2: IN B);
-	// applies to events of the first CLAP note port and to VST2 (one MIDI input)
+	// MIDI input selected by "F5 nn" port-select messages (nn = 1: IN A, 2: IN B, SC-8850
+	// also 3: IN C, 4: IN D); applies to events of the first CLAP note port and to VST2
 	uint8_t selected_port  = 0;
 	void InjectShort(uint8_t s, uint8_t d1, uint8_t d2, uint16_t port = 0);
 public:
 #endif
+#ifdef NUKED_SC55_DEVICE_8850
+	// SC-8850 front panel: the GUI drives unit 0's own panel (firmware menus, LCD, LEDs).
+	// Edits made there are read back from unit 0 (GS data requests) and passed on to the
+	// other units; MUTE and SOLO are taken from unit 0 and applied to all units.
+	std::atomic<uint32_t> ui_panel_buttons{0}; // switches held in the GUI (bit = 88emu Sc8850Button)
+	std::atomic<int> ui_encoder{0};            // VALUE encoder detents not yet passed on
+	bool GetLcdDots(uint8_t* dots, size_t size, bool& on); // unit 0, 160 x 64, one byte per dot
+	uint32_t PanelLeds() const;                // unit 0: EDIT, DRUM, EFFECTS, SHIFT, SOLO, MUTE
+	static constexpr int kLcdW = 160, kLcdH = 64;
+private:
+	uint32_t applied_buttons = 0;
+	struct SyncReq {
+		uint8_t port, a0, a1, a2, size;
+		uint8_t tries = 0;
+		uint64_t sent_frame = 0;
+	};
+	std::vector<SyncReq> sync_queue;       // requests still to send (the last one next)
+	std::vector<SyncReq> sync_outstanding; // sent, answer pending
+	std::vector<int16_t> sync_base;        // last known value per (port, address); -1 = unknown
+	std::vector<uint8_t> sync_in;          // unit 0 MIDI output not yet parsed
+	std::array<uint64_t, kNumParts + 1> host_change{}; // render frame of the host's last state change (part / [kNumParts] = SysEx)
+	bool sync_dirty = false;               // panel input since the last pass started
+	uint64_t panel_frame = 0;              // render frame of the last panel input
+	void E88PanelInput();
+	void E88SyncStart(bool boot);
+	void E88SyncPump(Instance& inst, bool forward, uint64_t now);
+	void E88SyncAnswer(const SyncReq& req, const uint8_t* data, int n, bool forward);
+	void E88SyncBoot(Instance& inst);
+	void E88Forward(uint8_t port, const uint8_t* msg, size_t size);
+	void E88PanelMutes();
+public:
+#endif
 	static constexpr bool HasToneMap()
 	{
-#ifdef NUKED_SC55_ENGINE_88PRO
+#if defined(NUKED_SC55_DEVICE_8850)
+		return false; // INST MAP on the panel, per part (synchronised like other panel edits)
+#elif defined(NUKED_SC55_ENGINE_88PRO)
 		return true;
 #else
 		return false;

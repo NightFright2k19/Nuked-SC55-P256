@@ -4,6 +4,105 @@ diff --git a/source/cpu/dsp56300 b/source/cpu/dsp56300
 @@ -1 +1 @@
 -Subproject commit c1d6593f0c90be3c654aa1430de7738d9fc7420c
 +Subproject commit c1d6593f0c90be3c654aa1430de7738d9fc7420c-dirty
+diff --git a/source/ronaldo/88emu/88lib/boards/sc8850.cpp b/source/ronaldo/88emu/88lib/boards/sc8850.cpp
+index 0aa2451..72ae629 100644
+--- a/source/ronaldo/88emu/88lib/boards/sc8850.cpp
++++ b/source/ronaldo/88emu/88lib/boards/sc8850.cpp
+@@ -3,6 +3,9 @@
+ #include <algorithm>
+ #include <cstdio>
+ #include <cstring>
++#include <map>
++#include <memory>
++#include <mutex>
+ 
+ namespace
+ {
+@@ -15,6 +18,28 @@ namespace
+ 		std::copy_n(_rom1.begin(), std::min(_rom1.size(), PhysicalRomSize), result.begin() + PhysicalRomSize);
+ 		return result;
+ 	}
++
++	// Process-wide cache of combined wave ROMs (keyed by a hash of the raw data).
++	std::shared_ptr<const std::vector<uint8_t>> sharedWaveRoms(const std::vector<uint8_t>& _rom0, const std::vector<uint8_t>& _rom1)
++	{
++		static std::mutex mutex;
++		static std::map<uint64_t, std::weak_ptr<const std::vector<uint8_t>>> cache;
++		uint64_t h = 1469598103934665603ull ^ (_rom0.size() * 31 + _rom1.size());
++		for (const auto* r : {&_rom0, &_rom1})
++			for (size_t i = 0; i < r->size(); i += 8)
++			{
++				uint64_t w = 0;
++				std::memcpy(&w, r->data() + i, std::min<size_t>(8, r->size() - i));
++				h ^= w; h *= 1099511628211ull;
++			}
++		std::lock_guard lock(mutex);
++		if (auto it = cache.find(h); it != cache.end())
++			if (auto sp = it->second.lock())
++				return sp;
++		auto sp = std::make_shared<const std::vector<uint8_t>>(combineWaveRoms(_rom0, _rom1));
++		cache[h] = sp;
++		return sp;
++	}
+ }
+ 
+ namespace emu88Lib
+@@ -57,7 +82,8 @@ namespace emu88Lib
+ 		: m_cpuRom(std::move(_cpuRom))
+ 		, m_programRom(std::move(_programRom))
+ 		, m_dataRom(std::move(_dataRom))
+-		, m_waveRom(combineWaveRoms(_waveRom0, _waveRom1))
++		, m_waveRomShared(sharedWaveRoms(_waveRom0, _waveRom1))
++		, m_waveRom(*m_waveRomShared)
+ 	{
+ 		if(m_cpuRom.size() != CpuRomSize)
+ 		{
+diff --git a/source/ronaldo/88emu/88lib/boards/sc8850.h b/source/ronaldo/88emu/88lib/boards/sc8850.h
+index 1ac9850..09b054e 100644
+--- a/source/ronaldo/88emu/88lib/boards/sc8850.h
++++ b/source/ronaldo/88emu/88lib/boards/sc8850.h
+@@ -4,6 +4,7 @@
+ #include <cstdint>
+ #include <deque>
+ #include <functional>
++#include <memory>
+ #include <utility>
+ #include <vector>
+ 
+@@ -112,6 +113,21 @@ namespace emu88Lib
+ 
+ 		bool isValid() const { return m_valid; }
+ 		SampleFrame renderSample();
++		// Nuked SC-55 Poly: firmware work RAM (01000000-0107FFFF), 0 outside
++		uint8_t peekWorkRam(const uint32_t _address)
++		{
++			if(_address < WorkRamBase || _address >= WorkRamBase + WorkRamSize) return 0;
++			return m_machine.bus().read8(_address);
++		}
++		// Nuked SC-55 Poly: sounding voices (effective amplitude != 0) of both XP tone generators
++		int activeVoiceCount() const
++		{
++			int n = 0;
++			for (const auto& xp : m_xp)
++				for (const auto& v : xp.state().voices)
++					if (v.combinedAmp_2300 != 0) ++n;
++			return n;
++		}
+ 
+ 		hwLib::SED1335& lcd() { return m_lcd; }
+ 		const hwLib::SED1335& lcd() const { return m_lcd; }
+@@ -247,7 +263,10 @@ namespace emu88Lib
+ 		std::vector<uint8_t> m_cpuRom;
+ 		std::vector<uint8_t> m_programRom;
+ 		std::vector<uint8_t> m_dataRom;
+-		std::vector<uint8_t> m_waveRom;
++		// Combined wave ROM, read-only after construction. Shared by all boards created from the
++		// same ROM set in this process (Nuked SC-55 Poly runs several units).
++		std::shared_ptr<const std::vector<uint8_t>> m_waveRomShared;
++		const std::vector<uint8_t>& m_waveRom;
+ 
+ 		std::array<bool, 2> m_xpEnabled{};
+ 		std::array<int32_t, 8> m_xp0SdiaInput{};
 diff --git a/source/ronaldo/88emu/88lib/boards/sc88pro.cpp b/source/ronaldo/88emu/88lib/boards/sc88pro.cpp
 index 2053225..9b6ea87 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc88pro.cpp
@@ -91,7 +190,7 @@ index 9f21044..96d1595 100644
  		xpLib::XP m_xp;
  		Lcd m_lcd;
 diff --git a/source/ronaldo/88emu/88lib/c_interface.cpp b/source/ronaldo/88emu/88lib/c_interface.cpp
-index 9ccf846..3d4df7f 100644
+index 9ccf846..9a92930 100644
 --- a/source/ronaldo/88emu/88lib/c_interface.cpp
 +++ b/source/ronaldo/88emu/88lib/c_interface.cpp
 @@ -1,3 +1,4 @@
@@ -99,7 +198,38 @@ index 9ccf846..3d4df7f 100644
  #include "88lib/c_interface.h"
  
  #include "88lib/deviceModel.h"
-@@ -515,3 +516,63 @@ void emu88_render_bit16s(const emu88_context _context, int16_t* _stream, const u
+@@ -45,6 +46,9 @@ struct emu88_data
+ 	// Played since the last frame was rendered; goes to the device with the next one.
+ 	std::vector<synthLib::SMidiEvent> midiIn;
+ 	std::vector<synthLib::SMidiEvent> midiOut;
++	// Nuked SC-55 Poly: collected MIDI output (emu88_capture_midi_out)
++	bool captureOut = false;
++	std::vector<uint8_t> outBytes;
+ 
+ 	std::unique_ptr<synthLib::Resampler> resampler;
+ 	std::vector<float> left, right;
+@@ -64,6 +68,20 @@ struct emu88_data
+ 		const synthLib::TAudioInputs inputs{};
+ 		device->process(inputs, _outputs, _frames, midiIn, midiOut);
+ 		midiIn.clear();
++		if(captureOut)
++		{
++			for(const auto& e : midiOut)
++			{
++				if(outBytes.size() > 0x40000) break;
++				if(!e.sysex.empty()) outBytes.insert(outBytes.end(), e.sysex.begin(), e.sysex.end());
++				else if(e.a >= 0x80 && e.a < 0xf0)
++				{
++					outBytes.push_back(e.a);
++					outBytes.push_back(e.b);
++					if((e.a & 0xe0) != 0xc0) outBytes.push_back(e.c);
++				}
++			}
++		}
+ 	}
+ 
+ 	void updateResampler()
+@@ -515,3 +533,138 @@ void emu88_render_bit16s(const emu88_context _context, int16_t* _stream, const u
  }
  
  } // extern "C"
@@ -163,11 +293,86 @@ index 9ccf846..3d4df7f 100644
 +	if (displayOn) *displayOn = s.displayOn ? 1 : 0;
 +	return 1;
 +}
++
++emu88_return_code emu88_set_sc8850_rom_images(const uint8_t* cpu, size_t cpuSize, const uint8_t* program,
++	size_t programSize, const uint8_t* data, size_t dataSize, const uint8_t* wave, size_t waveSize)
++{
++	emu88Lib::RomLoader::Sc8850RomImages im;
++	im.cpu = cpu; im.cpuSize = cpuSize;
++	im.program = program; im.programSize = programSize;
++	im.data = data; im.dataSize = dataSize;
++	im.wave = wave; im.waveSize = waveSize;
++	if (!cpu || !program || !data || !wave || cpuSize != emu88Lib::Sc8850RomSet::CpuSize ||
++	    programSize != emu88Lib::Sc8850RomSet::ProgramSize || dataSize != emu88Lib::Sc8850RomSet::DataSize ||
++	    waveSize != emu88Lib::Sc8850WaveRomSet::Size)
++		return EMU88_RC_INVALID_ARGUMENT;
++	emu88Lib::RomLoader::setInjectedSc8850RomImages(&im);
++	return EMU88_RC_OK;
++}
++
++emu88_return_code emu88_dump_sc8850_rom_images(const char* cpuPath, const char* programPath, const char* dataPath,
++	const char* wavePath)
++{
++	const auto set = emu88Lib::RomLoader::findSc8850RomSet();
++	const auto waves = emu88Lib::RomLoader::findSc8850WaveRomSet();
++	if (!set.isValid() || !waves.isValid())
++		return EMU88_RC_MISSING_ROMS;
++	const auto write = [](const char* path, const std::vector<uint8_t>& a, const std::vector<uint8_t>* b) {
++		FILE* f = std::fopen(path, "wb");
++		if (!f) return false;
++		bool ok = std::fwrite(a.data(), 1, a.size(), f) == a.size();
++		if (b) ok = ok && std::fwrite(b->data(), 1, b->size(), f) == b->size();
++		std::fclose(f);
++		return ok;
++	};
++	if (!write(cpuPath, set.cpu, nullptr) || !write(programPath, set.program, nullptr) ||
++	    !write(dataPath, set.data, nullptr) || !write(wavePath, waves.romA, &waves.romB))
++		return EMU88_RC_FAILED;
++	return EMU88_RC_OK;
++}
++
++int emu88_get_display_pixels(emu88_context context, unsigned screen, uint8_t* dots, size_t size, int* width,
++	int* height, int* displayOn)
++{
++	if (!context || !context->device || screen > 1)
++		return 0;
++	const auto snap = context->device->displaySnapshot();
++	const auto& s = snap.screens[screen];
++	if (s.type != emu88Lib::HardwareDevice::DisplaySnapshot::Type::Graphic)
++		return 0;
++	if (width) *width = s.width;
++	if (height) *height = s.height;
++	if (displayOn) *displayOn = s.displayOn ? 1 : 0;
++	if (dots) std::memcpy(dots, s.mono.data(), std::min(size, s.mono.size()));
++	return 1;
++}
++
++void emu88_capture_midi_out(emu88_context context, int enable)
++{
++	if (!context) return;
++	context->captureOut = enable != 0;
++	context->outBytes.clear();
++}
++
++size_t emu88_read_midi_out(emu88_context context, uint8_t* buffer, size_t size)
++{
++	if (!context || !buffer) return 0;
++	const size_t n = std::min(size, context->outBytes.size());
++	std::memcpy(buffer, context->outBytes.data(), n);
++	context->outBytes.erase(context->outBytes.begin(), context->outBytes.begin() + static_cast<std::ptrdiff_t>(n));
++	return n;
++}
++
++int emu88_peek_work_ram(emu88_context context, uint32_t address, uint8_t* buffer, size_t size)
++{
++	if (!context || !context->device || !buffer) return 0;
++	return context->device->peekWorkRam(address, buffer, size) ? 1 : 0;
++}
 diff --git a/source/ronaldo/88emu/88lib/c_interface.h b/source/ronaldo/88emu/88lib/c_interface.h
-index c9a5132..b876fd9 100644
+index c9a5132..9278f94 100644
 --- a/source/ronaldo/88emu/88lib/c_interface.h
 +++ b/source/ronaldo/88emu/88lib/c_interface.h
-@@ -227,6 +227,23 @@ EMU88_EXPORT int emu88_is_display_on(emu88_context context, unsigned screen);
+@@ -227,6 +227,42 @@ EMU88_EXPORT int emu88_is_display_on(emu88_context context, unsigned screen);
   * closed synth produces silence. */
  EMU88_EXPORT void emu88_render_bit16s(emu88_context context, int16_t* stream, uint32_t length);
  EMU88_EXPORT void emu88_render_float(emu88_context context, float* stream, uint32_t length);
@@ -185,6 +390,25 @@ index c9a5132..b876fd9 100644
 + * display, 0 otherwise. */
 +EMU88_EXPORT int emu88_get_display_memory(emu88_context context, unsigned screen, uint8_t* ddRam80,
 +	uint8_t* cgRam64, int* displayOn);
++/* The SC-8850's ROM set from memory: internal 64 KiB, program 1 MiB, data 2 MiB, wave 32 MiB
++ * (IC53+IC54 unscrambled). Only the pointers are kept, as with the SC-88 Pro. */
++EMU88_EXPORT emu88_return_code emu88_set_sc8850_rom_images(const uint8_t* cpu, size_t cpuSize,
++	const uint8_t* program, size_t programSize, const uint8_t* data, size_t dataSize,
++	const uint8_t* wave, size_t waveSize);
++/* Write the SC-8850 ROM set found on the ROM paths to four files in the layout above (build tool). */
++EMU88_EXPORT emu88_return_code emu88_dump_sc8850_rom_images(const char* cpuPath, const char* programPath,
++	const char* dataPath, const char* wavePath);
++/* Dot matrix of a graphic display (SC-8850: 160 x 64), one byte per dot (0/1), row major.
++ * Copies at most size bytes; returns 1 for a graphic display, 0 otherwise. Thread-safe (snapshot). */
++EMU88_EXPORT int emu88_get_display_pixels(emu88_context context, unsigned screen, uint8_t* dots, size_t size,
++	int* width, int* height, int* displayOn);
++/* Start (1) or stop (0) collecting the device's MIDI output, and take what was collected: raw bytes
++ * (SysEx complete), at most size; returns the number of bytes copied. Render thread only. */
++EMU88_EXPORT void emu88_capture_midi_out(emu88_context context, int enable);
++EMU88_EXPORT size_t emu88_read_midi_out(emu88_context context, uint8_t* buffer, size_t size);
++/* Firmware work RAM of the SC-8850 (01000000-0107FFFF; 0 outside). Render thread only.
++ * Returns 1 on the SC-8850, 0 otherwise. */
++EMU88_EXPORT int emu88_peek_work_ram(emu88_context context, uint32_t address, uint8_t* buffer, size_t size);
 +/* Write the normalized SC-88 Pro ROM set found on the ROM paths to four files (build tool). */
 +EMU88_EXPORT emu88_return_code emu88_dump_sc88pro_rom_images(const char* controlPath, const char* waveAPath,
 +	const char* waveBPath, const char* waveCPath);
@@ -192,10 +416,10 @@ index c9a5132..b876fd9 100644
  #ifdef __cplusplus
  }
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.cpp b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-index 69c6751..8b01580 100644
+index 69c6751..689bb2a 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-@@ -714,3 +714,11 @@ namespace emu88Lib
+@@ -714,3 +714,18 @@ namespace emu88Lib
  			m_activeChannels &= ~channelMask;
  	}
  }
@@ -204,28 +428,37 @@ index 69c6751..8b01580 100644
 +{
 +	int HardwareDevice::activeVoiceCount() const
 +	{
-+		return m_sc88Pro ? m_sc88Pro->activeVoiceCount() : -1;
++		return m_sc88Pro ? m_sc88Pro->activeVoiceCount() : m_sc8850 ? m_sc8850->activeVoiceCount() : -1;
++	}
++
++	bool HardwareDevice::peekWorkRam(const uint32_t _address, uint8_t* _dst, const size_t _size)
++	{
++		if(!m_sc8850) return false;
++		for(size_t i = 0; i < _size; ++i) _dst[i] = m_sc8850->peekWorkRam(_address + static_cast<uint32_t>(i));
++		return true;
 +	}
 +}
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.h b/source/ronaldo/88emu/88lib/hardwareDevice.h
-index 3ad2087..880beac 100644
+index 3ad2087..ed57c4e 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.h
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.h
-@@ -45,6 +45,9 @@ namespace emu88Lib
+@@ -45,6 +45,11 @@ namespace emu88Lib
  	class HardwareDevice final : public synthLib::Device
  	{
  	public:
-+		// Nuked SC-55 Poly: sounding voices of the tone generator (SC-88 Pro only, else -1)
++		// Nuked SC-55 Poly: sounding voices of the tone generator (SC-88 Pro and SC-8850, else -1)
 +		int activeVoiceCount() const;
++		// Nuked SC-55 Poly: firmware work RAM of the SC-8850 (render thread), false elsewhere
++		bool peekWorkRam(uint32_t _address, uint8_t* _dst, size_t _size);
 +
  		struct DisplaySnapshot
  		{
  			enum class Type : uint8_t { None, Character, Graphic };
 diff --git a/source/ronaldo/88emu/88lib/rom/romloader.cpp b/source/ronaldo/88emu/88lib/rom/romloader.cpp
-index 9e0b9fe..611ed61 100644
+index 9e0b9fe..cb521f7 100644
 --- a/source/ronaldo/88emu/88lib/rom/romloader.cpp
 +++ b/source/ronaldo/88emu/88lib/rom/romloader.cpp
-@@ -29,7 +29,24 @@ namespace emu88Lib
+@@ -29,7 +29,34 @@ namespace emu88Lib
              return {std::move(data), baseLib::filesystem::getFilenameWithoutPath(found->path), model};
          }
      } // namespace
@@ -234,6 +467,14 @@ index 9e0b9fe..611ed61 100644
 +    {
 +        RomLoader::Sc88ProRomImages g_injectedImages;
 +        const RomLoader::Sc88ProRomImages* g_injectedSc88Pro = nullptr;
++        RomLoader::Sc8850RomImages g_injected8850Images;
++        const RomLoader::Sc8850RomImages* g_injectedSc8850 = nullptr;
++    }
++
++    void RomLoader::setInjectedSc8850RomImages(const Sc8850RomImages* _images)
++    {
++        if (_images) { g_injected8850Images = *_images; g_injectedSc8850 = &g_injected8850Images; }
++        else g_injectedSc8850 = nullptr;
 +    }
 +
 +    void RomLoader::setInjectedSc88ProRomImages(const Sc88ProRomImages* _images)
@@ -246,12 +487,14 @@ index 9e0b9fe..611ed61 100644
 +    {
 +        if (g_injectedSc88Pro && _device == RomDevice::Sc88Pro)
 +            return true;
++        if (g_injectedSc8850 && _device == RomDevice::Sc8850)
++            return true;
 +        return scan().isComplete(_device);
 +    }
  
      bool RomLoader::isDeviceAvailable(const DeviceModel _model) { return isDeviceAvailable(toRomDevice(_model)); }
  
-@@ -114,6 +131,17 @@ namespace emu88Lib
+@@ -114,6 +141,17 @@ namespace emu88Lib
  
      Sc88ProRomSet RomLoader::findSc88ProRomSet(const RomDevice _device)
      {
@@ -269,11 +512,42 @@ index 9e0b9fe..611ed61 100644
          const auto inventory = scan();
          if ((_device != RomDevice::Sc88Pro && _device != RomDevice::VeGsPro) || !inventory.isComplete(_device))
              return {};
+@@ -134,6 +172,15 @@ namespace emu88Lib
+ 
+     Sc8850RomSet RomLoader::findSc8850RomSet()
+     {
++        if (g_injectedSc8850)
++        {
++            const auto& im = *g_injectedSc8850;
++            Sc8850RomSet set;
++            set.cpu.assign(im.cpu, im.cpu + im.cpuSize);
++            set.program.assign(im.program, im.program + im.programSize);
++            set.data.assign(im.data, im.data + im.dataSize);
++            return set.isValid() ? set : Sc8850RomSet{};
++        }
+         const auto inventory = scan();
+ 
+         Sc8850RomSet result;
+@@ -148,6 +195,14 @@ namespace emu88Lib
+     Sc8850WaveRomSet RomLoader::findSc8850WaveRomSet()
+     {
+         Sc8850WaveRomSet result;
++        if (g_injectedSc8850)
++        {
++            const auto& im = *g_injectedSc8850;
++            if (im.waveSize != Sc8850WaveRomSet::Size) return {};
++            result.romA.assign(im.wave, im.wave + Sc8850WaveRomSet::ChipSize);
++            result.romB.assign(im.wave + Sc8850WaveRomSet::ChipSize, im.wave + Sc8850WaveRomSet::Size);
++            return result;
++        }
+         const auto inventory = scan();
+         if (!inventory.read(result.romA, RomDevice::Sc8850, RomSlot::Wave, 0) ||
+             !inventory.read(result.romB, RomDevice::Sc8850, RomSlot::Wave, 1))
 diff --git a/source/ronaldo/88emu/88lib/rom/romloader.h b/source/ronaldo/88emu/88lib/rom/romloader.h
-index e0d8ff6..aa28fbb 100644
+index e0d8ff6..e1cf15f 100644
 --- a/source/ronaldo/88emu/88lib/rom/romloader.h
 +++ b/source/ronaldo/88emu/88lib/rom/romloader.h
-@@ -141,6 +141,17 @@ namespace emu88Lib
+@@ -141,6 +141,27 @@ namespace emu88Lib
          // The SC-88Pro board's set. The VE-GS Pro is the same board with its own
          // control ROM and the same waves, so _device picks whose control ROM is read.
          static Sc88ProRomSet findSc88ProRomSet(RomDevice _device = RomDevice::Sc88Pro);
@@ -288,6 +562,16 @@ index e0d8ff6..aa28fbb 100644
 +            const uint8_t* waveC = nullptr;    size_t waveCSize = 0;
 +        };
 +        static void setInjectedSc88ProRomImages(const Sc88ProRomImages* _images);
++        // The same for the SC-8850: internal 64 KiB, program 1 MiB, data 2 MiB, wave 32 MiB
++        // (IC53+IC54 unscrambled, as one image).
++        struct Sc8850RomImages
++        {
++            const uint8_t* cpu = nullptr;     size_t cpuSize = 0;
++            const uint8_t* program = nullptr; size_t programSize = 0;
++            const uint8_t* data = nullptr;    size_t dataSize = 0;
++            const uint8_t* wave = nullptr;    size_t waveSize = 0;
++        };
++        static void setInjectedSc8850RomImages(const Sc8850RomImages* _images);
  
          // SC-8850 uses the SH7016's 64 KiB internal ROM, a 1 MiB CS0
          // executable flash and a 2 MiB CS3 data/tone flash.

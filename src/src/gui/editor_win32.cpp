@@ -16,7 +16,9 @@
 #include "editor.h"
 
 // Window class name of the editor (one per editor instance)
-#ifdef NUKED_SC55_ENGINE_88PRO
+#if defined(NUKED_SC55_DEVICE_8850)
+#define NUKED_SC55_WNDCLASS_PREFIX "NukedSC8850P256Editor_"
+#elif defined(NUKED_SC55_ENGINE_88PRO)
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC88P256Editor_"
 #else
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC55P256Editor_"
@@ -142,6 +144,16 @@ struct Editor {
     int drag_x = 0, drag_y = 0;
     float drag_v0     = 1.0f;
     bool preview_down = false; // PREVIEW held
+#endif
+#ifdef NUKED_SC55_DEVICE_8850
+    uint32_t held85 = 0;       // panel switches held with the mouse (bit = 88emu Sc8850Button)
+    bool release85  = false;   // mouse released, switches let go after the minimum hold
+    DWORD press85   = 0;       // tick of the press
+    int push85      = 0;       // VALUE push pulse, timer frames left
+    int value85     = 0;       // VALUE knob position (detents; 4 knurl phases)
+    bool drag85     = false, moved85 = false; // VALUE being turned / moved since the press
+    int steps85     = 0;       // detents passed on during this drag
+    void* lcd85     = nullptr; // graphic LCD renderer
 #endif
     bool menu_open  = false;
     float peak      = 0;     // polyphony peak hold
@@ -425,10 +437,16 @@ bool GatherLcd(NukedSc55& p, lcdview::View& view)
 #ifdef NUKED_SC55_ENGINE_88PRO
 #include "editor_sc88.inc"
 #endif
+#ifdef NUKED_SC55_DEVICE_8850
+#include "editor_sc8850.inc"
+#endif
 
 void Draw(Editor& e, HDC dc)
 {
-#ifdef NUKED_SC55_ENGINE_88PRO
+#if defined(NUKED_SC55_DEVICE_8850)
+    Draw8850(e, dc);
+    return;
+#elif defined(NUKED_SC55_ENGINE_88PRO)
     Draw88(e, dc);
     return;
 #endif
@@ -494,7 +512,9 @@ void DecayBars(Editor& e)
 
 int HitButton(int x, int y)
 {
-#ifdef NUKED_SC55_ENGINE_88PRO
+#if defined(NUKED_SC55_DEVICE_8850)
+    return Hit8850(x, y);
+#elif defined(NUKED_SC55_ENGINE_88PRO)
     return HitButton88(x, y);
 #endif
     for (const auto& b : BUTTONS)
@@ -533,6 +553,10 @@ void ShowSetupMenu(Editor& e)
     const int base_88pro[] = {64, 128, 192, 256, 256, 256, 256, 256, 256}; // units of 64
     opts = base_88pro;
 #endif
+#ifdef NUKED_SC55_DEVICE_8850
+    const int base_8850[] = {128, 256, 256, 256, 256, 256, 256, 256, 256}; // units of 128
+    opts = base_8850;
+#endif
 
     HMENU m = CreatePopupMenu();
     AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Max. polyphony", L"Max. Polyphonie"));
@@ -553,7 +577,7 @@ void ShowSetupMenu(Editor& e)
         const bool checked = (cur + cap - 1) / cap == units;
         AppendMenuW(m, MF_STRING | (checked ? MF_CHECKED : 0), 100 + v, s);
     }
-#ifdef NUKED_SC55_ENGINE_88PRO
+#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850)
     HMENU pv_menu = CreatePopupMenu(); // "Prevw Note" C-1 .. G9 (Roland numbering, C4 = 60)
     {
         const int pn = p.preview_note.load();
@@ -598,7 +622,11 @@ void ShowSetupMenu(Editor& e)
     const auto& b = BUTTONS[3];
     e.menu_open = true;
     InvalidateRect(e.hwnd, nullptr, FALSE);
-#ifdef NUKED_SC55_ENGINE_88PRO
+#if defined(NUKED_SC55_DEVICE_8850)
+    (void)b;
+    const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTALIGN | TPM_BOTTOMALIGN,
+                                   r.left + E85_SETUP.right, r.top + E85_SETUP.top - 2, 0, e.hwnd, nullptr);
+#elif defined(NUKED_SC55_ENGINE_88PRO)
     (void)b;
     const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_BOTTOMALIGN,
                                    r.left + P88_SETUP.left, r.top + P88_SETUP.top - 2, 0, e.hwnd, nullptr);
@@ -636,6 +664,9 @@ const char* ClassName()
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     auto* e = reinterpret_cast<Editor*>(GetWindowLongPtrA(hwnd, GWLP_USERDATA));
+#ifdef NUKED_SC55_DEVICE_8850
+    if (e && Mouse8850(*e, hwnd, msg, wp, lp)) return 0;
+#endif
     switch (msg) {
     case WM_CREATE: {
         auto* cs = reinterpret_cast<CREATESTRUCTA*>(lp);
@@ -860,6 +891,9 @@ void Destroy(void* ed)
         DeleteDC(e->bg_dc);
     }
     lcdview::FreeCache(e->lcd_cache);
+#ifdef NUKED_SC55_DEVICE_8850
+    FreeLcd85(e->lcd85);
+#endif
     delete e;
 }
 

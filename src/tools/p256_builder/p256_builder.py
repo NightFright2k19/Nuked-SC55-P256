@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Nuked SC-55 / SC-88 P256 - Plugin-Builder
+Nuked SC-55 / SC-88 / SC-8850 P256 - Plugin-Builder
 
 Erzeugt die Ein-Datei-Plugins (CLAP + VST2, Windows x64) aus den ROM-losen Vorlagen in
 "templates" (ohne ROMs und ohne Platz dafuer; das Skript setzt die ROMs ein) und deinen eigenen ROM-Dateien im Ordner "roms" (Unterordner werden mit
@@ -10,6 +10,7 @@ durchsucht, Dateinamen sind egal - erkannt wird am Inhalt per SHA-256).
   SC-55 v1.21        -> output/CLAP/Nuked-SC55_v121.clap, output/VST2/Nuked-SC55_v121.dll
   SC-55mk2 v1.01     -> output/.../Nuked-SC55_MkII.*   (immer mit CTF, s. u.)
   SC-88 Pro          -> output/.../Nuked-SC88_Pro.*
+  SC-8850            -> output/.../Nuked-SC8850.*
 
 Gebaut wird alles, wofuer ein vollstaendiger ROM-Satz gefunden wird.
 SC-55mk2: Liegt nur das originale rom2 (512 KB) vor, wird der CTF-Patch (Capital Tone
@@ -46,8 +47,12 @@ KNOWN = {
     "3c6a96298e0de126c885f7111c62c8cce6afe8e446d86f5d57624c9540506212": ("88pro", "wave0"),
     "42bcbba9506a667c26bed3ed02afb1f0c1d2c1a132af3f11ab439fd28aa16ae6": ("88pro", "wave1"),
     "db40d8624fceec5af4883dd2ff93c9a47acfdb3b7aed677a2eddb046db3a2a03": ("88pro", "wave2"),
+    "dc5caf0841819fce6b9279af92b381a7211baa85822ef2bb1f9249296975ced0": ("8850", "internal"),
+    "19e670a82eebe4ff8610aab8013470a749d31a029483ce9e46ade85acdff5aab": ("8850", "program"),
+    "48eeceb4dbba45b66e0d3f3c325896bc7913ba19bdf61c4a0690ae6f936cd863": ("8850", "data"),
+    "3cfac9db381527a4bc21033a297518c4122b0af392996b036bd38dbada4ba1e2": ("8850", "wave"),
 }
-SIZES = {32768, 262144, 524288, 4096, 1048576, 2097152, 4194304, 8388608}
+SIZES = {32768, 262144, 524288, 4096, 1048576, 2097152, 4194304, 8388608, 65536, 33554432}
 CTF_SHA = "10b3f09485a74bb014f1a940d5c67f380c7979b62891d540d788154c83f17430"
 # CTF-Patch fuer SC-55mk2 v1.01 rom2: Abschnitte (Versatz u32, Laenge u16, Bytes), zlib, Base64
 CTF_PATCH = "eNrl2HdPU1EYx/Fve2kLChVliowCRcsGLYoVKSEOXNHg3nvHhMS9qyYm7r0XKu4VY4y8CF+L8SV4vFwSa5oUiTGG3++vc899cvN88tybk1xcFt2YWHjwkUYGmWSTQy555FNAIUUEKKWCEJXUUEs9DTTSRDMRWojSRjvTmM4MZtLBLOYwjwV0spBFLGYJS1nGclayijWsZT0b2MgmtrCVbexgJ7voYjd72Ms+9nOAgxziMEc4yjGOE+MEJ3tMl3PhDGc5x3kucJFLXOYKV7nGdW5wk1vc5i73uM8DHvGYp/TwjOe85BWvecNb3vGeD3zkE5/pxW3x/e+6Zw/Ivdl2bx+Ym1OcTqq+46i7jfpJErU15NQPB6BOkVR7JNVeSbVPUe1PtUil31lgrrwYaTGBoFmnY6xVxlr30xoxO26ItvXd+UXaaXZC/CZdYaSrE0ljpjpA0vPKVLUzCOuLeOu3vq57SUs635IhNt8vRj1M8lseLqlOl1RnSKr9kuoRimp3pn0q22a/WZeRwFxum6v7zWFT14Gtbk2onv8n6ph5Whf/fNojJd/xUZLqLEl1tqQ6R1KdK6nOk1Tnx6nTjTpLQD1actYFkuoxkupCSXWRpLpYUl0iqQ7Yf6STqIOm6itx7vAg3ev+E3ep5LTLJNXlkuqgpLpCUj1WUj1OUh2SVFdKqqsk1dWS6hpJda2kuk5SXS+pbpBUN0qqx0uqJ0iqw5LqJkn1REn1JEl1s6R6sqQ6IqmeIqlukVRPlVS3SqqjimpXzDKNO3E5cTuxUiw7HideJz4nqU5+AJuF72A="
@@ -57,6 +62,7 @@ MODELS = [
     ("v121", "Nuked-SC55_v121", "SC-55 v1.21", [(0, "rom1"), (1, "rom2"), (3, "wave1"), (4, "wave2"), (5, "wave3")]),
     ("mk2", "Nuked-SC55_MkII", "SC-55mk2 v1.01 (CTF)", [(0, "rom1"), (1, "rom2"), (2, "rom_sm"), (3, "wave1"), (4, "wave2")]),
     ("88pro", "Nuked-SC88_Pro", "SC-88 Pro", [(0, "control"), (1, "wave0"), (2, "wave1"), (3, "wave2")]),
+    ("8850", "Nuked-SC8850", "SC-8850", [(0, "internal"), (1, "program"), (2, "data"), (3, "wave")]),
 ]
 
 
@@ -120,7 +126,7 @@ def fill_template(template: bytes, entries, name: str) -> bytes:
 
 
 def main() -> int:
-    print("Nuked SC-55 / SC-88 P256 - Plugin-Builder\n")
+    print("Nuked SC-55 / SC-88 / SC-8850 P256 - Plugin-Builder\n")
     if not ROMS.is_dir():
         print(f"Ordner fehlt: {ROMS}\n-> Lege dort deine ROM-Dateien ab (Unterordner erlaubt).")
         return 1

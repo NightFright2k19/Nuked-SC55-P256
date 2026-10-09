@@ -15,4 +15,9 @@ if [ -f $WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ] && [ -f
   export GM=$WB/gearmulator LIBW=$WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ROMPROC=$WB/rom88proc
   . ./build88.sh; build88
 fi
+if [ -f $WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ] && [ -f $WB/rom8850/sc8850_wave.bin ]; then
+  echo "SC-8850 (88emu):"
+  export GM=$WB/gearmulator LIBW=$WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ROM8850=$WB/rom8850
+  . ./build8850.sh; build8850
+fi
 ls -la out2
