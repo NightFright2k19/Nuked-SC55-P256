@@ -2,6 +2,7 @@
 
 <p align="center">
 <img width="918" height="280" alt="sc55" src="https://github.com/user-attachments/assets/b166fa58-a380-4987-9cbe-c36dcb0e3541" />
+<img width="918" height="280" alt="sc55_mk2" src="https://github.com/user-attachments/assets/2ad02a8b-aef4-44f3-b5ed-8b1a7bf05e6b" />
 <img width="918" height="281" alt="sc_88" src="https://github.com/user-attachments/assets/4c4cf183-b4d8-4177-b115-526d5754561c" />
 <img width="918" height="280" alt="sc_88pro" src="https://github.com/user-attachments/assets/efe4a79e-5ba9-4abf-b199-a00c968ba4c7" />
 <img width="918" height="279" alt="sc_8850" src="https://github.com/user-attachments/assets/853f8c54-9bf6-4ff2-bf91-a5d85f23c303" />
