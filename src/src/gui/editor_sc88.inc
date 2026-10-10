@@ -15,7 +15,7 @@ constexpr int P88_GAIN_TEXT_Y = 81; // GAIN readout (dB) under the knob
 // SETUP box: the same place on all panels with a free bottom row (SC-55, SC-55mk2, SC-8850)
 // and between the logo and the EFX lamp on the SC-88 / SC-88 Pro
 constexpr RECT P88_SETUP_RIGHT = {804, 246, 892, 264};
-constexpr RECT P88_SETUP_LEFT  = {250, 246, 338, 264};
+constexpr RECT P88_SETUP_LEFT  = {284, 246, 372, 264};
 
 // GAIN knob: 31 sprite positions across kGainMinDb..kGainMaxDb, 0 dB = middle position (15)
 int GainKnobFrame(float db)
