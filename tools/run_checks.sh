@@ -19,7 +19,7 @@ wine_audio() {
 gui() {
   echo "== GUI-Screenshot (VST2-Editor, Menue, Chunk) -> $WB/out/"; xvfb; stage; mkdir -p $WB/out; rm -f /tmp/shot*.bmp /tmp/menu.bmp
   for L in en_US.UTF-8 de_DE.UTF-8; do
-    SETUP_XY=294,255 LANG=$L LC_ALL=$L timeout 200 $W64 $T/winbuild/guihost.exe "$WSOLO\\Nuked-SC55_v121.dll" 2>&1 | grep -E "EditOpen|Chunk"
+    SETUP_XY=848,255 LANG=$L LC_ALL=$L timeout 200 $W64 $T/winbuild/guihost.exe "$WSOLO\\Nuked-SC55_v121.dll" 2>&1 | grep -E "EditOpen|Chunk"
     python3 -c "from PIL import Image; Image.open('/tmp/shot2.bmp').save('$WB/out/panel_$L.png'); Image.open('/tmp/menu.bmp').save('$WB/out/menu_$L.png')"
   done
   timeout 120 $W64 $T/winbuild/clapgui.exe "$WSOLO\\Nuked-SC55_v121.clap" 2>&1 | grep -E "set_parent|state"
