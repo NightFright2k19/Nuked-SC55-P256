@@ -2103,6 +2103,7 @@ void NukedSc55::E88SyncAnswer(const SyncReq& req, const uint8_t* data, const int
 		else if (req.a1 == 0x03 && a <= 0x02) from = 0x00, to = 0x02;
 		else if ((req.a1 & 0xf0) == 0x10 && a <= 0x01) from = 0x00, to = 0x01;
 		else if ((req.a1 & 0xf0) == 0x10 && (a == 0x17 || a == 0x18)) from = 0x17, to = 0x18;
+		else if ((req.a1 & 0xf0) == 0x40 && a <= 0x01) from = 0x00, to = 0x01; // tone map, tone map-0
 	};
 	for (int i = 0; i < n && req.a2 + i < 128; ++i) {
 		if (!send[i]) continue;
@@ -2139,6 +2140,20 @@ void NukedSc55::E88SyncAnswer(const SyncReq& req, const uint8_t* data, const int
 		msg[k++] = 0xf7;
 		E88Forward(req.port, msg, k);
 		i = j;
+	}
+	// INST MAP (Issue #17): the firmware keeps a tone map written by DT1 pending until the part
+	// selects its tone again, so the tone number (read earlier in the same pass) follows the map.
+	if (req.a0 == 0x40 && (req.a1 & 0xf0) == 0x40 && req.a2 == 0x00 && n >= 2 && send[0]) {
+		const int bank = sync_base[SyncIndex(req.port, 0x40, 0x10 | (req.a1 & 0x0f), 0x00)];
+		const int prog = sync_base[SyncIndex(req.port, 0x40, 0x10 | (req.a1 & 0x0f), 0x01)];
+		if (bank >= 0 && prog >= 0) {
+			uint8_t tone[12] = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x40, static_cast<uint8_t>(0x10 | (req.a1 & 0x0f)), 0x00,
+			                    static_cast<uint8_t>(bank), static_cast<uint8_t>(prog), 0, 0xf7};
+			int sum = 0;
+			for (int k = 5; k < 10; ++k) sum += tone[k];
+			tone[10] = static_cast<uint8_t>((128 - (sum & 0x7f)) & 0x7f);
+			E88Forward(req.port, tone, sizeof(tone));
+		}
 	}
 }
 
