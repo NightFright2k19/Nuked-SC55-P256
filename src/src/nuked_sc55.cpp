@@ -756,6 +756,11 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 		router.SetAllowed(allowed);
 	}
 	HandleUiCommands();
+#ifndef NUKED_SC55_ENGINE_88PRO
+	// Front panel of unit 0: edits of the last block passed on, MUTE flags, GUI input
+	E55PanelPump();
+	E55PanelInput();
+#endif
 #ifdef NUKED_SC55_DEVICE_8850
 	// Front panel of unit 0: GUI input, edits passed on to the other units, MUTE / SOLO
 	E88PanelInput();
@@ -871,9 +876,13 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 		render_buf[1].clear();
 	}
 
-#ifdef NUKED_SC55_ENGINE_88PRO
 	{   // GAIN knob: analog-style output level after the emulation, ramped over the block
+#ifdef NUKED_SC55_ENGINE_88PRO
 		const float target = GainFactor(gain_db.load(std::memory_order_relaxed));
+#else
+		// SC-55: ALL + MUTE on the panel silences the whole module (unit 0 mutes itself)
+		const float target = all_mute55 ? 0.0f : GainFactor(gain_db.load(std::memory_order_relaxed));
+#endif
 		if (applied_gain < 0.0f) applied_gain = target; // first block: no ramp
 		const float step = (target - applied_gain) / static_cast<float>(std::max<uint32_t>(1, num_frames));
 		for (uint32_t i = 0; i < num_frames; ++i) {
@@ -883,7 +892,6 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 		}
 		applied_gain = target;
 	}
-#endif
 
 	return CLAP_PROCESS_CONTINUE;
 }
@@ -915,6 +923,9 @@ bool NukedSc55::LoadState([[maybe_unused]] const clap_istream_t* stream)
 			gain_db = GainFromLegacyVolume(std::atoi(v + 4));
 		}
 		if (const char* m = std::strstr(buf, "pnote="); m) preview_note = std::clamp(std::atoi(m + 6), 0, 127);
+#else
+		if (const char* m = std::strstr(buf, "gain="); m) // older states: no GAIN = 0 dB
+			gain_db = std::clamp(std::atoi(m + 5) / 10.0f, kGainMinDb, kGainMaxDb);
 #endif
 		return true;
 	}
@@ -937,7 +948,8 @@ bool NukedSc55::SaveState([[maybe_unused]] const clap_ostream_t* stream)
 	                            max_voices.load(), tone_map.load(),
 	                            static_cast<int>(std::lround(gain_db.load() * 10.0f)), preview_note.load());
 #else
-	const int n = std::snprintf(buf, sizeof(buf), "NSC55P1 max_voices=%d", max_voices.load());
+	const int n = std::snprintf(buf, sizeof(buf), "NSC55P1 max_voices=%d gain=%d", max_voices.load(),
+	                            static_cast<int>(std::lround(gain_db.load() * 10.0f)));
 #endif
 	int64_t done = 0;
 	while (done < n) {
@@ -1132,6 +1144,124 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 		}
 	}
 }
+
+#ifndef NUKED_SC55_ENGINE_88PRO
+//----------------------------------------------------------------------------
+// SC-55 / SC-55mk2 front panel (unit 0)
+//----------------------------------------------------------------------------
+namespace {
+// Parameter memory of the SC-55 v1.21 and SC-55mk2 v1.01 firmware (SRAM, the same layout in
+// both, found by comparing it before and after panel edits and GS messages): system
+// parameters at the start, GS part block x (40 1x ..) at 0x40 + 0x70 x.
+constexpr int kSram55Part = 0x40, kSram55PartSize = 0x70;
+struct Sys55 { uint8_t off, a1, a2; }; // offset -> GS 40 a1 a2
+constexpr Sys55 kSys55[] = {
+	{0x02, 0x00, 0x04}, // MASTER VOLUME (ALL + LEVEL)
+	{0x05, 0x00, 0x05}, // MASTER KEY SHIFT (ALL + KEY SHIFT)
+	{0x06, 0x00, 0x06}, // MASTER PAN (ALL + PAN)
+	{0x2d, 0x01, 0x33}, // REVERB LEVEL (ALL + REVERB)
+	{0x34, 0x01, 0x3a}, // CHORUS LEVEL (ALL + CHORUS)
+};
+constexpr uint8_t kPart55[][2] = { // offset in the block -> GS 40 1x a2
+	{0x0c, 0x02}, // Rx. CHANNEL (MIDI CH)
+	{0x0e, 0x16}, // PITCH KEY SHIFT
+	{0x10, 0x19}, // PART LEVEL
+	{0x11, 0x1c}, // PART PANPOT
+	{0x16, 0x21}, // CHORUS SEND
+	{0x17, 0x22}, // REVERB SEND
+};
+constexpr int kPart55Bank = 0x08, kPart55Prog = 0x09; // INSTRUMENT: sent as CC 0 + program change
+constexpr int kPart55Flags = 0x0a;                    // bit 1 clear = part muted (MUTE)
+constexpr uint8_t kMute55Bit = 0x02;
+constexpr uint8_t kLamp55All = 0x40, kLamp55Mute = 0x20; // panel port bits, active low
+constexpr double kPanel55Seconds = 0.6; // edits are passed on until this long after the last switch
+} // namespace
+
+// Audio thread, start of a block: GUI switches to unit 0, lamps back to the GUI
+void NukedSc55::E55PanelInput()
+{
+	if (instances.empty() || !instances[0].emu) return;
+	auto& mcu = instances[0].emu->GetMCU();
+	const uint32_t buttons = ui_panel_buttons.load(std::memory_order_relaxed);
+	if (buttons != 0 || buttons != applied_buttons) {
+		panel_active_until = render_frame_count + 1 +
+		                     static_cast<uint64_t>(render_sample_rate_hz * kPanel55Seconds);
+	}
+	if (buttons != applied_buttons || buttons != 0) mcu.button_pressed = buttons | panel_button_bits;
+	applied_buttons = buttons;
+	// The firmware ORs the ALL / MUTE lamps into every panel column write (mk1: gate array
+	// address, mk2: sub-CPU port 0). In ALL mode the MUTE lamp shows ALL + MUTE.
+	const uint8_t port = mcu.is_mk1 ? mcu.io_sd : mcu.p0_data;
+	const bool all = !(port & kLamp55All), mute = !(port & kLamp55Mute);
+	if (all) all_mute55 = mute;
+	ui_panel_leds.store((all ? 1u : 0u) | (mute ? 2u : 0u), std::memory_order_relaxed);
+}
+
+// Audio thread, start of a block: what unit 0's firmware changed during the last block (after
+// panel input) goes to the other units and the state log; part MUTE flags to the other units.
+void NukedSc55::E55PanelPump()
+{
+	if (instances.empty() || !instances[0].emu) return;
+	const uint8_t* sram = instances[0].emu->GetMCU().sram;
+	if (!panel_seen_valid) {
+		std::memcpy(panel_seen.data(), sram, panel_seen.size());
+		panel_seen_valid = true;
+	}
+	const auto others = ~PolyRouter::Mask{1};
+	const auto dt1 = [&](uint8_t a1, uint8_t a2, uint8_t v) {
+		const int sum = 0x40 + a1 + a2 + v;
+		const uint8_t m[11] = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x40, a1, a2, v,
+		                       static_cast<uint8_t>((128 - sum % 128) % 128), 0xf7};
+		const std::span<const uint8_t> msg{m, sizeof(m)};
+		state_log.AddSysEx(msg, 0);
+		QueueMidi(router.RouteSysEx(msg, 0) & others, m, sizeof(m), 0, 0);
+	};
+	const auto shrt = [&](uint8_t s, uint8_t d1, uint8_t d2, size_t len) {
+		const uint8_t m[3] = {s, d1, d2};
+		state_log.AddShort(m, 0);
+		UiTrackShort(m, 0);
+		QueueMidi(router.RouteShort(m, 0) & others, m, len, 0, 0);
+	};
+	if (render_frame_count < panel_active_until) {
+		for (const auto& p : kSys55)
+			if (sram[p.off] != panel_seen[p.off]) dt1(p.a1, p.a2, sram[p.off]);
+		for (int x = 0; x < 16; ++x) {
+			const int b = kSram55Part + kSram55PartSize * x;
+			for (const auto& p : kPart55)
+				if (sram[b + p[0]] != panel_seen[b + p[0]])
+					dt1(static_cast<uint8_t>(0x10 | x), p[1], sram[b + p[0]]);
+			if (sram[b + kPart55Bank] != panel_seen[b + kPart55Bank] ||
+			    sram[b + kPart55Prog] != panel_seen[b + kPart55Prog]) {
+				const uint8_t ch = sram[b + 0x0c];
+				if (ch < 16) {
+					shrt(static_cast<uint8_t>(0xb0 | ch), 0, sram[b + kPart55Bank] & 0x7f, 3);
+					shrt(static_cast<uint8_t>(0xc0 | ch), sram[b + kPart55Prog] & 0x7f, 0, 2);
+				}
+			}
+		}
+	}
+	std::memcpy(panel_seen.data(), sram, panel_seen.size());
+
+	uint16_t rx = 0; // bit x set = GS block x not muted
+	for (int x = 0; x < 16; ++x)
+		if (sram[kSram55Part + kSram55PartSize * x + kPart55Flags] & kMute55Bit) rx |= uint16_t(1u << x);
+	if (rx != applied_mute55) {
+		for (int i = 1; i < NumInstances(); ++i)
+			if (instances[i].awake) E55ApplyMutes(instances[i], rx);
+		applied_mute55 = rx;
+	}
+}
+
+void NukedSc55::E55ApplyMutes(Instance& inst, const uint16_t rx)
+{
+	if (!inst.emu) return;
+	uint8_t* sram = inst.emu->GetMCU().sram;
+	for (int x = 0; x < 16; ++x) {
+		uint8_t& f = sram[kSram55Part + kSram55PartSize * x + kPart55Flags];
+		f = (rx & (1u << x)) ? (f | kMute55Bit) : (f & ~kMute55Bit);
+	}
+}
+#endif
 
 #ifdef NUKED_SC55_ENGINE_88PRO
 int NukedSc55::UnitToneMap(const int i) const
@@ -1411,12 +1541,13 @@ void NukedSc55::NotifyStateChanged()
 	}
 }
 
-#ifdef NUKED_SC55_ENGINE_88PRO
-// Audio taper of the VOLUME knob: fully left = off, then -60 dB .. 0 dB (right).
+// GAIN knob: -12 .. +12 dB plus the level matching of the model (SC-55: none, so 0 dB = 1.0)
 float NukedSc55::GainFactor(const float gain_db)
 {
 	return std::pow(10.0f, (std::clamp(gain_db, kGainMinDb, kGainMaxDb) + kLevelMatchDb) / 20.0f);
 }
+
+#ifdef NUKED_SC55_ENGINE_88PRO
 
 float NukedSc55::GainFromLegacyVolume(const int vol)
 {
@@ -2318,6 +2449,7 @@ void NukedSc55::Wake(const int i)
 		}
 	});
 	step_until_drained(0.005);
+	E55ApplyMutes(inst, applied_mute55); // panel MUTE flags are not part of the state log
 #endif
 
 	inst.read_pos      = 0;
