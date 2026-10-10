@@ -1776,6 +1776,17 @@ constexpr uint32_t kRam88PanelFlags = 0xc06a; // bit 0: ALL + MUTE (everything m
 #endif
 } // namespace
 
+#ifdef NUKED_SC55_DEVICE_8850
+namespace {
+// SC-8850 switches (88emu Sc8850Button bits) that never edit a parameter: PART < >, EXIT,
+// SHIFT, SOLO, MUTE (taken from the work RAM, E88PanelMutes), PREVIEW
+constexpr uint32_t kBtn8850NoEdit = (1u << 1) | (1u << 2) | (1u << 7) | (1u << 9) | (1u << 10) | (1u << 11) | (1u << 20);
+constexpr uint32_t kBtn8850Enter  = 1u << 8;
+constexpr uint32_t kLed8850Drum   = 1u << 1;
+constexpr uint32_t kRam8850CurPart = 0x01060349; // part shown on the panel, 0..63 = A01..D16
+} // namespace
+#endif
+
 // Audio thread, start of a block: GUI switches (and the SC-8850's VALUE detents) to unit 0
 void NukedSc55::E88PanelInput()
 {
@@ -1809,13 +1820,24 @@ void NukedSc55::E88PanelInput()
 #else
 	const int detents = ui_encoder.exchange(0);
 	if (buttons == applied_buttons && detents == 0) return;
+	const uint32_t pressed = buttons & ~applied_buttons;
 	if (buttons != applied_buttons) {
 		emu88_set_panel_buttons(inst.ctx, buttons);
 		applied_buttons = buttons;
 	}
 	if (detents != 0) emu88_turn_panel_encoder(inst.ctx, std::clamp(detents, -64, 63));
-	sync_dirty  = true;
 	panel_frame = render_frame_count;
+	// Only input that can edit parameters starts a read-back pass, and the pass reads only
+	// what that input can have changed: the data requests go through unit 0's MIDI input
+	// and delay the host's notes there while they are answered (Issue #13).
+	if ((pressed & ~kBtn8850NoEdit) != 0 || detents != 0) {
+		uint8_t cur = 0;
+		emu88_peek_work_ram(inst.ctx, kRam8850CurPart, &cur, 1);
+		if (cur < kNumParts) sync_parts |= uint64_t{1} << cur;
+		sync_drums |= (emu88_get_panel_leds(inst.ctx) & kLed8850Drum) != 0;
+		sync_full |= (pressed & kBtn8850Enter) != 0;
+		sync_dirty = true;
+	}
 #endif
 }
 #endif
@@ -1901,7 +1923,6 @@ namespace {
 constexpr uint32_t kRam8850PartRec  = 0x0103BA12; // bit 1 of the first byte clear = MUTE
 constexpr uint32_t kRam8850PartSize = 0x450;
 constexpr uint32_t kRam8850SoloGate = 0x79;       // 0 while another part is soloed (else 0x7F)
-constexpr uint32_t kRam8850CurPart  = 0x01060349; // part shown on the panel, 0..63 = A01..D16
 int Fw8850PartIndex(const int part)
 {
 	const int c = part % 16;
@@ -1999,7 +2020,8 @@ void NukedSc55::DotShow(const bool on)
 
 
 // Queue the data requests of one pass: system and effects first, then the part shown on
-// the panel, then all other parts, then both drum maps.
+// the panel, then the other parts and both drum maps. At boot everything; after panel input
+// only the parts shown while editing (all after ENTER) and the drum maps if DRUM was open.
 void NukedSc55::E88SyncStart(const bool boot)
 {
 	sync_queue.clear();
@@ -2031,11 +2053,15 @@ void NukedSc55::E88SyncStart(const bool boot)
 		emu88_peek_work_ram(instances[0].ctx, kRam8850CurPart, &v, 1);
 		cur = (v < kNumParts) ? v : 0;
 	}
+	const bool all = boot || sync_full;
 	add_part(cur);
 	for (int part = 0; part < kNumParts; ++part)
-		if (part != cur) add_part(part);
-	for (int map = 0; map < 2; ++map)
-		for (int prm = 1; prm <= 9; ++prm) add(0, 0x41, map * 0x10 + prm, 0x00, 0x80); // drum setup
+		if (part != cur && (all || (sync_parts & (uint64_t{1} << part)))) add_part(part);
+	if (all || sync_drums)
+		for (int map = 0; map < 2; ++map)
+			for (int prm = 1; prm <= 9; ++prm) add(0, 0x41, map * 0x10 + prm, 0x00, 0x80); // drum setup
+	sync_parts = 0;
+	sync_drums = sync_full = false;
 	std::reverse(sync_queue.begin(), sync_queue.end()); // sent from the back
 }
 
@@ -2177,6 +2203,8 @@ void NukedSc55::E88SyncBoot(Instance& inst)
 	sync_outstanding.clear();
 	host_change.fill(0);
 	sync_dirty      = false;
+	sync_parts      = 0;
+	sync_drums = sync_full = false;
 	applied_buttons = 0;
 	emu88_capture_midi_out(inst.ctx, 1);
 	E88SyncStart(true);
