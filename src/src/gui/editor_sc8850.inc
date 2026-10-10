@@ -23,7 +23,7 @@ constexpr double E85_LCD_X = 247.5, E85_LCD_Y = 42.0, E85_LCD_W = 262.5, E85_LCD
 constexpr int E85_LCD_PX = 247, E85_LCD_PY = 42, E85_LCD_PW = 264, E85_LCD_PH = 105;           // pixels touched
 constexpr RECT E85_VOICES = {29, 38, 142, 145};
 constexpr RECT E85_UNITS  = {48, 152, 126, 172};
-constexpr RECT E85_SETUP  = {806, 222, 894, 240};
+constexpr RECT E85_SETUP  = P88_SETUP_RIGHT;
 constexpr POINT E85_GAIN = {189, 57}, E85_PREVIEW = {189, 133};
 constexpr int E85_GAIN_R = 21, E85_PREVIEW_R = 18, E85_GAIN_TEXT_Y = 81;
 constexpr double E85_VALUE_CX = 832.5, E85_VALUE_CY = 82.5, E85_VALUE_R = 57.0;

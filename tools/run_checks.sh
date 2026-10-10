@@ -19,7 +19,7 @@ wine_audio() {
 gui() {
   echo "== GUI-Screenshot (VST2-Editor, Menue, Chunk) -> $WB/out/"; xvfb; stage; mkdir -p $WB/out; rm -f /tmp/shot*.bmp /tmp/menu.bmp
   for L in en_US.UTF-8 de_DE.UTF-8; do
-    LANG=$L LC_ALL=$L timeout 200 $W64 $T/winbuild/guihost.exe "$WSOLO\\Nuked-SC55_v121.dll" 2>&1 | grep -E "EditOpen|Chunk"
+    SETUP_XY=294,255 LANG=$L LC_ALL=$L timeout 200 $W64 $T/winbuild/guihost.exe "$WSOLO\\Nuked-SC55_v121.dll" 2>&1 | grep -E "EditOpen|Chunk"
     python3 -c "from PIL import Image; Image.open('/tmp/shot2.bmp').save('$WB/out/panel_$L.png'); Image.open('/tmp/menu.bmp').save('$WB/out/menu_$L.png')"
   done
   timeout 120 $W64 $T/winbuild/clapgui.exe "$WSOLO\\Nuked-SC55_v121.clap" 2>&1 | grep -E "set_parent|state"
@@ -29,9 +29,9 @@ poly() {
   cd $T/test; NUKED_SC55_POLY_VOICES=256 timeout 280 ./play net.nuked_sc55_poly_clap.sc55_v1_21 | tail -10
 }
 sc88() {
-  echo "== SC-88 Pro unter Wine (Name/ID S8PP, CTF-Test hoerbar ~0.0109, 256 Noten)"; stage
+  echo "== SC-88 Pro unter Wine (Name/ID S8PP, CTF-Test hoerbar ~0.0352 (Standard-Map SC-88 Pro seit #20), 256 Noten)"; stage
   for m in 2 1; do timeout 250 $W64 $T/winbuild/vsthost.exe "$WSOLO\\Nuked-SC88_Pro.dll" $m 2>&1 | grep -E "Name|CTF|256"; done
-  echo "== SC-88 Pro Linux: Map-Umschaltung + Einheiten (erwartet: Start SC-88; Verhaeltnisse ~1.38/1.73; alle Einheiten folgen)"
+  echo "== SC-88 Pro Linux: Map-Umschaltung + Einheiten (erwartet: Start SC-88 Pro; Verhaeltnisse ~1.38/1.73; alle Einheiten folgen)"
   cd $T/test && SOUNDCANVAS_ROM_PATH=$WB/rom88 timeout 250 ./map88 | grep -vE "^nach Umschalten"
 }
 sc88poly() {
@@ -43,7 +43,7 @@ lcd() {
   xvfb; stage; mkdir -p $WB/out
   for f in "Nuked-SC55_v121:55" "Nuked-SC88_Pro:88"; do [ -f "$SOLO/${f%%:*}.dll" ] || continue
     for m in StarGame:1.45,2.0,6.0,12.0 3X3EYES_mod:0.95,1.4,2.4,3.0; do n=${m%%:*}; [ -f $T/midi/lcd/$n.txt ] || continue; cp $T/midi/lcd/$n.txt /tmp/
-      timeout 280 $W64 $T/winbuild/lcdhost.exe "$WSOLO\\${f%%:*}.dll" "Z:\\tmp\\$n.txt" "Z:\\tmp\\lcd${f##*:}_$n" ${m#*:} | grep -c Screenshot
+      timeout 280 $W64 $T/winbuild/lcdhost.exe "$WSOLO\\${f%%:*}.dll" "Z:\\tmp\\$n.txt" "Z:\\tmp\\lcd${f##*:}_$n" $(echo ${m#*:} | tr , ' ') | grep -c Screenshot
       for b in /tmp/lcd${f##*:}_${n}_*.bmp; do python3 -c "from PIL import Image; Image.open('$b').save('$WB/out/'+'$(basename $b .bmp)'+'.png')"; done
     done
   done

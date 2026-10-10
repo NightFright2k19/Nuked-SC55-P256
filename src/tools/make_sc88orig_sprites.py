@@ -16,6 +16,7 @@
 #   66..71  Auswahl-LEDs (oben, Mitte, unten): je [aus, an]
 #   72..73  USER-INST-EDIT-LED [aus, an]
 #   74..104 GAIN 31 Stellungen
+#   105..106 EFX-LED des SC-88 Pro gruen, gelb (72/73 = aus / rot)
 # usage: make_sc88orig_sprites.py <88emuplayer/assets> <out.bgra>
 import io, math, re, struct, sys
 import cairosvg
@@ -86,5 +87,7 @@ for face in ('efx_led_off.svg', 'efx_led_on.svg'):
 knob = Image.open(A + 'knob.png').convert('RGBA')
 for f in range(31):  # .volumeKnob 112/24 dp, 28 dp -> 168/36 px, 42 px
     put(168, 36, knob.crop((0, f * 128, 128, f * 128 + 128)).resize((42, 42), Image.LANCZOS))
+for face in ('efx_led_green.svg', 'efx_led_amber.svg'):
+    put(*render(face, 287.5, 165.5, 9, 9))
 open(out, 'wb').write(blob)
 print(f"{out}: {len(blob)} Bytes")

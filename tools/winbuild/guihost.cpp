@@ -18,7 +18,8 @@ static HWND g_ed; static int g_W,g_H;
 static DWORD WINAPI MenuThread(void*){
   Sleep(400);
   // SETUP-Button anklicken (rechts unten im Editor)
-  PostMessage(g_ed,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(g_W-80,g_H-50));
+  int sx=g_W-80, sy=g_H-50; if(const char* xy=getenv("SETUP_XY")) sscanf(xy,"%d,%d",&sx,&sy); // SC-88: 294,255
+  PostMessage(g_ed,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(sx,sy));
   Sleep(900);
   // Bildschirm-Screenshot inkl. Menü
   HDC sdc=GetDC(nullptr); int W=760,H=560; HDC mem=CreateCompatibleDC(sdc);

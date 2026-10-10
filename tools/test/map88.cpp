@@ -25,7 +25,7 @@ int main(){
   double a=note(0,60); printf("Piano, Start (Kanal 1): RMS %.5f\n",a);
   for(int m : {2,0,1}){ ns->tone_map=m; idle(1.5); r[m]=note(0,60); printf("nach Umschalten auf %-9s: RMS %.5f  (Verhaeltnis zu SC-88 Pro: %.3f)\n",nm[m],r[m],0.0); }
   for(int m=0;m<3;m++) printf("  %-9s / SC-88 Pro = %.3f   (Referenz 88emu direkt: SC-55 1.373, SC-88 1.705)\n",nm[m],r[m]/r[2]);
-  printf("Start war %s\n", std::fabs(a-r[1])<std::fabs(a-r[2])&&std::fabs(a-r[1])<std::fabs(a-r[0])?"SC-88 (wie gewuenscht)":"NICHT SC-88");
+  printf("Start war %s\n", std::fabs(a-r[2])<std::fabs(a-r[1])&&std::fabs(a-r[2])<std::fabs(a-r[0])?"SC-88 Pro (Werkseinstellung, wie gewuenscht)":"NICHT SC-88 Pro");
   // Map aller Einheiten (auch schlafender) laut Panel-LEDs, nach Umschalten auf SC-55
   ns->tone_map=0; idle(2.5); idle(1.0);
   printf("Einheiten-Map nach Umschalten auf SC-55 (wach: %d):",ns->NumAwake()); for(int i=0;i<ns->NumInstances();i++) printf(" E%d=%s",i,nm[ns->UnitToneMap(i)]); printf("\n");
