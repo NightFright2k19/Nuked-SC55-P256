@@ -1,21 +1,16 @@
 #pragma once
 // Nuked SC-55 Poly – plugin editor (Windows, Win32/GDI)
 //
-// Shows an SC-55 style front panel: amber dot-matrix LCD with part info and
-// 16 part level bars, a polyphony meter and a setup menu (max. polyphony,
-// GS reset, all notes off). All plugin data is read through atomics.
+// Shows the device's front panel: firmware-driven LCD, panel switches, GAIN knob,
+// a polyphony meter (VOICES / UNITS) and a setup menu (max. polyphony, GS reset,
+// all notes off). All plugin data is read through atomics.
 
 class NukedSc55;
 
 namespace editor {
 
-#ifdef NUKED_SC55_ENGINE_88PRO
-constexpr int Width  = 918; // SC-88 Pro panel (88emu art, half size)
+constexpr int Width  = 918; // 88emu panel art (SC-55, SC-88, SC-88 Pro, SC-8850)
 constexpr int Height = 280;
-#else
-constexpr int Width  = 780;
-constexpr int Height = 340;
-#endif
 
 // Opaque editor handle stored in NukedSc55::editor
 void* Create(NukedSc55* plugin, const char* display_name);

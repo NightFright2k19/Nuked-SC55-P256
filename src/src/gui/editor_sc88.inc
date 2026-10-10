@@ -6,7 +6,7 @@
 // EFX labels replaced) and linked in as raw BGRA pixels. Everything dynamic
 // (LCD content, value windows, map LEDs, voices) is drawn on top of it.
 
-#if !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88) // the SC-8850 panel (editor_sc8850.inc) has its own art
+#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88) // the SC-8850 panel (editor_sc8850.inc) has its own art
 extern "C" const unsigned char nk_panel88_b[] asm("nk_panel88_b");
 extern "C" const unsigned char nk_panel88_e[] asm("nk_panel88_e");
 // Original 88emu controls, prepared by tools/make_sc88_sprites.py (premultiplied BGRA, fixed order)
@@ -82,7 +82,7 @@ void Box88(Editor& e, HDC dc, const RECT& r, const char* s, COLORREF col = C88_L
                                  DT_END_ELLIPSIS);
 }
 
-#if !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88)
+#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88)
 void BuildSprites88()
 {
     if (g_sp_dc) return;
@@ -173,7 +173,7 @@ void DrawVoices88(Editor& e, HDC dc, const RECT& win, const RECT& units_box)
     Box88(e, dc, units_box, v, C88_LED, true);
 }
 
-#if !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88)
+#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88)
 void BuildBackground88(Editor& e)
 {
     HDC screen = GetDC(nullptr);

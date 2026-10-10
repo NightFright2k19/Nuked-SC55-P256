@@ -410,8 +410,9 @@ intptr_t Dispatcher(AEffect* fx, int32_t opcode, int32_t index, intptr_t value,
 			                            static_cast<int>(std::lround(ns->gain_db.load() * 10.0f)),
 			                            ns->preview_note.load());
 #else
-			const int n = std::snprintf(b->state_chunk, sizeof(b->state_chunk),
-			                            "NSC55P1 max_voices=%d", ns->max_voices.load());
+			const int n = std::snprintf(b->state_chunk, sizeof(b->state_chunk), "NSC55P1 max_voices=%d gain=%d",
+			                            ns->max_voices.load(),
+			                            static_cast<int>(std::lround(ns->gain_db.load() * 10.0f)));
 #endif
 			*static_cast<void**>(ptr) = b->state_chunk;
 			return n;
@@ -432,6 +433,9 @@ intptr_t Dispatcher(AEffect* fx, int32_t opcode, int32_t index, intptr_t value,
 				ns->gain_db = NukedSc55::GainFromLegacyVolume(std::atoi(v + 4));
 			if (const char* m = std::strstr(buf, "pnote="); m)
 				ns->preview_note = std::clamp(std::atoi(m + 6), 0, 127);
+#else
+			if (const char* m = std::strstr(buf, "gain="); m) // older states: no GAIN = 0 dB
+				ns->gain_db = std::clamp(std::atoi(m + 5) / 10.0f, NukedSc55::kGainMinDb, NukedSc55::kGainMaxDb);
 #endif
 		}
 		return 1;

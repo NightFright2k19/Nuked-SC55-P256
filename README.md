@@ -71,7 +71,7 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 
 ### User interface (Windows)
 
-- **Editor panel** for both device families, drawn procedurally with Win32/GDI (SC-55) or derived from the 88emu panel art (SC-88 Pro): part parameters, 16 part level meters, voice meter, SETUP menu.
+- **Editor panel** for every model, derived from the 88emu panel art: the device's own LCD and switches, GAIN knob, voice meter, SETUP menu.
 - **Original LCD** rendered from the emulated LCD controller: SysEx text and bitmap messages (`45 10 00 xx`, `45 10 01 xx`) are shown exactly as the firmware displays them.
 - **Menu language** follows the Windows UI language (German or English); the printed panel labels stay English like on the hardware.
 
@@ -290,15 +290,15 @@ The SC-88 plug-in uses the same 88emu core with the firmware of the first SC-88 
 
 ## Panels and controls
 
-Both panels are Windows-only (Win32/GDI), 30 frames per second, and read the engine only through atomics.
+All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and read the engine only through atomics.
 
-### SC-55 panel (780 x 340 px)
+### SC-55 / SC-55mkII panel (918 x 280 px)
 
-- **Style:** drawn procedurally: rack ears with screws, metal texture, recessed orange dot-matrix LCD, rubber keys with LEDs, info bar. It is inspired by the look of the Gearmulator skins; **no graphics of Gearmulator and no Roland or Sound Canvas logos are used**.
-- **LCD:** the contents of the emulated HD44780 controller (DDRAM 80 bytes, CGRAM 64 bytes) shown on the original glass. Scrolling text, display time and the return to the normal display are handled by the firmware itself. It also shows the 16-part level matrix.
-- **Voices window:** sounding voices as segment bar with peak hold; `MAX / CAP / UNITS`; above the limit "UNITS 6->2".
-- **Buttons:** PART left / PART right (press the device's PART keys on unit 0), ALL OFF, SETUP. A click on a matrix column selects the part for the value windows; the mouse wheel changes the part.
-- **Value windows:** part parameters (GM names or GS kit names, `*` for bank not 0).
+- **Graphics:** the 88emu SC-55 and SC-55mkII panel art (GPLv3, The Usual Suspects), halved by `tools/make_sc55_panel.py`. Only the branding ("Nuked SC-55" / "Nuked SC-55mkII"), the playlist header (VOICES) and the VOLUME label (GAIN) are replaced. Switches, rockers, lamps and the GAIN knob are rendered from the player's own graphics at the positions of its skin (`tools/make_sc55_sprites.py`, with the pressed tint). The art is fetched from Gearmulator at build time (pinned commit).
+- **LCD:** the firmware's character LCD on the original glass (313 x 113 px, rendered at full size and reduced so the dots stay even). Text and bitmap SysEx messages are shown by the firmware itself.
+- **Front panel = the device's own panel:** ALL, MUTE, PART < >, INSTRUMENT, LEVEL, PAN, REVERB, CHORUS, KEY SHIFT and MIDI CH go to unit 0, so the LCD, the ALL / MUTE lamps and the key repeat work as on the hardware. Every switch is held while the mouse button is down (at least 80 ms). Until 0.6 s after the last switch the plug-in compares unit 0's parameter memory and sends every change as GS DT1 (instrument as CC 0 + program change) to the other units and into the state log, so units that wake later play the same sounds. Part MUTE flags are copied to all awake units; ALL + MUTE silences the output.
+- **GAIN:** -12 ... +12 dB, 0 dB in the middle (default) and bit-identical to the previous output. Drag (right / up = louder), mouse wheel (0.8 dB per notch), double-click = 0 dB.
+- **VOICES / UNITS:** sounding voices with peak hold and awake units like on the other 88emu panels. **SETUP** (bottom): max polyphony, GS reset, all notes off.
 - **Window class:** contains the module handle, so v1.21 and MkII can run in the same host.
 
 ### SC-88 Pro panel
@@ -337,7 +337,7 @@ The menu language (German or English) follows `GetUserDefaultUILanguage()`; ever
 The DLL **never writes files**. The only state is the plug-in state, saved by the host in the CLAP `state` extension or as a VST2 chunk (opcodes 23/24). A change in the menu is reported to the host (CLAP `state.mark_dirty`, VST2 `audioMasterUpdateDisplay`). The state is a short ASCII string:
 
 ```
-NSC55P1 max_voices=<n>                                    SC-55 plug-ins
+NSC55P1 max_voices=<n> gain=<-120..120>                     SC-55 plug-ins (gain in 0.1 dB)
 NSC55P1 max_voices=<n> map=<0..2> vol=<0..1000> pnote=<0..127>    SC-88 Pro
 NSC55P1 max_voices=<n> gain=<-120..120>                     SC-8850 (gain in 0.1 dB)
 ```

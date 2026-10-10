@@ -317,6 +317,30 @@ private:
 	void E88PanelMutes();
 public:
 #endif
+#ifndef NUKED_SC55_ENGINE_88PRO
+	// SC-55 / SC-55mk2 front panel (Issue #10): the GUI drives unit 0's own panel (firmware
+	// LCD, ALL / MUTE lamps). Edits made there are read back from unit 0's parameter memory
+	// and passed on to the other units and the state log.
+	std::atomic<uint32_t> ui_panel_buttons{0}; // switches held in the GUI (bit = Nuked MCU button)
+	std::atomic<uint32_t> ui_panel_leds{0};    // unit 0's lamps: bit 0 = ALL, bit 1 = MUTE
+	uint32_t PanelLeds() const { return ui_panel_leds.load(std::memory_order_relaxed); }
+	std::atomic<float> gain_db{0.0f};          // GAIN knob in dB, kGainMinDb..kGainMaxDb; 0 = default
+	static constexpr float kGainMinDb = -12.0f, kGainMaxDb = 12.0f;
+	static constexpr float kLevelMatchDb = 0.0f; // 0 dB = the level the SC-55 plugins always had
+	static float GainFactor(float gain_db);
+private:
+	float applied_gain = -1.0f;    // < 0: not applied yet
+	uint32_t applied_buttons = 0;
+	uint64_t panel_active_until = 0; // render frame until which unit 0's edits are passed on
+	std::array<uint8_t, 0x700> panel_seen{}; // unit 0's parameter memory (SRAM 0..6FF) as last seen
+	bool panel_seen_valid = false;
+	uint16_t applied_mute55 = 0xffff; // part MUTE flags applied to the other units (bit = GS block)
+	bool all_mute55 = false;          // ALL + MUTE: whole module silent
+	void E55PanelInput();
+	void E55PanelPump();
+	void E55ApplyMutes(Instance& inst, uint16_t rx);
+public:
+#endif
 #ifdef NUKED_SC55_DEVICE_88
 private:
 	// SC-88: the firmware logs every panel edit as a GS parameter change (a ring in its work
