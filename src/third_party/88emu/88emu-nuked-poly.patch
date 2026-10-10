@@ -166,7 +166,7 @@ index 2053225..9b6ea87 100644
  		, m_subMcu([this](Sc88SubMcu::Record&& _r) { m_midiInQueue.emplace_back(std::move(_r)); },
  		           SmSysExStage, SmCommand - SmSysExStage)
 diff --git a/source/ronaldo/88emu/88lib/boards/sc88pro.h b/source/ronaldo/88emu/88lib/boards/sc88pro.h
-index 9f21044..96d1595 100644
+index 9f21044..08f97ac 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc88pro.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc88pro.h
 @@ -4,6 +4,7 @@
@@ -177,7 +177,7 @@ index 9f21044..96d1595 100644
  #include <utility>
  #include <vector>
  
-@@ -95,6 +96,15 @@ namespace emu88Lib
+@@ -95,6 +96,17 @@ namespace emu88Lib
  	class Sc88Pro
  	{
  	public:
@@ -189,11 +189,13 @@ index 9f21044..96d1595 100644
 +				if (v.combinedAmp_2300 != 0) ++n; // effective amplitude (amp env x tva gain)
 +			return n;
 +		}
++		// Nuked SC-55 Poly: firmware work RAM (pages C0-C7, 0x0000-0xFFFF) for the panel sync
++		uint8_t peekWorkRam(const uint32_t _addr) const { return _addr < SramSize ? m_sram[_addr] : uint8_t(0); }
 +
  
  		// External interrupt pins as this board wires them. The gate array
  		// shares IRQ0 through its own status register; the XP is one line over.
-@@ -246,7 +256,10 @@ namespace emu88Lib
+@@ -246,7 +258,10 @@ namespace emu88Lib
  
  		std::vector<uint8_t> m_rom;
  		std::vector<uint8_t> m_sram = std::vector<uint8_t>(SramSize, 0);
@@ -411,10 +413,10 @@ index 9ccf846..5c8fa70 100644
 +	return EMU88_RC_OK;
 +}
 diff --git a/source/ronaldo/88emu/88lib/c_interface.h b/source/ronaldo/88emu/88lib/c_interface.h
-index c9a5132..4988abd 100644
+index c9a5132..55d989f 100644
 --- a/source/ronaldo/88emu/88lib/c_interface.h
 +++ b/source/ronaldo/88emu/88lib/c_interface.h
-@@ -227,6 +227,48 @@ EMU88_EXPORT int emu88_is_display_on(emu88_context context, unsigned screen);
+@@ -227,6 +227,49 @@ EMU88_EXPORT int emu88_is_display_on(emu88_context context, unsigned screen);
   * closed synth produces silence. */
  EMU88_EXPORT void emu88_render_bit16s(emu88_context context, int16_t* stream, uint32_t length);
  EMU88_EXPORT void emu88_render_float(emu88_context context, float* stream, uint32_t length);
@@ -454,7 +456,8 @@ index c9a5132..4988abd 100644
 + * (SysEx complete), at most size; returns the number of bytes copied. Render thread only. */
 +EMU88_EXPORT void emu88_capture_midi_out(emu88_context context, int enable);
 +EMU88_EXPORT size_t emu88_read_midi_out(emu88_context context, uint8_t* buffer, size_t size);
-+/* Firmware work RAM of the SC-8850 (01000000-0107FFFF; 0 outside) or the SC-88 (SRAM 0000-FFFF).
++/* Firmware work RAM of the SC-8850 (01000000-0107FFFF; 0 outside), the SC-88
++ * or the SC-88 Pro (SRAM 0000-FFFF).
 + * Render thread only. Returns 1 on those boards, 0 otherwise. */
 +EMU88_EXPORT int emu88_peek_work_ram(emu88_context context, uint32_t address, uint8_t* buffer, size_t size);
 +/* Write the normalized SC-88 Pro ROM set found on the ROM paths to four files (build tool). */
@@ -464,7 +467,7 @@ index c9a5132..4988abd 100644
  #ifdef __cplusplus
  }
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.cpp b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-index 69c6751..5eb0066 100644
+index 69c6751..c0aa20c 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 @@ -154,6 +154,12 @@ namespace emu88Lib
@@ -480,7 +483,7 @@ index 69c6751..5eb0066 100644
  			auto rom = RomLoader::findROM(model);
  			if(!rom.isValid() || rom.model() != model) break;
  			auto waveData = m_model == DeviceModel::Xpgs
-@@ -714,3 +720,24 @@ namespace emu88Lib
+@@ -714,3 +720,29 @@ namespace emu88Lib
  			m_activeChannels &= ~channelMask;
  	}
  }
@@ -495,6 +498,11 @@ index 69c6751..5eb0066 100644
 +
 +	bool HardwareDevice::peekWorkRam(const uint32_t _address, uint8_t* _dst, const size_t _size)
 +	{
++		if(m_sc88Pro)
++		{
++			for(size_t i = 0; i < _size; ++i) _dst[i] = m_sc88Pro->peekWorkRam(_address + static_cast<uint32_t>(i));
++			return true;
++		}
 +		if(m_sc88)
 +		{
 +			for(size_t i = 0; i < _size; ++i) _dst[i] = m_sc88->peekWorkRam(_address + static_cast<uint32_t>(i));

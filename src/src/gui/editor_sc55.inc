@@ -17,7 +17,7 @@ void ShowSetupMenu(Editor& e); // editor_win32.cpp
 
 namespace {
 
-constexpr RECT E55_SETUP = {250, 246, 338, 264};
+constexpr RECT E55_SETUP = P88_SETUP_RIGHT;
 constexpr DWORD E55_MIN_HOLD_MS = 80; // a short click still reaches the panel scan
 
 // Sprite order of make_sc55_sprites.py

@@ -107,11 +107,9 @@ struct Editor {
     int drag_x = 0, drag_y = 0;
     float drag_v0     = 1.0f;
     bool preview_down = false; // PREVIEW held (SC-88 Pro)
-#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88) || !defined(NUKED_SC55_ENGINE_88PRO)
-    uint32_t held85 = 0;       // panel switches held with the mouse (bit = 88emu button)
+    uint32_t held85 = 0;       // panel switches held with the mouse (bit = 88emu / MCU button)
     bool release85  = false;   // mouse released, switches let go after the minimum hold
     DWORD press85   = 0;       // tick of the press
-#endif
 #ifdef NUKED_SC55_DEVICE_8850
     int push85      = 0;       // VALUE push pulse, timer frames left
     int value85     = 0;       // VALUE knob position (detents; 4 knurl phases)
@@ -181,14 +179,14 @@ bool GatherLcd(NukedSc55& p, lcdview::View& view)
     return true;
 }
 
-#include "editor_sc88.inc" // SC-88 Pro panel; shared helpers (GAIN knob, VOICES, text boxes)
+#include "editor_sc88.inc" // shared helpers (GAIN knob, VOICES, text boxes)
 #ifndef NUKED_SC55_ENGINE_88PRO
 #include "editor_sc55.inc"
 #endif
 #ifdef NUKED_SC55_DEVICE_8850
 #include "editor_sc8850.inc"
 #endif
-#ifdef NUKED_SC55_DEVICE_88
+#if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
 #include "editor_sc88orig.inc"
 #endif
 
@@ -196,10 +194,8 @@ void Draw(Editor& e, HDC dc)
 {
 #if defined(NUKED_SC55_DEVICE_8850)
     Draw8850(e, dc);
-#elif defined(NUKED_SC55_DEVICE_88)
+#elif defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     Draw88o(e, dc);
-#elif defined(NUKED_SC55_ENGINE_88PRO)
-    Draw88(e, dc);
 #else
     Draw55(e, dc);
 #endif
@@ -219,21 +215,10 @@ int HitButton(int x, int y)
 {
 #if defined(NUKED_SC55_DEVICE_8850)
     return Hit8850(x, y);
-#elif defined(NUKED_SC55_DEVICE_88)
+#elif defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     return Hit88o(x, y);
-#elif defined(NUKED_SC55_ENGINE_88PRO)
-    return HitButton88(x, y);
 #else
     return Hit55(x, y);
-#endif
-}
-
-int HitPart(int x, int y)
-{
-#ifdef NUKED_SC55_ENGINE_88PRO
-    return HitPart88(x, y);
-#else
-    return lcdview::PartAt(P88_LCD, x, y);
 #endif
 }
 
@@ -321,15 +306,12 @@ void ShowSetupMenu(Editor& e)
 #if defined(NUKED_SC55_DEVICE_8850)
     const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTALIGN | TPM_BOTTOMALIGN,
                                    r.left + E85_SETUP.right, r.top + E85_SETUP.top - 2, 0, e.hwnd, nullptr);
-#elif defined(NUKED_SC55_DEVICE_88)
+#elif defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_BOTTOMALIGN,
                                    r.left + E88O_SETUP.left, r.top + E88O_SETUP.top - 2, 0, e.hwnd, nullptr);
-#elif defined(NUKED_SC55_ENGINE_88PRO)
-    const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_BOTTOMALIGN,
-                                   r.left + P88_SETUP.left, r.top + P88_SETUP.top - 2, 0, e.hwnd, nullptr);
 #else
-    const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_BOTTOMALIGN,
-                                   r.left + E55_SETUP.left, r.top + E55_SETUP.top - 2, 0, e.hwnd, nullptr);
+    const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTALIGN | TPM_BOTTOMALIGN,
+                                   r.left + E55_SETUP.right, r.top + E55_SETUP.top - 2, 0, e.hwnd, nullptr);
 #endif
     e.menu_open = false;
     DestroyMenu(m);
@@ -364,7 +346,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 #ifdef NUKED_SC55_DEVICE_8850
     if (e && Mouse8850(*e, hwnd, msg, wp, lp)) return 0;
 #endif
-#ifdef NUKED_SC55_DEVICE_88
+#if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     if (e && Mouse88o(*e, hwnd, msg, wp, lp)) return 0;
 #endif
 #ifndef NUKED_SC55_ENGINE_88PRO
@@ -437,88 +419,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (msg == WM_LBUTTONUP) ReleaseCapture();
         }
 #endif
-        return 0;
-    case WM_LBUTTONDBLCLK: // fast repeated presses count as presses
-    case WM_LBUTTONDOWN:
-        if (e) {
-            const int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
-            const int hb = HitButton(x, y);
-            if (hb) e->flash[hb] = 6;
-            switch (hb) {
-#ifdef NUKED_SC55_ENGINE_88PRO
-            // PART </>: press the device's buttons; the selected part follows the part the
-            // firmware shows (A01..A16, B01..B16, no wrap-around, fast presses may be ignored)
-            case 1: e->plugin->ui_command = 3; break;
-            case 2: e->plugin->ui_command = 4; break;
-#else
-            case 1: e->part = (e->part + 15) % 16; e->plugin->ui_command = 3; break; // PART <
-            case 2: e->part = (e->part + 1) % 16; e->plugin->ui_command = 4; break;  // PART >
-#endif
-#ifdef NUKED_SC55_ENGINE_88PRO
-            case 3: e->plugin->ui_command = 5; break; // ALL: unit 0's ALL view on/off (lamp from the firmware)
-#else
-            case 3: e->plugin->ui_command = 1; e->flash[3] = 12; break;
-#endif
-            case 4: ShowSetupMenu(*e); break;
-#ifdef NUKED_SC55_ENGINE_88PRO
-            case 5: { // SC-55 MAP: toggles SC-55 <-> SC-88 Pro like the hardware
-                const int tm = e->plugin->tone_map.load();
-                e->plugin->tone_map = (tm == 0) ? 2 : 0;
-                e->plugin->NotifyStateChanged();
-                break;
-            }
-            case 6: { // SC-88 MAP: toggles SC-88 <-> SC-88 Pro like the hardware
-                const int tm = e->plugin->tone_map.load();
-                e->plugin->tone_map = (tm == 1) ? 2 : 1;
-                e->plugin->NotifyStateChanged();
-                break;
-            }
-            case 7: ShowSetupMenu(*e); break;
-            case 8: { // MUTE: selected part on/off
-                const uint32_t bit = 1u << e->part;
-                e->plugin->mute_mask.fetch_xor(bit);
-                break;
-            }
-            case 9: // PREVIEW: note of the selected part while held
-                e->plugin->ui_preview_part = e->part;
-                e->plugin->ui_preview      = 1;
-                e->preview_down            = true;
-                SetCapture(hwnd);
-                break;
-            case 10: // GAIN knob: drag; double-click = 0 dB
-                if (msg == WM_LBUTTONDBLCLK) {
-                    e->plugin->gain_db = 0.0f;
-                    e->plugin->NotifyStateChanged();
-                    break;
-                }
-                e->drag_vol = true;
-                e->drag_x   = x;
-                e->drag_y   = y;
-                e->drag_v0  = e->plugin->gain_db.load();
-                SetCapture(hwnd);
-                break;
-#endif
-            default:
-                // column of the shown port (A or B, the one of the selected part)
-                if (const int c = HitPart(x, y); c >= 0) e->part = e->part / 16 * 16 + c;
-            }
-        }
-        return 0;
-    case WM_MOUSEWHEEL:
-#ifdef NUKED_SC55_ENGINE_88PRO
-        if (e) { // over the GAIN knob: one knob position (of 31, 0.8 dB) per notch
-            POINT pt{(short)LOWORD(lp), (short)HIWORD(lp)};
-            ScreenToClient(hwnd, &pt);
-            if (HitButton(pt.x, pt.y) == 10) {
-                const int f = GainKnobFrame(e->plugin->gain_db.load()) + (GET_WHEEL_DELTA_WPARAM(wp) > 0 ? 1 : -1);
-                e->plugin->gain_db = GainOfKnobFrame(f);
-                e->plugin->NotifyStateChanged();
-                return 0;
-            }
-        }
-#endif
-        if (e) e->part = (e->part + (GET_WHEEL_DELTA_WPARAM(wp) > 0 ? NukedSc55::kNumParts - 1 : 1)) %
-                         NukedSc55::kNumParts;
         return 0;
     case WM_DESTROY:
         KillTimer(hwnd, 1);

@@ -1,12 +1,14 @@
-// Nuked SC-88 Poly - front panel (included by editor_win32.cpp in NUKED_SC55_DEVICE_88
-// builds, after editor_sc88.inc).
+// Nuked SC-88 Poly / Nuked SC-88 Pro Poly - front panel (included by editor_win32.cpp in
+// NUKED_SC55_DEVICE_88 and NUKED_SC55_DEVICE_88PRO builds, after editor_sc88.inc).
 //
-// Background: the 88emu SC-88 panel art (The Usual Suspects, GPLv3), prepared at build
-// time by tools/make_sc88orig_panel.py (918x280, branding replaced, playlist -> VOICES,
+// Background: the 88emu SC-88 / SC-88 Pro panel art (The Usual Suspects, GPLv3), prepared at
+// build time by tools/make_sc88orig_panel.py (918x280, branding replaced, playlist -> VOICES,
 // VOLUME -> GAIN). The controls are the player's sprites (tools/make_sc88orig_sprites.py)
-// at the positions of its skin. All switches drive unit 0's own panel: the firmware runs
+// at the positions of its skin. The switches drive unit 0's own panel: the firmware runs
 // the LCD and the lamps, and the plugin passes panel edits on to the other units
-// (NukedSc55::E88EditPump).
+// (NukedSc55::E88EditPump). The two panels share their layout and switch bits; on the
+// SC-88 Pro the tone map keys, MUTE and PREVIEW stay plugin functions (all units, state),
+// and the lamp at the USER INST / SELECT keys is the three-colour EFX lamp.
 
 extern "C" const unsigned char nk_panel88o_b[] asm("nk_panel88o_b");
 extern "C" const unsigned char nk_panel88o_e[] asm("nk_panel88o_e");
@@ -17,13 +19,21 @@ void ShowSetupMenu(Editor& e); // editor_win32.cpp
 
 namespace {
 
-constexpr RECT E88O_SETUP = {250, 246, 338, 264};
+constexpr RECT E88O_SETUP = P88_SETUP_LEFT;
 constexpr int E88O_BIT_PREVIEW = 7;
 constexpr DWORD E88O_MIN_HOLD_MS = 80; // a short click still reaches the panel scan
 
 // Sprite order of make_sc88orig_sprites.py
 constexpr int S88O_MODE = 0, S88O_PART = 16, S88O_PREVIEW = 20, S88O_PLAIN = 22, S88O_ROCKER = 26,
-              S88O_SELECT_LED = 66, S88O_EDIT_LED = 72, S88O_KNOB = 74, S88O_COUNT = 105;
+              S88O_SELECT_LED = 66, S88O_EDIT_LED = 72, S88O_KNOB = 74, S88O_EFX_GREEN = 105,
+              S88O_EFX_AMBER = 106, S88O_COUNT = 107;
+#ifdef NUKED_SC55_DEVICE_88PRO
+// SC-88 Pro switches handled by the plugin itself (pressed tint only, not given to unit 0):
+// SC-88 MAP, SC-55 MAP, MUTE, PREVIEW
+constexpr uint32_t E88O_PLUGIN_BITS = (1u << 1) | (1u << 2) | (1u << 5) | (1u << E88O_BIT_PREVIEW);
+#else
+constexpr uint32_t E88O_PLUGIN_BITS = 0;
+#endif
 
 // Panel switches: box (dp, player skin), 88emu SC-88 button bit, lamp bit (-1 = none),
 // shape (0 = round, 1 = rocker half / plain key), first sprite (normal; +1 pressed)
@@ -31,8 +41,8 @@ struct E88oBtn { float l, t, w, h; uint8_t bit; int8_t led; uint8_t rect; uint8_
 constexpr E88oBtn E88O_BTNS[] = {
     {420, 14, 15, 15, 6, 0, 0, S88O_MODE + 0},   // ALL
     {420, 40, 15, 15, 5, 1, 0, S88O_MODE + 4},   // MUTE
-    {420, 66, 15, 15, 2, 2, 0, S88O_MODE + 8},   // INST MAP (SC-55 MAP)
-    {420, 92, 15, 15, 1, 3, 0, S88O_MODE + 12},  // EQ
+    {420, 66, 15, 15, 2, 2, 0, S88O_MODE + 8},   // INST MAP (SC-88 Pro: SC-55 MAP)
+    {420, 92, 15, 15, 1, 3, 0, S88O_MODE + 12},  // EQ (SC-88 Pro: SC-88 MAP)
     {472, 14, 13, 13, 22, -1, 0, S88O_PART + 0}, // PART <
     {500, 14, 13, 13, 14, -1, 0, S88O_PART + 2}, // PART >
     {311, 166, 27, 9, 24, -1, 1, S88O_PLAIN + 0}, // USER INST EDIT ON/OFF
@@ -44,9 +54,11 @@ constexpr E88oBtn E88O_BTNS[] = {
     {538, 69, 27, 9, 10, -1, 1, S88O_ROCKER + 16}, {566, 69, 27, 9, 11, -1, 1, S88O_ROCKER + 18}, // CHORUS
     {465, 95, 27, 9, 16, -1, 1, S88O_ROCKER + 20}, {493, 95, 27, 9, 17, -1, 1, S88O_ROCKER + 22}, // KEY SHIFT
     {538, 95, 27, 9, 8, -1, 1, S88O_ROCKER + 24},  {566, 95, 27, 9, 9, -1, 1, S88O_ROCKER + 26},  // MIDI CH
-    {392, 166, 27, 9, 26, -1, 1, S88O_ROCKER + 28}, {420, 166, 27, 9, 27, -1, 1, S88O_ROCKER + 30}, // VIB RATE / DELAY
-    {465, 166, 27, 9, 28, -1, 1, S88O_ROCKER + 32}, {493, 166, 27, 9, 29, -1, 1, S88O_ROCKER + 34}, // VIB DEPTH / INSTRUMENT
-    {538, 166, 27, 9, 30, -1, 1, S88O_ROCKER + 36}, {566, 166, 27, 9, 31, -1, 1, S88O_ROCKER + 38}, // VIB DELAY / VARIATION
+    // SC-88: VIB RATE / DELAY, VIB DEPTH / INSTRUMENT, VIB DELAY / VARIATION;
+    // SC-88 Pro: EFX TYPE (VIB RATE, ATTACK), EFX PARAM (VIB DEPTH, CUTOFF, DECAY), EFX VALUE (VIB DELAY, RESONANCE, RELEASE)
+    {392, 166, 27, 9, 26, -1, 1, S88O_ROCKER + 28}, {420, 166, 27, 9, 27, -1, 1, S88O_ROCKER + 30},
+    {465, 166, 27, 9, 28, -1, 1, S88O_ROCKER + 32}, {493, 166, 27, 9, 29, -1, 1, S88O_ROCKER + 34},
+    {538, 166, 27, 9, 30, -1, 1, S88O_ROCKER + 36}, {566, 166, 27, 9, 31, -1, 1, S88O_ROCKER + 38},
     {116, 78, 20, 20, E88O_BIT_PREVIEW, -1, 0, S88O_PREVIEW},                                     // PREVIEW
 };
 constexpr int E88O_NBTN = sizeof(E88O_BTNS) / sizeof(E88O_BTNS[0]);
@@ -162,20 +174,43 @@ void Draw88o(Editor& e, HDC dc)
     NukedSc55& p = *e.plugin;
     if (!e.bg_dc) BuildBackground88o(e);
     BitBlt(dc, 0, 0, Width, Height, e.bg_dc, 0, 0, SRCCOPY);
-    {   // LCD as driven by unit 0's firmware; level meters of all units
+    {   // LCD as driven by unit 0's firmware; level meters of all units. The selected part
+        // (MUTE, PREVIEW of the SC-88 Pro) follows the part the firmware shows ("A01".."B16").
         lcdview::View view;
-        if (GatherLcd(p, view)) lcdview::DrawDots(dc, P88_LCD, view, e.lcd_cache);
+        if (GatherLcd(p, view)) {
+            lcdview::DrawDots(dc, P88_LCD, view, e.lcd_cache);
+            if (const int lp = LcdPart88(view.dd); lp >= 0 && lp != e.lcd_part) e.lcd_part = e.part = lp;
+        }
     }
 
     // Switches and lamps as the firmware lights them, darker while held
-    const uint32_t leds = p.PanelLeds();
+    uint32_t leds = p.PanelLeds();
+#ifdef NUKED_SC55_DEVICE_88PRO
+    {   // lamps of the plugin's own switches: MUTE of the selected part, the active tone map
+        const int tm = p.tone_map.load();
+        leds &= ~0x0eu;
+        if ((p.mute_mask.load() >> e.part) & 1u) leds |= 1u << 1;
+        if (tm == 0) leds |= 1u << 2;
+        if (tm == 1) leds |= 1u << 3;
+    }
+#endif
     for (const auto& b : E88O_BTNS) {
         const bool held = (e.held85 >> b.bit) & 1u;
         const int lit   = (b.led >= 0 && ((leds >> b.led) & 1u)) ? 2 : 0;
         Blend88o(dc, b.sprite + lit + (held ? 1 : 0));
     }
     for (int i = 0; i < 3; ++i) Blend88o(dc, S88O_SELECT_LED + 2 * i + ((leds >> (4 + i)) & 1u));
+#ifdef NUKED_SC55_DEVICE_88PRO
+    // EFX lamp: bit 7 green, bit 8 red, both = amber (like the player)
+    switch ((leds >> 7) & 3u) {
+    case 1: Blend88o(dc, S88O_EFX_GREEN); break;
+    case 2: Blend88o(dc, S88O_EDIT_LED + 1); break;
+    case 3: Blend88o(dc, S88O_EFX_AMBER); break;
+    default: Blend88o(dc, S88O_EDIT_LED); break;
+    }
+#else
     Blend88o(dc, S88O_EDIT_LED + ((leds >> 7) & 1u));
+#endif
     const float gain = p.gain_db.load();
     Blend88o(dc, S88O_KNOB + GainKnobFrame(gain));
     {   // GAIN readout under the knob
@@ -193,12 +228,33 @@ void Draw88o(Editor& e, HDC dc)
 bool Mouse88o(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     NukedSc55& p = *e.plugin;
-    const auto send = [&] { p.ui_panel_buttons = e.held85; };
+    const auto send = [&] { p.ui_panel_buttons = e.held85 & ~E88O_PLUGIN_BITS; };
     switch (msg) {
     case WM_LBUTTONDOWN:
     case WM_LBUTTONDBLCLK: {
         const int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
         const int h = Hit88o(x, y);
+#ifdef NUKED_SC55_DEVICE_88PRO
+        if (h >= 1 && h <= E88O_NBTN && ((E88O_PLUGIN_BITS >> E88O_BTNS[h - 1].bit) & 1u)) {
+            switch (E88O_BTNS[h - 1].bit) {
+            case 2: // SC-55 MAP: toggles SC-55 <-> SC-88 Pro like the hardware
+            case 1: { // SC-88 MAP: toggles SC-88 <-> SC-88 Pro
+                const int key = E88O_BTNS[h - 1].bit == 2 ? 0 : 1;
+                p.tone_map    = (p.tone_map.load() == key) ? 2 : key;
+                p.NotifyStateChanged();
+                break;
+            }
+            case 5: // MUTE: selected part on/off (all units; not stored, like on the device)
+                p.mute_mask.fetch_xor(uint64_t{1} << e.part);
+                break;
+            default: // PREVIEW: note of the selected part while held (shared release code)
+                p.ui_preview_part = e.part;
+                p.ui_preview      = 1;
+                e.preview_down    = true;
+                break;
+            }
+        }
+#endif
         if (h >= 1 && h <= E88O_NBTN) {
             // a button still held only for the minimum time is released by the new press
             e.held85 = (e.release85 ? 0u : e.held85) | 1u << E88O_BTNS[h - 1].bit;

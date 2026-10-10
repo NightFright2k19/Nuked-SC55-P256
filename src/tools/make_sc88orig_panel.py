@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-# Bereitet die 88emu-Panelgrafik des SC-88 (sc88_panel.png, GPLv3, The Usual Suspects) fuer das
-# Nuked-SC88-Poly-Panel auf: 918x280 (= 612x187 dp x 1,5), Branding ersetzt, Playlist-Kopf ->
-# VOICES, VOLUME -> GAIN, Logo unten links ersetzt; alles andere bleibt unveraendert.
+# Bereitet die 88emu-Panelgrafik des SC-88 (sc88_panel.png) bzw. des SC-88 Pro (sc88pro_panel.png,
+# --pro; GPLv3, The Usual Suspects) fuer das Nuked-SC88(-Pro)-Poly-Panel auf: 918x280 (= 612x187 dp
+# x 1,5), Branding ersetzt, Playlist-Kopf -> VOICES, VOLUME -> GAIN, Logo unten links ersetzt; alles
+# andere (Tastenmulden, Beschriftungen, beim Pro die EFX-Felder) bleibt unveraendert.
 # Ausgabe: rohe BGRA-Pixel (918*280*4 Byte) fuer .incbin.
-# usage: make_sc88orig_panel.py <sc88_panel.png> <out.bgra> [preview.png]
+# usage: make_sc88orig_panel.py [--pro] <sc88_panel.png | sc88pro_panel.png> <out.bgra> [preview.png]
 import sys
+PRO = "--pro" in sys.argv
+if PRO: sys.argv.remove("--pro")
 from PIL import Image, ImageDraw, ImageFont
 src, out = sys.argv[1], sys.argv[2]
 im = Image.open(src).convert("RGB")
@@ -91,15 +94,16 @@ def vgrad_fill(box, lx, rx):
 # Branding oben auf dem LCD-Rahmen ("TheUsualSuspects", weiss kursiv) -> Produktname, gleicher Stil
 vgrad_fill((390, 6, 558, 29), 388, 560)
 f1, f2 = font(15), font(15, "-Bold")
-w = d.textlength("Nuked", font=f1) + d.textlength("SC-88", font=f2)
+w = d.textlength("Nuked", font=f1) + d.textlength("SC-88 Pro" if PRO else "SC-88", font=f2)
 x = 551 - w
 x += oblique_text(x, 9, "Nuked", f1, (236, 238, 240))
-oblique_text(x, 9, "SC-88", f2, (236, 238, 240))
-# Logo unten links ("88Emu" + Pfeil): Struktur aus der leeren Flaeche rechts daneben (gleiche Zeilen)
-texture_fill((32, 236, 170, 274), (180, 330))
+oblique_text(x, 9, "SC-88 Pro" if PRO else "SC-88", f2, (236, 238, 240))
+# Logo unten links ("88Emu" bzw. "88EmuPro" + Pfeil): Struktur aus der leeren Flaeche rechts daneben
+texture_fill((32, 236, 218 if PRO else 170, 274), (225, 415) if PRO else (180, 330))
 f1, f2 = font(22), font(22, "-Bold")
 x = 42 + oblique_text(42, 241, "Nuked-SC", f1, (236, 238, 240))
-oblique_text(x, 241, "88", f2, (236, 238, 240))
+x += oblique_text(x, 241, "88", f2, (236, 238, 240))
+if PRO: oblique_text(x + 4, 241, "Pro", f2, (255, 111, 15))  # orange wie "Pro" im Original
 # Playlist-Kopf -> "VOICES" (Ordnersymbol entfernt), Spalten-Verlauf bleibt
 inpaint_text((31, 12, 140, 35), (95, 115), thr=3, grow=2)
 center_text(86, 18, "VOICES", font(11, "-Bold"), (226, 228, 232))

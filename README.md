@@ -266,7 +266,7 @@ The SC-8850 plug-in uses the same 88emu core with the SC-8850 firmware (compile-
 - **LCD:** the 160 x 64 dots of the firmware's graphic LCD, black on the orange glass like in the player, area-averaged to 262 x 105 px.
 - **SysEx display messages:** text messages (`45 10 00 xx`) are shown by the firmware itself. The SC-8850 firmware ignores the 16 x 16 bitmaps (`45 10 01 00` … `45 10 05 7F`, pages 1-10, page select `45 10 20 00`), so the plug-in keeps the pages and lays the shown one over the level meters of the play screen for 3.2 s after the last update, as on the SC-55 / SC-88 (one bar = one column, two dots per row). Menus are left alone. The panel size does not change.
 - **Controls:** every switch is held while the mouse button is down (at least 80 ms). VALUE: drag (right / up = clockwise, about 10 px per detent) or mouse wheel; a click without moving pushes the encoder. PREVIEW is the device's own key. GAIN: drag, wheel (0.8 dB per notch), double-click = 0 dB.
-- **VOICES / UNITS:** sounding voices, peak hold and awake units like on the SC-88 Pro panel. **SETUP** (bottom right): max polyphony 128 / 256, GS reset, all notes off.
+- **VOICES / UNITS:** sounding voices, peak hold and awake units like on the SC-88 Pro panel. **SETUP** (bottom right, same place as on the SC-55 / SC-55mkII): max polyphony 128 / 256, GS reset, all notes off.
 
 ## SC-88 engine (88emu)
 
@@ -285,7 +285,7 @@ The SC-88 plug-in uses the same 88emu core with the firmware of the first SC-88 
 - **Graphics:** the 88emu SC-88 panel art (GPLv3, The Usual Suspects) by `tools/make_sc88orig_panel.py`. Only the branding ("Nuked SC-88"), the playlist header (VOICES) and the VOLUME label (GAIN) are replaced; everything else is unchanged. Switches, rockers, LEDs, PREVIEW and the GAIN knob are rendered from the player's own vector graphics at the positions of its skin (`tools/make_sc88orig_sprites.py`, with the pressed tint).
 - **LCD:** the firmware's character LCD on the panel's glass, rendered like on the SC-88 Pro.
 - **Controls:** every switch is held while the mouse button is down (at least 80 ms), so holding a rocker repeats like on the device. GAIN: drag, wheel (0.8 dB per notch), double-click = 0 dB.
-- **VOICES / UNITS** as on the other 88emu panels. **SETUP** (bottom left): max polyphony 64 / 128 / 192 / 256, GS reset, all notes off.
+- **VOICES / UNITS** as on the other 88emu panels. **SETUP** (bottom, between the logo and the EFX lamp; same place on the SC-88 Pro): max polyphony 64 / 128 / 192 / 256, GS reset, all notes off.
 
 ---
 
@@ -299,17 +299,15 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 - **LCD:** the firmware's character LCD on the original glass (313 x 113 px, rendered at full size and reduced so the dots stay even). Text and bitmap SysEx messages are shown by the firmware itself.
 - **Front panel = the device's own panel:** ALL, MUTE, PART < >, INSTRUMENT, LEVEL, PAN, REVERB, CHORUS, KEY SHIFT and MIDI CH go to unit 0, so the LCD, the ALL / MUTE lamps and the key repeat work as on the hardware. Every switch is held while the mouse button is down (at least 80 ms). Until 0.6 s after the last switch the plug-in compares unit 0's parameter memory and sends every change as GS DT1 (instrument as CC 0 + program change) to the other units and into the state log, so units that wake later play the same sounds. Part MUTE flags are copied to all awake units; ALL + MUTE silences the output.
 - **GAIN:** -12 ... +12 dB, 0 dB in the middle (default) and bit-identical to the previous output. Drag (right / up = louder), mouse wheel (0.8 dB per notch), double-click = 0 dB.
-- **VOICES / UNITS:** sounding voices with peak hold and awake units like on the other 88emu panels. **SETUP** (bottom): max polyphony, GS reset, all notes off.
+- **VOICES / UNITS:** sounding voices with peak hold and awake units like on the other 88emu panels. **SETUP** (bottom right, same place as on the SC-8850): max polyphony, GS reset, all notes off.
 - **Window class:** contains the module handle, so v1.21 and MkII can run in the same host.
 
-### SC-88 Pro panel
+### SC-88 Pro panel (918 x 280 px)
 
-- **Graphics:** derived from the panel art of 88emu (GPLv3, The Usual Suspects). `tools/make_sc88_panel.py` halves it, replaces the 88emu branding by "NUKED-SC88 PRO" and the playlist / EFX fields by VOICES, SETUP, TONE MAP, UNITS and MAX VOICES. The controls (ALL, MUTE, SC-55, SC-88, PART arrows, PREVIEW, VOLUME knob with 31 positions) come from the 88emu player assets (`tools/make_sc88_sprites.py`).
-- **TONE MAP keys:** SC-55 / SC-88; the green LED shows the active map, both off means SC-88 Pro.
-- **ALL:** presses ALL on unit 0's panel, like on the hardware: it latches, the LCD shows the ALL view and the button lamp is lit until ALL is pressed again. A tone map change keeps the ALL view. All notes off is in the SETUP menu.
-- **VOLUME:** 0..1, characteristic off / -60 ... 0 dB, applied at the output after resampling with a ramp per block; at 1.0 there is no multiplication (bit-identical). Drag the knob or use the mouse wheel.
-- **MUTE:** per part (bit = MIDI channel). Note ons of that channel are dropped, a newly muted part gets CC 120. The mute state is **not** part of the plug-in state (like on the device).
-- **PREVIEW:** note on while pressed, note off when released, on the selected part, velocity 100, note from the menu "Prevw Note" (C-1 ... G9, Roland numbering, C4 = 60, default C4). It goes through the normal routing path.
+- **Same panel code as the SC-88** (`editor_sc88orig.inc`): the 88emu SC-88 Pro panel art (GPLv3, The Usual Suspects) by `tools/make_sc88orig_panel.py --pro`, branding "Nuked SC-88 Pro". All controls of the device are real switches: PART < >, INSTRUMENT, LEVEL, PAN, REVERB, CHORUS, KEY SHIFT and MIDI CH rockers, ALL, the bottom row EFX ON/OFF (USER INST / SELECT), EFX TYPE, EFX PARAM, EFX VALUE, and the EFX lamp (green / red / amber like on the device).
+- **Firmware panel:** these switches go to unit 0. The SC-88 Pro firmware keeps the same panel edit log as the SC-88; the plug-in forwards every edit as GS DT1 to the other units and into the state log, so all units (also those that wake later) play the same sounds. ALL + INSTRUMENT and ALL + MIDI CH have no GS equivalent and are disabled. Checked by `tools/test/panel88p.cpp` (30 panel steps, ALL mode, tone map change, key repeat; parameter memory of all units compared, with a negative control).
+- **Handled by the plug-in:** the tone map keys SC-55 / SC-88 (lamp = active map, both off = SC-88 Pro; also in the SETUP menu), MUTE per part (note ons dropped, CC 120 on muting; not stored in the state, like on the device) and PREVIEW (note on while pressed, on the shown part, note from the menu "Prevw Note").
+- **GAIN, VOICES / UNITS, SETUP:** as on the SC-88, SETUP between the logo and the EFX lamp.
 
 ### LCD details
 

@@ -1,5 +1,10 @@
 #pragma once
 
+// SC-88 Pro (88emu engine without an SC-8850 / SC-88 device switch)
+#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88)
+#define NUKED_SC55_DEVICE_88PRO 1
+#endif
+
 #include <array>
 #include <atomic>
 #include <condition_variable>
@@ -280,9 +285,6 @@ public:
 	std::atomic<float> gain_db{0.0f};      // GAIN knob in dB, kGainMinDb..kGainMaxDb; 0 = default
 	std::atomic<int> preview_note{60};     // system parameter "Prevw Note" 0..127 (C-1..G9), C4 = 60
 	std::atomic<uint64_t> mute_mask{0};    // MUTE per part (bit = part = port * 16 + MIDI channel), not stored
-#if !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88)
-	uint32_t PanelLeds() const;            // unit 0's panel lamps (88emu bit order; bit 0 = ALL)
-#endif
 	std::atomic<int> ui_preview{0};        // 1 = PREVIEW pressed, 2 = released
 	std::atomic<int> ui_preview_part{0};   // 0..31 = A01..B16
 	static constexpr float kGainMinDb   = -12.0f, kGainMaxDb = 12.0f;
@@ -308,16 +310,19 @@ private:
 	void InjectShort(uint8_t s, uint8_t d1, uint8_t d2, uint16_t port = 0);
 public:
 #endif
-#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88)
-	// Front panel of the SC-8850 / SC-88: the GUI drives unit 0's own panel (firmware menus,
-	// LCD, LEDs). Edits made there are passed on to the other units and the state log.
+#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
+	// Front panel of the SC-8850 / SC-88 / SC-88 Pro: the GUI drives unit 0's own panel (firmware
+	// menus, LCD, LEDs). Edits made there are passed on to the other units and the state log.
+	// SC-88 Pro: tone map keys, MUTE and PREVIEW stay plugin functions (all units, state).
 	std::atomic<uint32_t> ui_panel_buttons{0}; // switches held in the GUI (bit = 88emu button)
 	uint32_t PanelLeds() const;                // unit 0's panel lamps (88emu bit order)
 private:
 	uint32_t applied_buttons = 0;
 	void E88PanelInput();
 	void E88Forward(uint8_t port, const uint8_t* msg, size_t size);
+#ifndef NUKED_SC55_DEVICE_88PRO
 	void E88PanelMutes();
+#endif
 public:
 #endif
 #ifndef NUKED_SC55_ENGINE_88PRO
@@ -344,13 +349,13 @@ private:
 	void E55ApplyMutes(Instance& inst, uint16_t rx);
 public:
 #endif
-#ifdef NUKED_SC55_DEVICE_88
+#if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
 private:
-	// SC-88: the firmware logs every panel edit as a GS parameter change (a ring in its work
-	// RAM); the plugin reads the new entries after each block and passes them on as DT1.
+	// SC-88 / SC-88 Pro: the firmware logs every panel edit as a GS parameter change (a ring in
+	// its work RAM); the plugin reads the new entries after each block and passes them on as DT1.
 	int edit_cursor  = -1;   // next unread byte of the log (-1: start at the current end)
 	uint32_t gui_buttons = 0; // switches held in the GUI as last seen (ALL-mode handling)
-	bool all_eq_on   = true; // ALL + EQ: EQ switch of all parts (applied as GS parameters)
+	bool all_eq_on   = true; // SC-88: ALL + EQ, EQ switch of all parts (applied as GS parameters)
 	void E88EditPump();
 	void E88SendAll(uint8_t port, const uint8_t* msg, size_t size);
 public:
