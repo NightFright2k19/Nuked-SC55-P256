@@ -7,7 +7,7 @@
 <img width="861" height="263" alt="sc8850" src="https://github.com/user-attachments/assets/033535b2-8a73-4b00-864b-d7c12298787d" />
 </p>
 
-Single-file **CLAP** and **VST2** plug-ins (Windows x64) for the Roland **SC-55 (v1.21)**, **SC-55mk2 (v1.01, with Capital Tone Fallback)**, **SC-88 Pro** and **SC-8850**, built on the low-level emulation of [Nuked SC-55](https://github.com/nukeykt/Nuked-SC55) and [88emu](https://github.com/dsp56300/gearmulator). The original modules stop at 24 (SC-55) or 28 (SC-55mk2) simultaneous voices. These plug-ins run several bit-identical emulator instances side by side and distribute the MIDI notes among them, which raises the limit to **256-280 voices** without changing how a single module sounds.
+Single-file **CLAP** and **VST2** plug-ins (Windows x64) for the Roland **SC-55 (v1.21)**, **SC-55mk2 (v1.01, with Capital Tone Fallback)**, **SC-88**, **SC-88 Pro** and **SC-8850**, built on the low-level emulation of [Nuked SC-55](https://github.com/nukeykt/Nuked-SC55) and [88emu](https://github.com/dsp56300/gearmulator). The original modules stop at 24 (SC-55) or 28 (SC-55mk2) simultaneous voices. These plug-ins run several bit-identical emulator instances side by side and distribute the MIDI notes among them, which raises the limit to **256-280 voices** without changing how a single module sounds.
 
 > [!IMPORTANT]
 > The plug-ins aim to preserve an important part of DOS gaming history for all to enjoy. They are only intended for **personal use** (retro gaming, writing music as a hobby) and **research purposes**. **No ROM files are included in this repository.** Plug-ins that contain your ROMs (everything the builder produces) are for **private use only** and must not be shared.
@@ -21,6 +21,8 @@ Single-file **CLAP** and **VST2** plug-ins (Windows x64) for the Roland **SC-55 
 - [How the polyphony works](#how-the-polyphony-works)
 - [Capital Tone Fallback (SC-55mk2)](#capital-tone-fallback-sc-55mk2)
 - [SC-88 Pro engine (88emu)](#sc-88-pro-engine-88emu)
+- [SC-8850 engine (88emu)](#sc-8850-engine-88emu)
+- [SC-88 engine (88emu)](#sc-88-engine-88emu)
 - [Panels and controls](#panels-and-controls)
 - [Settings and plug-in state](#settings-and-plug-in-state)
 - [Configuration (environment variables)](#configuration-environment-variables)
@@ -42,7 +44,7 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 
 ### Polyphony
 
-- **Multi-instance polyphony:** N identical, bit-exact emulators run in parallel and their outputs are summed. A note router in `src/poly_router.h` decides which instance plays which note. Result: **264 voices** (SC-55 v1.21, 11 units), **280 voices** (SC-55mk2, 10 units), **256 voices** (SC-88 Pro, 4 units of 64; SC-8850, 2 units of 128).
+- **Multi-instance polyphony:** N identical, bit-exact emulators run in parallel and their outputs are summed. A note router in `src/poly_router.h` decides which instance plays which note. Result: **264 voices** (SC-55 v1.21, 11 units), **280 voices** (SC-55mk2, 10 units), **256 voices** (SC-88 and SC-88 Pro, 4 units of 64; SC-8850, 2 units of 128).
 - **Dynamic instances:** only as many instances run as the music needs. Sleeping instances are brought up to date from a compact state log when they wake (`src/state_log.h`), and a background thread pre-synchronises the next sleeping units so that waking up never causes a dropout.
 - **Constant DC offset compensation:** every instance outputs a constant 1/32 of full scale; it is measured after boot and subtracted from all additional instances. With 24/28 voices or fewer, the output is **bit-identical** with a single module.
 - **Runtime voice limit** (SETUP menu): 24 / 48 / 64 / 96 / 128 / 160 / 192 / 224 / 256 (SC-55mk2: 28 / 56 / ...). Instances above the limit receive no new notes and go to sleep once silent.
@@ -52,6 +54,7 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 - **SC-55mk2 with CTF:** the plug-in prefers a `rom2.bin` patched with Capital Tone Fallback (the original plug-in always loads the unpatched one). In the single-file builds, the CTF `rom2.bin` is built in.
 - **SC-88 Pro** (new): a second engine based on the 88emu core from the Gearmulator project, with the SC-55 / SC-88 / SC-88 Pro tone map switch of the hardware, gain, mute and preview, and both MIDI inputs (32 parts A01-A16 / B01-B16: port select `F5 01` / `F5 02`, or the second CLAP note port "MIDI IN B"). The SC-55 code is untouched by this (audio compared byte by byte).
 - **SC-8850** (new): the same 88emu engine with the SC-8850 firmware, 64 parts on four MIDI inputs (A-D), the original front panel with graphic LCD driven by the firmware, and GAIN. See [SC-8850 engine](#sc-8850-engine-88emu).
+- **SC-88** (new): the 88emu engine with the firmware of the first SC-88, 32 parts on two MIDI inputs like the SC-88 Pro, the original front panel driven by the firmware, and GAIN. See [SC-88 engine](#sc-88-engine-88emu).
 
 ### Formats and packaging
 
@@ -113,6 +116,7 @@ See [Building from source](#building-from-source).
 | --- | --- | --- | --- | --- |
 | SC-55 v1.21 | yes | 24 | 11 | 264 |
 | SC-55mk2 v1.01 (CTF) | yes | 28 | 10 | 280 |
+| SC-88 | yes | 64 | 4 | 256 |
 | SC-88 Pro | yes | 64 | 4 | 256 |
 | SC-8850 | yes | 128 | 2 | 256 |
 | SC-55 v1.00 / v1.10 / v1.20 / v2.00 | source builds with external ROMs only | 24 | configurable | - |
@@ -129,6 +133,8 @@ The ROMs are recognised **by content** (SHA-256), not by file name. Dumps of oth
 | | rom2 original (no CTF) | `rom2.bin.old` | `a4c9fd821059054c` |
 | | rom_sm | `rom_sm.bin` | `b0b5f865a403f730` |
 | | wave ROM 1 / 2 | `waverom1.bin` / `waverom2.bin` | `c6429e21b9b3a02f` / `5b753f6cef4cfc7f` |
+| SC-88 | control ROM (v1.01) | `sc88_control.bin` | `875f561d009fba79` |
+| | wave ROM 0 / 1 / 2 / 3 | `sc88_wave0/1/2/3.bin` | `4d8fbb7f089e500a` / `c36f96c4a17a17eb` / `be62816e655cf712` / `cd2ba0643fe22fcd` |
 | SC-88 Pro | control ROM (v1.02) | `sc88pro_control.bin` | `efcdbe43f5810d34` |
 | | wave ROM 0 / 1 / 2 | `sc88pro_wave0/1/2.bin` | `3c6a96298e0de126` / `42bcbba9506a667c` / `db40d8624fceec5a` |
 | SC-8850 | internal (sub CPU) | `sc8850_internal.bin` | `dc5caf0841819fce` |
@@ -136,7 +142,7 @@ The ROMs are recognised **by content** (SHA-256), not by file name. Dumps of oth
 | | data | `sc8850_data.bin` | `48eeceb4dbba45b6` |
 | | wave | `sc8850_wave.bin` | `3cfac9db381527a4` |
 
-The SC-88 Pro files are the raw dumps (control ROM 1 MB, wave ROMs 8 + 8 + 4 MB). The SC-8850 set is internal 64 KB, program 1 MB, data 2 MB and the wave ROM as one 32 MB file.
+The SC-88 files are the raw dumps (control ROM 512 KB, four wave ROMs of 2 MB each). The SC-88 Pro files are the raw dumps (control ROM 1 MB, wave ROMs 8 + 8 + 4 MB). The SC-8850 set is internal 64 KB, program 1 MB, data 2 MB and the wave ROM as one 32 MB file.
 
 > [!NOTE]
 > **SC-55mk2:** either `rom2` works. If only the original `rom2` (512 KB) is found, the builder applies the CTF patch itself and checks the result against the known checksum (see [Capital Tone Fallback](#capital-tone-fallback-sc-55mk2)).
@@ -153,13 +159,14 @@ For source builds with **external** ROMs, the layout of the original plug-in app
 | Nuked-SC55 MkII | `Nuked-SC55_MkII` | Nuked SC-55 | `net.nuked_sc55_poly_clap.sc55mk2_v1_01` | `S5PM` (0x5335504D) | 280 |
 | Nuked-SC88 Pro | `Nuked-SC88_Pro` | 88emu | `net.nuked_sc55_poly_clap.sc88pro` | `S8PP` (0x53385050) | 256 |
 | Nuked-SC8850 | `Nuked-SC8850` | 88emu | `net.nuked_sc55_poly_clap.sc8850` | `S885` (0x53383835) | 256 |
+| Nuked-SC88 | `Nuked-SC88` | 88emu | `net.nuked_sc55_poly_clap.sc88` | `S888` (0x53383838) | 256 |
 
 - The file names contain no spaces or dots (some hosts and drivers dislike them); the display names in the host stay "Nuked-SC55 v1.21", "Nuked-SC55 MkII" and "Nuked-SC88 Pro".
 - Both formats are the **same file** with two entry points (`clap_entry` and `VSTPluginMain`). The builder writes it twice, once as `.clap` and once as `.dll`.
-- Category: instrument/synth; flags: editor, replacing, program chunks. VST2 vendor `Nuked SC-55 P256` (SC-88 Pro: `Nuked SC-88 P256`, SC-8850: `Nuked SC-8850 P256`).
+- Category: instrument/synth; flags: editor, replacing, program chunks. VST2 vendor `Nuked SC-55 P256` (SC-88 Pro: `Nuked SC-88 P256`, SC-8850: `Nuked SC-8850 P256`, SC-88: `Nuked SC-88 P256`).
 - The IDs of the plug-ins never changed since the first version, so projects stay compatible. Hosts may show a new vendor after a rescan.
 - Windows version info: product name, description and internal name are the display name; file and product version are the build date (`2026.10.07` is stored as `2026,10,7,0` numerically, which Windows shows as `2026.10.7.0`).
-- A DLL with ROMs is large: about 27 MB for the SC-88 Pro (21 MB ROMs, 1 MB panel graphics), about 42 MB for the SC-8850 (35 MB ROMs).
+- A DLL with ROMs is large: about 27 MB for the SC-88 Pro (21 MB ROMs, 1 MB panel graphics), about 42 MB for the SC-8850 (35 MB ROMs), about 14 MB for the SC-88 (8.5 MB ROMs).
 
 ---
 
@@ -258,6 +265,25 @@ The SC-8850 plug-in uses the same 88emu core with the SC-8850 firmware (compile-
 - **LCD:** the 160 x 64 dots of the firmware's graphic LCD, black on the orange glass like in the player, area-averaged to 262 x 105 px.
 - **Controls:** every switch is held while the mouse button is down (at least 80 ms). VALUE: drag (right / up = clockwise, about 10 px per detent) or mouse wheel; a click without moving pushes the encoder. PREVIEW is the device's own key. GAIN: drag, wheel (0.8 dB per notch), double-click = 0 dB.
 - **VOICES / UNITS:** sounding voices, peak hold and awake units like on the SC-88 Pro panel. **SETUP** (bottom right): max polyphony 128 / 256, GS reset, all notes off.
+
+## SC-88 engine (88emu)
+
+The SC-88 plug-in uses the same 88emu core with the firmware of the first SC-88 (compile-time `NUKED_SC55_DEVICE_88` on top of `NUKED_SC55_ENGINE_88PRO`, model index 8).
+
+- **Units:** 64 voices per unit, 4 units = 256 voices, like the SC-88 Pro.
+- **Two MIDI inputs, 32 parts (A01-B16):** CLAP note ports "MIDI IN A" and "MIDI IN B"; on VST2 the port select messages `F5 01` / `F5 02`.
+- **GAIN:** -12 ... +12 dB, 0 dB in the middle (default). At 0 dB the output is raised by 5 dB like the SC-88 Pro; the measured level then matches the SC-88 Pro within 0.1 dB (RMS of E1M1, Animus and grabbag).
+- **Front panel = the device's own panel:** all switches go to unit 0, so the firmware's LCD, LEDs and functions work as on the hardware (part and instrument selection, level / pan / reverb / chorus / key shift / MIDI channel, the SELECT rows vibrato / TVF / envelope, USER INST EDIT, ALL mode, PREVIEW). The SC-88 firmware writes every panel edit into a small log in its work RAM; the plug-in reads that log and sends each edit as a GS DT1 message to the other units and into the state log, so all units (including those that wake later) play the same sounds. Checked by comparing the parameter memory of the units.
+- **ALL mode:** ALL + MUTE mutes all units (taken from the firmware's panel flag); ALL + EQ switches the EQ of all 32 parts on all units. ALL + INST MAP and ALL + MIDI CH have no GS equivalent and are disabled.
+- **Patches:** `88emu-nuked-poly.patch` also adds `emu88_set_sc88_rom_images` (ROM set from memory; the raw dumps are normalised inside 88emu), the SC-88 voice counter and work RAM access.
+- **Builds:** `tools/winbuild/build88o.sh` (single file / template, ROM slots 0 = control, 1-4 = wave ROMs 0-3).
+
+### SC-88 panel (918 x 280 px)
+
+- **Graphics:** the 88emu SC-88 panel art (GPLv3, The Usual Suspects) by `tools/make_sc88orig_panel.py`. Only the branding ("Nuked SC-88"), the playlist header (VOICES) and the VOLUME label (GAIN) are replaced; everything else is unchanged. Switches, rockers, LEDs, PREVIEW and the GAIN knob are rendered from the player's own vector graphics at the positions of its skin (`tools/make_sc88orig_sprites.py`, with the pressed tint).
+- **LCD:** the firmware's character LCD on the panel's glass, rendered like on the SC-88 Pro.
+- **Controls:** every switch is held while the mouse button is down (at least 80 ms), so holding a rocker repeats like on the device. GAIN: drag, wheel (0.8 dB per notch), double-click = 0 dB.
+- **VOICES / UNITS** as on the other 88emu panels. **SETUP** (bottom left): max polyphony 64 / 128 / 192 / 256, GS reset, all notes off.
 
 ---
 
@@ -359,6 +385,7 @@ Nuked SC-55 / SC-88 / SC-8850 P256 - Plugin Builder
 
 [ok] SC-55 v1.21: output/CLAP/Nuked-SC55_v121.clap, output/VST2/Nuked-SC55_v121.dll
 [ok] SC-55mk2 v1.01 (CTF) (CTF patch will be applied): output/CLAP/Nuked-SC55_MkII.clap, ...
+[--] SC-88: no ROMs found
 [--] SC-88 Pro: no ROMs found
 [--] SC-8850: no ROMs found
 
@@ -507,7 +534,7 @@ These are limits of the approach, or things that are not done yet.
 - **16 parts only.** The SC-55 has one MIDI port; the SC-88 Pro has 32 parts on two ports, but VST2 only offers one. A second port for parts B01-B16 (CLAP only) is possible.
 - **SC-88 Pro:** uses much more memory (166 MB) and larger files (about 27 MB) than the SC-55 variants. 88emu is an early access alpha and models the analog output stages for SC-55 mk1/mk2 too (`AnalogOutputMode`), which might become a sound option later.
 - **64-bit only, Windows only for the editor and single-file builds.** There is no 32-bit build yet; 32-bit programs can use a MIDI driver that hosts VST plug-ins (see [Using the plug-ins](#using-the-plug-ins)).
-- **Not yet decided:** a language selection in the SETUP menu (automatic / English / German, stored in the state); a 48-voice variant for lower peak load (available today through SETUP); other 88emu devices (SC-88); more CPU work (resampler, about 11 % of the plug-in share, not bit-exact; mixing overhead with several instances); HiDPI scaling and fonts of the editor.
+- **Not yet decided:** a language selection in the SETUP menu (automatic / English / German, stored in the state); a 48-voice variant for lower peak load (available today through SETUP); other 88emu devices; more CPU work (resampler, about 11 % of the plug-in share, not bit-exact; mixing overhead with several instances); HiDPI scaling and fonts of the editor.
 
 ---
 
@@ -516,6 +543,10 @@ These are limits of the approach, or things that are not done yet.
 ### SC-8850
 
 - **Panel edits of user tones and user drum sets** (stored in the firmware's user memory) are not passed on to the other units; part, system, effect and drum map settings are. The firmware RAM addresses the plug-in reads (current part, MUTE / SOLO) belong to the accepted program ROM.
+
+### SC-88
+
+- **ALL + INST MAP and ALL + MIDI CH** do nothing (there is no GS message for them that the other units could follow). Panel edits are passed on from the firmware's edit log, whose address belongs to control ROM v1.01.
 
 ### SC-88 Pro
 
@@ -559,10 +590,10 @@ The development workbench contains the source, the complete patch series (`patch
 
 - **NukeYKT** - [Nuked-SC55](https://github.com/nukeykt/Nuked-SC55), the low-level SC-55 emulation this project is built on
 - **John Novak** - [Nuked-SC-55-CLAP](https://github.com/johnnovak/Nuked-SC55-CLAP), the CLAP plug-in this project forked from
-- **dsp56300** - [Gearmulator](https://github.com/dsp56300/gearmulator), including the 88emu core used for the SC-88 Pro
+- **dsp56300** - [Gearmulator](https://github.com/dsp56300/gearmulator), including the 88emu core used for the SC-88, SC-88 Pro and SC-8850
 - **shingo45endo** - [SC55MK2-CTF-Patcher](https://github.com/shingo45endo/sc55mk2-ctf-patcher), tool to modify the SC-55mkII firmware for CTF support
 - **Falcosoft** - Falcosoft MIDI Player and Falcosoft VST MIDI Driver ([falcosoft.hu](https://falcosoft.hu/))
-- **Roland** - [Roland](https://www.roland.com), the SC-55, SC-55mk2 and SC-88 Pro sound modules
+- **Roland** - [Roland](https://www.roland.com), the SC-55, SC-55mk2, SC-88, SC-88 Pro and SC-8850 sound modules
 
 ### License
 

@@ -10,6 +10,7 @@ filenames do not matter - identification is based on the contents via SHA-256).
 
   SC-55 v1.21        -> output/CLAP/Nuked-SC55_v121.clap, output/VST2/Nuked-SC55_v121.dll
   SC-55mk2 v1.01     -> output/.../Nuked-SC55_MkII.*   (always with CTF, see below)
+  SC-88              -> output/.../Nuked-SC88.*
   SC-88 Pro          -> output/.../Nuked-SC88_Pro.*
   SC-8850            -> output/.../Nuked-SC8850.*
 
@@ -44,6 +45,11 @@ KNOWN = {
     "b0b5f865a403f7308b4be8d0ed3ba2ed1c22db881b8a8326769dea222f6431d8": ("mk2", "rom_sm"),
     "c6429e21b9b3a02fbd68ef0b2053668433bee0bccd537a71841bc70b8874243b": ("mk2", "wave1"),
     "5b753f6cef4cfc7fcafe1430fecbb94a739b874e55356246a46abe24097ee491": ("mk2", "wave2"),
+    "875f561d009fba79296c745b02a83df91105346e292f575d16cf484a17b85be8": ("88", "control"),
+    "4d8fbb7f089e500a5cdefcc45caaeeca3434eb2c67a3754b7a22d4b097e771e7": ("88", "wave0"),
+    "c36f96c4a17a17eba668958efa95382c90f375b32fad28b7519a2f66c965debd": ("88", "wave1"),
+    "be62816e655cf71244f7b06cbc06279ae424ba079a582b883c8840720e356d1e": ("88", "wave2"),
+    "cd2ba0643fe22fcd5bb8121f27220f29966f146217fcda3bf206b9d80a26d86d": ("88", "wave3"),
     "efcdbe43f5810d34cb774edfdd4e785a7ce77f5646e94addcf2ee5a217e53234": ("88pro", "control"),
     "3c6a96298e0de126c885f7111c62c8cce6afe8e446d86f5d57624c9540506212": ("88pro", "wave0"),
     "42bcbba9506a667c26bed3ed02afb1f0c1d2c1a132af3f11ab439fd28aa16ae6": ("88pro", "wave1"),
@@ -62,6 +68,7 @@ CTF_PATCH = "eNrl2HdPU1EYx/Fve2kLChVliowCRcsGLYoVKSEOXNHg3nvHhMS9qyYm7r0XKu4VY4y
 MODELS = [
     ("v121", "Nuked-SC55_v121", "SC-55 v1.21", [(0, "rom1"), (1, "rom2"), (3, "wave1"), (4, "wave2"), (5, "wave3")]),
     ("mk2", "Nuked-SC55_MkII", "SC-55mk2 v1.01 (CTF)", [(0, "rom1"), (1, "rom2"), (2, "rom_sm"), (3, "wave1"), (4, "wave2")]),
+    ("88", "Nuked-SC88", "SC-88", [(0, "control"), (1, "wave0"), (2, "wave1"), (3, "wave2"), (4, "wave3")]),
     ("88pro", "Nuked-SC88_Pro", "SC-88 Pro", [(0, "control"), (1, "wave0"), (2, "wave1"), (3, "wave2")]),
     ("8850", "Nuked-SC8850", "SC-8850", [(0, "internal"), (1, "program"), (2, "data"), (3, "wave")]),
 ]

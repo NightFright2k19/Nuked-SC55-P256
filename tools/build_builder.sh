@@ -1,7 +1,7 @@
 #!/bin/bash
 # Baut die ROM-losen Vorlagen und stellt das Builder-Paket zusammen: out/Nuked-P256-Builder/
 # (p256_builder.py, templates/*.p256tpl, roms/, Anleitungen). Selbsttest: Builder mit den
-# Workbench-ROMs (roms/, rom88/) ausfuehren, Ergebnis muss "N Plugin(s) erzeugt" melden.
+# Workbench-ROMs (roms/, rom88/, rom8850/, rom88sc/) ausfuehren, Ergebnis muss "N Plugin(s) erzeugt" melden.
 # Dauer ca. 4 min (im Hintergrund starten).
 WB=/home/claude/wb; T=$WB/tools; S=$WB/src; K=$WB/out/Nuked-P256-Builder
 cd $T/winbuild; export S CXX=x86_64-w64-mingw32-g++-posix OUTDIR=out_tpl; rm -rf out_tpl
@@ -12,6 +12,7 @@ if [ -f $WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ]; then
   export GM=$WB/gearmulator LIBW=$WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a; . ./build88.sh
   NK_SLOT_CAP=22085632 build88
   . ./build8850.sh; NK_SLOT_CAP=36765696 build8850   # 64 KiB + 1 MiB + 2 MiB + 32 MiB
+  . ./build88o.sh; NK_SLOT_CAP=8912896 build88o      # 512 KiB + 4 x 2 MiB
 fi
 rm -rf $K && mkdir -p $K/templates $K/roms
 cp $S/tools/p256_builder/p256_builder.py $S/tools/p256_builder/LIESMICH.txt $S/tools/p256_builder/README-EN.txt $K/
@@ -19,6 +20,6 @@ cp $S/tools/p256_builder/HIER-ROMS-ABLEGEN.txt $K/roms/
 # kompakt: reservierten (leeren) ROM-Bereich herausschneiden; das Skript setzt die ROMs dort ein
 for f in out_tpl/*.dll; do python3 $S/tools/p256_builder/compact_template.py "$f" "$K/templates/$(basename "$f" .dll).p256tpl"; done
 # Selbsttest mit den Workbench-ROMs (Kopie, das Paket selbst bleibt ROM-frei)
-X=/tmp/p256_selftest; rm -rf $X && cp -r $K $X && cp -rL $WB/roms $X/roms/sc55 && { [ -d $WB/rom88 ] && cp -r $WB/rom88/. $X/roms/sc88/ || true; }
+X=/tmp/p256_selftest; rm -rf $X && cp -r $K $X && cp -rL $WB/roms $X/roms/sc55 && { [ -d $WB/rom88 ] && cp -r $WB/rom88/. $X/roms/sc88/ || true; } && { [ -d $WB/rom8850 ] && mkdir -p $X/roms/sc8850 && cp -r $WB/rom8850/. $X/roms/sc8850/ || true; } && { [ -d $WB/rom88sc ] && mkdir -p $X/roms/sc88orig && cp -r $WB/rom88sc/. $X/roms/sc88orig/ || true; }
 ( cd $X && python3 p256_builder.py | grep -E "^\[|erzeugt" )
 echo "Paket: $K  (Selbsttest-Ausgabe: $X/output)"
