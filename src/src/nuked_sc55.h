@@ -335,6 +335,17 @@ public:
 	bool GetLcdDots(uint8_t* dots, size_t size, bool& on); // unit 0, 160 x 64, one byte per dot
 	static constexpr int kLcdW = 160, kLcdH = 64;
 private:
+	// GS dot display (45 10 01 00..10 05 7F, pages 1..10; page select 45 10 20 00): the SC-8850
+	// firmware shows the text messages but ignores the 16 x 16 bitmaps, so the plugin keeps the
+	// pages itself and lays the shown one over the level meters of the play screen.
+	static constexpr double kDotShowSeconds = 3.2;
+	std::array<std::array<uint16_t, 16>, 10> dot_pages{}; // per page 16 rows, bit 15 = left
+	int dot_page        = 0;                 // page shown (0..9)
+	uint64_t dot_until  = 0;                 // render frame at which the bitmap disappears
+	std::array<std::atomic<uint16_t>, 16> ui_dots{}; // bitmap for the GUI
+	std::atomic<bool> ui_dots_on{false};
+	void DotSysEx(std::span<const uint8_t> msg);
+	void DotShow(bool on);
 	struct SyncReq {
 		uint8_t port, a0, a1, a2, size;
 		uint8_t tries = 0;

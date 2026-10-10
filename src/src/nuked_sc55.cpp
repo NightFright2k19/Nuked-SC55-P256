@@ -661,6 +661,11 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	sleeps = 0;
 	render_frame_count = 0;
 	warmer_next_frame  = 0;
+#ifdef NUKED_SC55_DEVICE_8850
+	dot_pages = {};
+	dot_page  = 0;
+	DotShow(false);
+#endif
 	if (dynamic_instances) StartWarmer();
 	lcd_ready = true;
 
@@ -823,6 +828,9 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	midi_bytes.clear(); // all queued events have been consumed
 	render_frame_count += num_render_frames;
 	if (dynamic_instances) ScheduleWarming();
+#ifdef NUKED_SC55_DEVICE_8850
+	if (dot_until != 0 && render_frame_count >= dot_until) DotShow(false);
+#endif
 
 	// Publish display data
 	{
@@ -1101,6 +1109,10 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 				const bool gs_reset = msg.size() >= 10 && msg[1] == 0x41 && msg[4] == 0x12 &&
 				                      msg[5] == 0x40 && msg[6] == 0x00 && msg[7] == 0x7f;
 				if (gm_on || gs_reset) UiResetParts();
+#ifdef NUKED_SC55_DEVICE_8850
+				if (gm_on || gs_reset) DotShow(false);
+				DotSysEx(msg);
+#endif
 				// GS part parameter "Pitch Key Shift" (40 1x 16), for the panel display;
 				// SC-88 Pro: 50 1x 16 or 40 1x 16 received on IN B = B part (40 1x on IN C/D: C/D)
 				if (msg.size() >= 10 && msg[1] == 0x41 && msg[3] == 0x42 && msg[4] == 0x12 &&
@@ -1778,7 +1790,80 @@ bool NukedSc55::GetLcdDots(uint8_t* dots, const size_t size, bool& on)
 	int w = 0, h = 0, o = 0;
 	if (!emu88_get_display_pixels(instances[0].ctx, 0, dots, size, &w, &h, &o)) return false;
 	on = o != 0;
-	return w == kLcdW && h == kLcdH;
+	if (w != kLcdW || h != kLcdH) return false;
+	if (on && ui_dots_on.load() && size >= static_cast<size_t>(kLcdW * kLcdH)) {
+		// Level meters of the play screen: 16 bars, 5 dots wide every 6 dots from x 49, the
+		// bottom row (y 47) always lit. Other screens (menus) keep their own picture.
+		constexpr int X0 = 49, Y0 = 15, YB = 47;
+		bool meters = true;
+		for (int c = 0; c < 16 && meters; ++c) {
+			for (int k = 0; k < 6; ++k) {
+				const bool lit = dots[YB * kLcdW + X0 + c * 6 + k] != 0;
+				if (lit != (k < 5) && !(c == 15 && k == 5)) meters = false;
+			}
+		}
+		if (meters) {
+			// 16 x 16 bitmap on the meter area: a column = one bar (5 dots), a row = 2 dots
+			for (int y = Y0; y <= YB; ++y)
+				std::memset(dots + y * kLcdW + X0, 0, 16 * 6 - 1);
+			for (int r = 0; r < 16; ++r) {
+				const uint16_t bits = ui_dots[r].load(std::memory_order_relaxed);
+				for (int c = 0; c < 16; ++c) {
+					if (!(bits & (0x8000u >> c))) continue;
+					for (int dy = 0; dy < 2; ++dy)
+						std::memset(dots + (Y0 + r * 2 + dy) * kLcdW + X0 + c * 6, 1, 5);
+				}
+			}
+		}
+	}
+	return true;
+}
+
+// Audio thread: GS dot display messages (Roland, model 45, DT1). Address 10 0n xx: page
+// 2(n-1) + (xx >= 40) with the byte at xx & 3F; byte i = row i % 16, columns 5(i / 16) ..
+// +4 from bit 4 down. 10 20 00 v: show page v (1..10), 0 = back to the meters.
+void NukedSc55::DotSysEx(const std::span<const uint8_t> msg)
+{
+	if (msg.size() < 11 || msg[0] != 0xf0 || msg[1] != 0x41 || msg[3] != 0x45 || msg[4] != 0x12 ||
+	    msg[5] != 0x10 || msg.back() != 0xf7)
+		return;
+	const size_t n = msg.size() - 10; // data bytes (without address, checksum, F7)
+	const uint8_t a1 = msg[6], a2 = msg[7];
+	if (a1 >= 0x01 && a1 <= 0x05) {
+		const int page = (a1 - 1) * 2 + (a2 >> 6);
+		auto& rows    = dot_pages[page];
+		for (size_t k = 0; k < n; ++k) {
+			const size_t i = (a2 & 0x3f) + k;
+			if (i >= 64) break;
+			const int row = static_cast<int>(i % 16), first = static_cast<int>(i / 16) * 5;
+			for (int b = 0; b < 5 && first + b < 16; ++b) {
+				const uint16_t bit = 0x8000u >> (first + b);
+				if (msg[8 + k] & (0x10 >> b)) rows[row] |= bit;
+				else rows[row] &= static_cast<uint16_t>(~bit);
+			}
+		}
+		if (page == dot_page) DotShow(true);
+	} else if (a1 == 0x20 && a2 == 0x00 && n >= 1) {
+		const int v = msg[8];
+		if (v == 0) {
+			DotShow(false);
+		} else if (v <= 10) {
+			dot_page = v - 1;
+			DotShow(true);
+		}
+	}
+}
+
+void NukedSc55::DotShow(const bool on)
+{
+	if (on) {
+		for (int r = 0; r < 16; ++r) ui_dots[r].store(dot_pages[dot_page][r], std::memory_order_relaxed);
+		dot_until = render_frame_count + 1 +
+		            static_cast<uint64_t>(kDotShowSeconds * (render_sample_rate_hz > 0 ? render_sample_rate_hz : 32000.0));
+	} else {
+		dot_until = 0;
+	}
+	ui_dots_on.store(on);
 }
 
 
