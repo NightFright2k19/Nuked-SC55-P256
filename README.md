@@ -236,13 +236,13 @@ The SC-88 Pro variant does not use the Nuked core. It uses **88emu**, a low-leve
 
 ### Tone map switch
 
-Like the hardware, the map is switched with emulated panel keys. Both map keys **toggle**: SC-55 MAP toggles 55 <-> Pro, SC-88 MAP toggles 88 <-> Pro. **ALL latches** and makes the key press valid for all parts. The map LEDs of the emulation do not show the map reliably, so the plug-in tracks the map of every unit itself (`applied_map`, boot state = Pro). The sequence is ALL on, one map key, ALL off, running in the background while rendering (press 0.15 s, release 0.35 s); only during boot and in the warmer it runs synchronously. The map survives GS resets like on the hardware; SysEx `40 1x 7F` has no effect. All 15 transitions were tested from every state.
+Like the hardware, the map is switched with emulated panel keys. Both map keys **toggle**: SC-55 MAP toggles 55 <-> Pro, SC-88 MAP toggles 88 <-> Pro. **ALL latches** and makes the key press valid for all parts. The map LEDs of the emulation do not show the map reliably, so the plug-in tracks the map of every unit itself (`applied_map`, boot state = Pro). The sequence is ALL on, one map key, ALL off (only the map key while the ALL view chosen on the panel is on), running in the background while rendering (press 0.15 s, release 0.35 s); only during boot and in the warmer it runs synchronously. The map survives GS resets like on the hardware; SysEx `40 1x 7F` has no effect. All 15 transitions were tested from every state.
 
 | `map` | Tone map |
 | --- | --- |
 | 0 | SC-55 |
-| 1 | **SC-88 (default)** |
-| 2 | SC-88 Pro (factory setting of the hardware) |
+| 1 | SC-88 |
+| 2 | **SC-88 Pro (default, factory setting of the hardware)** |
 
 The panel keys toggle like on the device, the SETUP menu selects directly.
 
@@ -306,6 +306,7 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 
 - **Graphics:** derived from the panel art of 88emu (GPLv3, The Usual Suspects). `tools/make_sc88_panel.py` halves it, replaces the 88emu branding by "NUKED-SC88 PRO" and the playlist / EFX fields by VOICES, SETUP, TONE MAP, UNITS and MAX VOICES. The controls (ALL, MUTE, SC-55, SC-88, PART arrows, PREVIEW, VOLUME knob with 31 positions) come from the 88emu player assets (`tools/make_sc88_sprites.py`).
 - **TONE MAP keys:** SC-55 / SC-88; the green LED shows the active map, both off means SC-88 Pro.
+- **ALL:** presses ALL on unit 0's panel, like on the hardware: it latches, the LCD shows the ALL view and the button lamp is lit until ALL is pressed again. A tone map change keeps the ALL view. All notes off is in the SETUP menu.
 - **VOLUME:** 0..1, characteristic off / -60 ... 0 dB, applied at the output after resampling with a ramp per block; at 1.0 there is no multiplication (bit-identical). Drag the knob or use the mouse wheel.
 - **MUTE:** per part (bit = MIDI channel). Note ons of that channel are dropped, a newly muted part gets CC 120. The mute state is **not** part of the plug-in state (like on the device).
 - **PREVIEW:** note on while pressed, note off when released, on the selected part, velocity 100, note from the menu "Prevw Note" (C-1 ... G9, Roland numbering, C4 = 60, default C4). It goes through the normal routing path.
@@ -343,7 +344,7 @@ NSC55P1 max_voices=<n> map=<0..2> vol=<0..1000> pnote=<0..127>    SC-88 Pro
 NSC55P1 max_voices=<n> gain=<-120..120>                     SC-8850 (gain in 0.1 dB)
 ```
 
-A new plug-in instance starts with the maximum number of voices. Old chunks without `map=` start with the SC-88 map. Whether a particular host or driver keeps the chunk is up to the host; if it does not, the plug-in starts with the maximum each time, which is harmless.
+A new plug-in instance starts with the maximum number of voices. Old chunks without `map=` start with the SC-88 Pro map (before Issue #20: SC-88); chunks with `map=` keep their map. Whether a particular host or driver keeps the chunk is up to the host; if it does not, the plug-in starts with the maximum each time, which is harmless.
 
 ---
 

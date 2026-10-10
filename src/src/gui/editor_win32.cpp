@@ -299,10 +299,9 @@ void ShowSetupMenu(Editor& e)
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Tone map (all parts)", L"Klang-Map (alle Parts)"));
         AppendMenuW(m, MF_STRING | (tm == 0 ? MF_CHECKED : 0), 200, L"   SC-55 Map");
-        AppendMenuW(m, MF_STRING | (tm == 1 ? MF_CHECKED : 0), 201,
-                    T(L"   SC-88 Map\t(default)", L"   SC-88 Map\t(Standard)"));
+        AppendMenuW(m, MF_STRING | (tm == 1 ? MF_CHECKED : 0), 201, L"   SC-88 Map");
         AppendMenuW(m, MF_STRING | (tm == 2 ? MF_CHECKED : 0), 202,
-                    T(L"   SC-88 Pro Map\t(factory setting)", L"   SC-88 Pro Map\t(Werkseinstellung)"));
+                    T(L"   SC-88 Pro Map\t(default)", L"   SC-88 Pro Map\t(Standard)"));
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
         char nb[8];
         wchar_t pl[96];
@@ -455,7 +454,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             case 1: e->part = (e->part + 15) % 16; e->plugin->ui_command = 3; break; // PART <
             case 2: e->part = (e->part + 1) % 16; e->plugin->ui_command = 4; break;  // PART >
 #endif
+#ifdef NUKED_SC55_ENGINE_88PRO
+            case 3: e->plugin->ui_command = 5; break; // ALL: unit 0's ALL view on/off (lamp from the firmware)
+#else
             case 3: e->plugin->ui_command = 1; e->flash[3] = 12; break;
+#endif
             case 4: ShowSetupMenu(*e); break;
 #ifdef NUKED_SC55_ENGINE_88PRO
             case 5: { // SC-55 MAP: toggles SC-55 <-> SC-88 Pro like the hardware

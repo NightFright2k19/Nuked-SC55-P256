@@ -1455,6 +1455,15 @@ void NukedSc55::UiTrackShort(const uint8_t* d, const int port)
 	}
 }
 
+#ifdef NUKED_SC55_ENGINE_88PRO
+// SC-88 Pro front-panel switches (88emu Sc88ProButton bits)
+namespace {
+constexpr uint32_t Btn88Map  = 1u << 1; // Sc88ProButton::Sc88Map
+constexpr uint32_t Btn55Map  = 1u << 2; // Sc88ProButton::Sc55Map
+constexpr uint32_t BtnAll    = 1u << 6; // Sc88ProButton::InstAll
+}
+#endif
+
 void NukedSc55::HandleUiCommands()
 {
 	const int cmd = ui_command.exchange(0);
@@ -1484,6 +1493,20 @@ void NukedSc55::HandleUiCommands()
 #endif
 		return;
 	}
+#ifdef NUKED_SC55_ENGINE_88PRO
+	if (cmd == 5 && HasToneMap()) { // front-panel ALL on unit 0 (SC-88 Pro): latching ALL view
+		auto& inst = instances[0];
+		if (inst.ctx && inst.seq_len == 0) {
+			inst.seq_mask[0] = BtnAll;
+			inst.seq_len     = 2; // press + release, keeps the tone map
+			inst.seq_pos     = 0;
+			inst.seq_map     = inst.applied_map;
+			inst.seq_left    = static_cast<uint32_t>(emu88_get_device_samplerate(inst.ctx) * 0.15);
+			emu88_set_panel_buttons(inst.ctx, BtnAll);
+		}
+		return;
+	}
+#endif
 	if (cmd == 1) { // all sound off + all notes off + reset controllers
 		for (uint8_t port = 0; port < kNumPorts; ++port) {
 			for (uint8_t ch = 0; ch < 16; ++ch) {
@@ -1640,11 +1663,6 @@ void NukedSc55::InjectShort(const uint8_t s, const uint8_t d1, const uint8_t d2,
 //----------------------------------------------------------------------------
 // SC-88 Pro unit helpers (88emu)
 //----------------------------------------------------------------------------
-namespace {
-constexpr uint32_t Btn88Map  = 1u << 1; // Sc88ProButton::Sc88Map
-constexpr uint32_t Btn55Map  = 1u << 2; // Sc88ProButton::Sc55Map
-constexpr uint32_t BtnAll    = 1u << 6; // Sc88ProButton::InstAll
-}
 
 // Tone-map switching like on the hardware front panel. Both map buttons
 // toggle: SC-55 MAP switches SC-55 <-> SC-88 Pro (from SC-88: to SC-55),
@@ -1698,11 +1716,13 @@ void NukedSc55::E88StartMapSequence(Instance& inst, const int map)
 		return;
 	}
 	if (inst.seq_len > 0 || map == inst.applied_map) return;
+	// The map buttons act on all parts only in ALL mode: enter it for the press and leave it
+	// again, unless ALL was already on (the ALL view chosen on the panel stays)
 	const bool all_on = (emu88_get_panel_leds(inst.ctx) & 1u) != 0;
 	int k = 0;
 	if (!all_on) inst.seq_mask[k++] = BtnAll;
 	inst.seq_mask[k++] = E88MapKey(inst.applied_map, map);
-	inst.seq_mask[k++] = BtnAll; // leave ALL mode again
+	if (!all_on) inst.seq_mask[k++] = BtnAll; // leave ALL mode again
 	inst.seq_map  = map;
 	inst.seq_len  = 2 * k; // press + release per button
 	inst.seq_pos  = 0;
@@ -1739,16 +1759,19 @@ void NukedSc55::E88Drain(Instance& inst, const size_t bytes, const double extra_
 }
 #endif
 
-#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88)
-//----------------------------------------------------------------------------
-// Front panel of unit 0 (SC-8850, SC-88)
-//----------------------------------------------------------------------------
+#ifdef NUKED_SC55_ENGINE_88PRO
+// Lamps of unit 0's front panel (SC-88 Pro: ALL view; SC-8850, SC-88: all switches)
 uint32_t NukedSc55::PanelLeds() const
 {
 	if (!lcd_ready.load() || instances.empty() || !instances[0].ctx) return 0;
 	return emu88_get_panel_leds(instances[0].ctx);
 }
+#endif
 
+#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88)
+//----------------------------------------------------------------------------
+// Front panel of unit 0 (SC-8850, SC-88)
+//----------------------------------------------------------------------------
 // A DT1 for all units but unit 0 (which made the change) and for the state log.
 void NukedSc55::E88Forward(const uint8_t port, const uint8_t* msg, const size_t size)
 {

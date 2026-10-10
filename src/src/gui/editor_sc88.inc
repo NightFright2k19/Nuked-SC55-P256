@@ -253,6 +253,7 @@ void Draw88(Editor& e, HDC dc)
     const int tm      = p.tone_map.load();
     const bool muted  = (p.mute_mask.load() >> e.part) & 1u;
     Sprite88(dc, SP_ALL, P88_BTN_ALL, e.flash[3] > 0);
+    if (p.PanelLeds() & 1u) Sprite88(dc, SP_LED, P88_BTN_ALL, e.flash[3] > 0); // ALL view (lamp lit like the player's)
     Sprite88(dc, muted ? SP_LED : SP_ROUND, P88_BTN_MUTE, e.flash[8] > 0);
     Sprite88(dc, tm == 0 ? SP_LED : SP_ROUND, P88_BTN_55, e.flash[5] > 0);
     Sprite88(dc, tm == 1 ? SP_LED : SP_ROUND, P88_BTN_88, e.flash[6] > 0);
@@ -287,7 +288,7 @@ void Draw88(Editor& e, HDC dc)
 
 #endif // !NUKED_SC55_DEVICE_8850 && !NUKED_SC55_DEVICE_88
 
-// 1/2 = part left/right, 3 = ALL (all notes off), 4 = SETUP, 5 = SC-55 MAP,
+// 1/2 = part left/right, 3 = ALL (ALL view), 4 = SETUP, 5 = SC-55 MAP,
 // 6 = SC-88 MAP, 7 = tone map window (opens the menu as well), 8 = MUTE,
 // 9 = PREVIEW, 10 = GAIN knob
 int HitButton88(int x, int y)

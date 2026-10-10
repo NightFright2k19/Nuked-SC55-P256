@@ -245,7 +245,7 @@ public:
 	std::atomic<int> ui_voices{0};      // sounding partials (all instances)
 	std::atomic<int> ui_awake{1};       // awake emulator instances
 	std::atomic<int> max_voices{256};   // user limit (setup menu)
-	std::atomic<int> ui_command{0};     // 1 = all sound off, 2 = GS reset, 3/4 = PART </> button
+	std::atomic<int> ui_command{0};     // 1 = all sound off, 2 = GS reset, 3/4 = PART </> button, 5 = ALL button (SC-88 Pro)
 	std::atomic<uint64_t> ui_awake_mask{1}; // awake units (bit i = unit i)
 	std::atomic<bool> lcd_ready{false};   // units exist and may be read by the GUI
 
@@ -270,16 +270,19 @@ public:
 	void* editor = nullptr; // opaque GUI object (Windows only)
 
 	// Tone map of the SC-88 Pro (front-panel SC-55 MAP / SC-88 MAP), stored in
-	// the plugin state: 0 = SC-55, 1 = SC-88 (default), 2 = SC-88 Pro.
+	// the plugin state: 0 = SC-55, 1 = SC-88, 2 = SC-88 Pro (default = factory setting).
 	float boot_dc_l = 0.0f, boot_dc_r = 0.0f; // idle offset measured on unit 0 after boot
 	bool clone_units = true; // start units as copies of unit 0 (NUKED_SC55_NO_CLONE=1: boot each)
-	std::atomic<int> tone_map{1};
-	int last_tone_map = 1;
+	std::atomic<int> tone_map{2};
+	int last_tone_map = 2;
 #ifdef NUKED_SC55_ENGINE_88PRO
 	// SC-88 Pro front panel (GUI thread writes, audio thread reads)
 	std::atomic<float> gain_db{0.0f};      // GAIN knob in dB, kGainMinDb..kGainMaxDb; 0 = default
 	std::atomic<int> preview_note{60};     // system parameter "Prevw Note" 0..127 (C-1..G9), C4 = 60
 	std::atomic<uint64_t> mute_mask{0};    // MUTE per part (bit = part = port * 16 + MIDI channel), not stored
+#if !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88)
+	uint32_t PanelLeds() const;            // unit 0's panel lamps (88emu bit order; bit 0 = ALL)
+#endif
 	std::atomic<int> ui_preview{0};        // 1 = PREVIEW pressed, 2 = released
 	std::atomic<int> ui_preview_part{0};   // 0..31 = A01..B16
 	static constexpr float kGainMinDb   = -12.0f, kGainMaxDb = 12.0f;
