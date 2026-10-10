@@ -356,7 +356,10 @@ private:
 	std::vector<int16_t> sync_base;        // last known value per (port, address); -1 = unknown
 	std::vector<uint8_t> sync_in;          // unit 0 MIDI output not yet parsed
 	std::array<uint64_t, kNumParts + 1> host_change{}; // render frame of the host's last state change (part / [kNumParts] = SysEx)
-	bool sync_dirty = false;               // panel input since the last pass started
+	bool sync_dirty = false;               // panel input that may have edited parameters since the last pass started
+	uint64_t sync_parts = 0;               // parts shown on the panel during that input (bit = A01..D16)
+	bool sync_drums = false;               // ... with the DRUM menu open
+	bool sync_full  = false;               // ... ENTER pressed (utilities may change any part)
 	uint64_t panel_frame = 0;              // render frame of the last panel input
 	void E88SyncStart(bool boot);
 	void E88SyncPump(Instance& inst, bool forward, uint64_t now);
