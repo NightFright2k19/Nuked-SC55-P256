@@ -1569,7 +1569,7 @@ void NukedSc55::HandleUiCommands()
 			}
 		}
 	} else if (cmd == 2 || cmd == 6 || (cmd == 7 && HasGm2()) || ((cmd == 8 || cmd == 9) && HasSystemMode())) {
-		// SETUP menu "Reset Type" (GM / GS / GM2) and "System Mode" (Mode 1 / Mode 2)
+		// SETUP menu "Send Reset" (GM / GS / GM2) and "System Mode" (Mode 1 / Mode 2)
 		static const uint8_t gm[]  = {0xf0, 0x7e, 0x7f, 0x09, 0x01, 0xf7};
 		static const uint8_t gs[]  = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x40,
 		                              0x00, 0x7f, 0x00, 0x41, 0xf7};

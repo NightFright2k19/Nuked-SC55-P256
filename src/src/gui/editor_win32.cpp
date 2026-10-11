@@ -296,15 +296,15 @@ void ShowSetupMenu(Editor& e)
     }
 #endif
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    // "Reset Type": choosing an entry sends that reset at once (no mark, nothing stored)
+    // "Send Reset": choosing an entry sends that reset at once (no mark, nothing stored)
     HMENU rt_menu = CreatePopupMenu();
     {
         AppendMenuW(rt_menu, MF_STRING, 6, L"GM");
         AppendMenuW(rt_menu, MF_STRING, 2, L"GS");
         if (p.HasGm2()) AppendMenuW(rt_menu, MF_STRING, 7, L"GM2");
-        AppendMenuW(m, MF_POPUP, (UINT_PTR)rt_menu, T(L"Reset Type", L"Reset-Typ"));
+        AppendMenuW(m, MF_POPUP, (UINT_PTR)rt_menu, T(L"Send Reset", L"Reset senden"));
     }
-    if (p.HasSystemMode()) { // SC-88 / SC-88 Pro: System Mode Set (default Mode 2)
+    if (p.HasSystemMode()) { // SC-88 / SC-88 Pro: System Mode Set (default Mode 1 = factory setting)
         HMENU sm_menu = CreatePopupMenu();
         const int sm  = p.system_mode.load();
         AppendMenuW(sm_menu, MF_STRING | (sm == 0 ? MF_CHECKED : 0), 8, L"Mode 1");
