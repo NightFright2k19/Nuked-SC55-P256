@@ -660,6 +660,8 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	}
 	sleeps = 0;
 	render_frame_count = 0;
+	held_events.clear();
+	hold_until = 0;
 	warmer_next_frame  = 0;
 #ifdef NUKED_SC55_DEVICE_8850
 	dot_pages = {};
@@ -810,10 +812,48 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	}
 #endif
 
+	// Events of this block: held events that are due, then the host's (held back
+	// themselves while a reset from the SETUP menu is running or older ones wait)
+	block_events.clear();
+	held_events.reserve(held_events.size() + num_events); // no reallocation below (pointers)
+	size_t released = 0;
+	for (; released < held_events.size(); ++released) {
+		auto& h = held_events[released];
+		if (h.frame >= render_frame_count + num_render_frames) break;
+		if (h.midi.header.type == CLAP_EVENT_MIDI_SYSEX) {
+			h.sysex.buffer = h.bytes.data();
+			block_events.push_back({&h.sysex.header, static_cast<uint32_t>(h.frame - render_frame_count)});
+		} else {
+			block_events.push_back({&h.midi.header, static_cast<uint32_t>(h.frame - render_frame_count)});
+		}
+	}
+	for (uint32_t i = 0; i < num_events; ++i) {
+		const auto event = process->in_events->get(process->in_events, i);
+		auto frame = static_cast<uint32_t>(
+		        static_cast<double>(event->time) * resample_ratio);
+		if (num_render_frames > 0) {
+			frame = std::min(frame, num_render_frames - 1);
+		}
+		const bool midi = event->space_id == CLAP_CORE_EVENT_SPACE_ID &&
+		                  (event->type == CLAP_EVENT_MIDI || event->type == CLAP_EVENT_MIDI_SYSEX);
+		if (midi && (released < held_events.size() || render_frame_count + frame < hold_until)) {
+			HeldEvent h{std::max(render_frame_count + frame, hold_until), {}, {}, {}};
+			if (event->type == CLAP_EVENT_MIDI_SYSEX) {
+				h.sysex = *reinterpret_cast<const clap_event_midi_sysex_t*>(event);
+				h.bytes.assign(h.sysex.buffer, h.sysex.buffer + h.sysex.size);
+				h.midi.header.type = CLAP_EVENT_MIDI_SYSEX; // marker
+			} else {
+				h.midi = *reinterpret_cast<const clap_event_midi_t*>(event);
+			}
+			held_events.push_back(std::move(h));
+			continue;
+		}
+		block_events.push_back({event, frame});
+	}
+
 	if (dynamic_instances) {
 		int note_ons = 0;
-		for (uint32_t i = 0; i < num_events; ++i) {
-			const auto ev = process->in_events->get(process->in_events, i);
+		for (const auto& [ev, frame] : block_events) {
 			if (ev->space_id == CLAP_CORE_EVENT_SPACE_ID &&
 			    ev->type == CLAP_EVENT_MIDI) {
 				const auto m = reinterpret_cast<const clap_event_midi_t*>(ev);
@@ -824,15 +864,10 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 		}
 		ManageInstances(note_ons);
 	}
-	for (uint32_t i = 0; i < num_events; ++i) {
-		const auto event = process->in_events->get(process->in_events, i);
-		auto frame = static_cast<uint32_t>(
-		        static_cast<double>(event->time) * resample_ratio);
-		if (num_render_frames > 0) {
-			frame = std::min(frame, num_render_frames - 1);
-		}
+	for (const auto& [event, frame] : block_events) {
 		ProcessEvent(event, frame);
 	}
+	held_events.erase(held_events.begin(), held_events.begin() + static_cast<std::ptrdiff_t>(released));
 
 	RenderAudio(num_render_frames);
 	midi_bytes.clear(); // all queued events have been consumed
@@ -907,7 +942,6 @@ bool NukedSc55::LoadState([[maybe_unused]] const clap_istream_t* stream)
 		return false;
 	}
 
-	// Settings only: "NSC55P1 max_voices=<n>"
 	char buf[256] = {};
 	size_t got = 0;
 	while (got < sizeof(buf) - 1) {
@@ -915,26 +949,7 @@ bool NukedSc55::LoadState([[maybe_unused]] const clap_istream_t* stream)
 		if (r <= 0) break;
 		got += static_cast<size_t>(r);
 	}
-	int v = 0;
-	if (std::sscanf(buf, "NSC55P1 max_voices=%d", &v) == 1) {
-		SetMaxVoices(v);
-#ifdef NUKED_SC55_ENGINE_88PRO
-		if (const char* m = std::strstr(buf, "map="); HasToneMap() && m && m[4] >= '0' && m[4] <= '2') {
-			tone_map = m[4] - '0';
-		}
-		if (const char* m = std::strstr(buf, "gain="); m) {
-			gain_db = std::clamp(std::atoi(m + 5) / 10.0f, kGainMinDb, kGainMaxDb);
-		} else if (const char* v = std::strstr(buf, "vol="); v) {
-			gain_db = GainFromLegacyVolume(std::atoi(v + 4));
-		}
-		if (const char* m = std::strstr(buf, "pnote="); m) preview_note = std::clamp(std::atoi(m + 6), 0, 127);
-#else
-		if (const char* m = std::strstr(buf, "gain="); m) // older states: no GAIN = 0 dB
-			gain_db = std::clamp(std::atoi(m + 5) / 10.0f, kGainMinDb, kGainMaxDb);
-#endif
-		return true;
-	}
-	return false;
+	return ParseState(buf);
 }
 
 bool NukedSc55::SaveState([[maybe_unused]] const clap_ostream_t* stream)
@@ -943,25 +958,61 @@ bool NukedSc55::SaveState([[maybe_unused]] const clap_ostream_t* stream)
 		return 0;
 	}
 
-	char buf[64];
-#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88)
-	// the panel's own settings (tone maps, preview note, ...) live in the firmware
-	const int n = std::snprintf(buf, sizeof(buf), "NSC55P1 max_voices=%d gain=%d", max_voices.load(),
-	                            static_cast<int>(std::lround(gain_db.load() * 10.0f)));
-#elif defined(NUKED_SC55_ENGINE_88PRO)
-	const int n = std::snprintf(buf, sizeof(buf), "NSC55P1 max_voices=%d map=%d gain=%d pnote=%d",
-	                            max_voices.load(), tone_map.load(),
-	                            static_cast<int>(std::lround(gain_db.load() * 10.0f)), preview_note.load());
-#else
-	const int n = std::snprintf(buf, sizeof(buf), "NSC55P1 max_voices=%d gain=%d", max_voices.load(),
-	                            static_cast<int>(std::lround(gain_db.load() * 10.0f)));
-#endif
+	char buf[kStateSize];
+	const int n = StateString(buf, sizeof(buf));
 	int64_t done = 0;
 	while (done < n) {
 		const int64_t w = stream->write(stream, buf + done, static_cast<uint64_t>(n - done));
 		if (w <= 0) return false;
 		done += w;
 	}
+	return true;
+}
+
+// Settings only (CLAP state and VST2 chunk): "NSC55P1 max_voices=<n> ..."
+int NukedSc55::StateString(char* buf, const size_t size) const
+{
+#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88)
+	// the panel's own settings (tone maps, preview note, ...) live in the firmware
+	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d", max_voices.load(),
+	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)));
+#elif defined(NUKED_SC55_ENGINE_88PRO)
+	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d pnote=%d",
+	                      max_voices.load(), tone_map.load(),
+	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)), preview_note.load());
+#else
+	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d", max_voices.load(),
+	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)));
+#endif
+	n += std::snprintf(buf + n, size - n, " rtype=%d", reset_type.load());
+	if (HasSystemMode()) n += std::snprintf(buf + n, size - n, " smode=%d", system_mode.load());
+	return n;
+}
+
+bool NukedSc55::ParseState(const char* buf)
+{
+	int v = 0;
+	if (std::sscanf(buf, "NSC55P1 max_voices=%d", &v) != 1) return false;
+	SetMaxVoices(v);
+#ifdef NUKED_SC55_ENGINE_88PRO
+	if (const char* m = std::strstr(buf, "map="); HasToneMap() && m && m[4] >= '0' && m[4] <= '2') {
+		tone_map = m[4] - '0';
+	}
+	if (const char* m = std::strstr(buf, "gain="); m) {
+		gain_db = std::clamp(std::atoi(m + 5) / 10.0f, kGainMinDb, kGainMaxDb);
+	} else if (const char* v = std::strstr(buf, "vol="); v) {
+		gain_db = GainFromLegacyVolume(std::atoi(v + 4));
+	}
+	if (const char* m = std::strstr(buf, "pnote="); m) preview_note = std::clamp(std::atoi(m + 6), 0, 127);
+#else
+	if (const char* m = std::strstr(buf, "gain="); m) // older states: no GAIN = 0 dB
+		gain_db = std::clamp(std::atoi(m + 5) / 10.0f, kGainMinDb, kGainMaxDb);
+#endif
+	// SETUP menu marks only; loading sends nothing (start-up stays as it is)
+	if (const char* m = std::strstr(buf, "rtype="); m && m[6] >= '0' && m[6] <= (HasGm2() ? '2' : '1'))
+		reset_type = m[6] - '0';
+	if (const char* m = std::strstr(buf, "smode="); HasSystemMode() && m && m[6] >= '0' && m[6] <= '1')
+		system_mode = m[6] - '0';
 	return true;
 }
 
@@ -1122,12 +1173,10 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 #endif
 			state_log.AddSysEx(msg, port);
 			{
-				const bool gm_on = msg.size() >= 6 && msg[1] == 0x7e && msg[3] == 0x09;
-				const bool gs_reset = msg.size() >= 10 && msg[1] == 0x41 && msg[4] == 0x12 &&
-				                      msg[5] == 0x40 && msg[6] == 0x00 && msg[7] == 0x7f;
-				if (gm_on || gs_reset) UiResetParts();
+				const bool reset = StateLog::IsReset(msg);
+				if (reset) UiResetParts();
 #ifdef NUKED_SC55_DEVICE_8850
-				if (gm_on || gs_reset) DotShow(false);
+				if (reset) DotShow(false);
 				DotSysEx(msg);
 #endif
 				// GS part parameter "Pitch Key Shift" (40 1x 16), for the panel display;
@@ -1522,14 +1571,64 @@ void NukedSc55::HandleUiCommands()
 				}
 			}
 		}
-	} else if (cmd == 2) { // GS reset
-		static const uint8_t gs[] = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x40,
-		                             0x00, 0x7f, 0x00, 0x41, 0xf7};
-		const std::span msg{gs, sizeof(gs)};
+	} else if (cmd == 2 || cmd == 6 || (cmd == 7 && HasGm2()) || ((cmd == 8 || cmd == 9) && HasSystemMode())) {
+		// SETUP menu "Reset Type" (GM / GS / GM2) and "System Mode" (Mode 1 / Mode 2)
+		static const uint8_t gm[]  = {0xf0, 0x7e, 0x7f, 0x09, 0x01, 0xf7};
+		static const uint8_t gs[]  = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x40,
+		                              0x00, 0x7f, 0x00, 0x41, 0xf7};
+		static const uint8_t gm2[] = {0xf0, 0x7e, 0x7f, 0x09, 0x03, 0xf7};
+		static const uint8_t md1[] = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x00,
+		                              0x00, 0x7f, 0x00, 0x01, 0xf7};
+		static const uint8_t md2[] = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x00,
+		                              0x00, 0x7f, 0x01, 0x00, 0xf7};
+		std::span<const uint8_t> msg;
+		switch (cmd) {
+		case 6: msg = gm; reset_type = 0; break;
+		case 7: msg = gm2; reset_type = 2; break;
+		case 8: msg = md1; system_mode = 0; break;
+		case 9: msg = md2; system_mode = 1; break;
+		default: msg = gs; reset_type = 1; break;
+		}
 		state_log.AddSysEx(msg);
-		QueueMidi(router.RouteSysEx(msg), gs, sizeof(gs), 0);
+		QueueMidi(router.RouteSysEx(msg), msg.data(), msg.size(), 0);
 		UiResetParts();
+#ifdef NUKED_SC55_DEVICE_8850
+		DotShow(false);
+#endif
+		// The next host events wait until the firmware has finished the reset (measured with
+		// tools/test/reset26: notes are exact from 50-100 ms after GM/GS/GM2, from 150 ms
+		// after a System Mode Set on the SC-88 Pro)
+		const double hold = (cmd == 8 || cmd == 9) ? 0.2 : 0.1;
+		hold_until = render_frame_count + static_cast<uint64_t>(render_sample_rate_hz * hold);
 	}
+}
+
+#ifdef NUKED_SC55_ENGINE_88PRO
+// Settle time after a replayed reset: a System Mode Set (00 00 7F) keeps the firmware
+// busy for about 150 ms (tools/test/reset26), GM / GS / GM2 for less than 60 ms
+double NukedSc55::ResetSettleSeconds(const StateLog::Entry& e)
+{
+	const auto& m = e.bytes;
+	return (m.size() >= 10 && m[1] == 0x41 && m[5] == 0x00 && m[6] == 0x00 && m[7] == 0x7f) ? 0.2 : 0.06;
+}
+#endif
+
+bool NukedSc55::HasGm2() const
+{
+#ifdef NUKED_SC55_ENGINE_88PRO
+	return model == Model::Sc8850;
+#else
+	return false;
+#endif
+}
+
+bool NukedSc55::HasSystemMode() const
+{
+#ifdef NUKED_SC55_ENGINE_88PRO
+	return model == Model::Sc88 || model == Model::Sc88Pro;
+#else
+	return false;
+#endif
 }
 
 const char* NukedSc55::ModelName() const
@@ -2343,7 +2442,7 @@ void NukedSc55::ReplayInto(Instance& inst, const std::vector<StateLog::Entry>& e
 		emu88_parse_stream_on_port(inst.ctx, e.port, e.bytes.data(), static_cast<uint32_t>(e.bytes.size()));
 		bytes += e.bytes.size();
 		if (e.is_reset) {
-			E88Drain(inst, bytes, 0.06);
+			E88Drain(inst, bytes, ResetSettleSeconds(e));
 			bytes = 0;
 		}
 	}
@@ -2510,7 +2609,7 @@ void NukedSc55::Wake(const int i)
 			bytes += e.bytes.size();
 			replayed_bytes += static_cast<int>(e.bytes.size());
 			if (e.is_reset) {
-				E88Drain(inst, bytes, 0.06);
+				E88Drain(inst, bytes, ResetSettleSeconds(e));
 				bytes = 0;
 			}
 		});

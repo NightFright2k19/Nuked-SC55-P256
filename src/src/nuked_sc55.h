@@ -12,6 +12,7 @@
 #include <functional>
 #include <mutex>
 #include <thread>
+#include <utility>
 #include <filesystem>
 #include <memory>
 #include <vector>
@@ -177,6 +178,20 @@ private:
 	void UiTrackShort(const uint8_t* d, int port = 0);
 	void UiResetParts();
 	void HandleUiCommands();
+#ifdef NUKED_SC55_ENGINE_88PRO
+	static double ResetSettleSeconds(const StateLog::Entry& e);
+#endif
+	// Host MIDI held back after a reset sent from the SETUP menu, so that the firmware has
+	// finished the reset before the next notes / controllers arrive (render frames)
+	struct HeldEvent {
+		uint64_t frame;
+		clap_event_midi_t midi;
+		clap_event_midi_sysex_t sysex;
+		std::vector<uint8_t> bytes;
+	};
+	std::vector<HeldEvent> held_events;
+	uint64_t hold_until = 0;
+	std::vector<std::pair<const clap_event_header_t*, uint32_t>> block_events;
 	uint32_t panel_button_bits = 0;  // emulated front-panel button held on unit 0
 	int panel_button_blocks    = 0;  // blocks until it is released
 
@@ -250,7 +265,18 @@ public:
 	std::atomic<int> ui_voices{0};      // sounding partials (all instances)
 	std::atomic<int> ui_awake{1};       // awake emulator instances
 	std::atomic<int> max_voices{256};   // user limit (setup menu)
-	std::atomic<int> ui_command{0};     // 1 = all sound off, 2 = GS reset, 3/4 = PART </> button, 5 = ALL button (SC-88 Pro)
+	std::atomic<int> ui_command{0};     // 1 = all sound off, 2 = GS reset, 3/4 = PART </> button, 5 = ALL button (SC-88 Pro),
+	                                    // 6 = GM reset, 7 = GM2 reset (SC-8850), 8/9 = System Mode 1/2 (SC-88, SC-88 Pro)
+	// SETUP menu "Reset Type" (last reset sent from the menu, stored in the state): 0 = GM, 1 = GS, 2 = GM2
+	std::atomic<int> reset_type{1};
+	// SETUP menu "System Mode" (SC-88, SC-88 Pro; last mode set from the menu): 0 = Mode 1, 1 = Mode 2
+	std::atomic<int> system_mode{1};
+	bool HasGm2() const;
+	bool HasSystemMode() const;
+	// Plugin settings as text (CLAP state, VST2 chunk)
+	static constexpr size_t kStateSize = 128;
+	int StateString(char* buf, size_t size) const;
+	bool ParseState(const char* buf);
 	std::atomic<uint64_t> ui_awake_mask{1}; // awake units (bit i = unit i)
 	std::atomic<bool> lcd_ready{false};   // units exist and may be read by the GUI
 

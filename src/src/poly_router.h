@@ -325,6 +325,12 @@ private:
 			Reset();
 			return;
 		}
+#ifdef NUKED_SC55_ENGINE_88PRO
+		if (a == 0x00 && b == 0x00 && c == 0x7f) { // System Mode Set (SC-88 family, SC-8850)
+			Reset();
+			return;
+		}
+#endif
 		// 40 1x = part on the receiving port (a 40-block DT1 on IN B edits a
 		// B part), 50 1x = B part (SC-88 family and SC-8850, from any input)
 		if ((a != 0x40 && a != 0x50) || (b & 0xf0) != 0x10) return;

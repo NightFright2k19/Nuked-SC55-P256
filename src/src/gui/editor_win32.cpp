@@ -296,7 +296,22 @@ void ShowSetupMenu(Editor& e)
     }
 #endif
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_STRING, 2, T(L"Send GS reset", L"GS-Reset senden"));
+    // "Reset Type": choosing an entry sends that reset at once and marks it (default GS)
+    HMENU rt_menu = CreatePopupMenu();
+    {
+        const int rt = p.reset_type.load();
+        AppendMenuW(rt_menu, MF_STRING | (rt == 0 ? MF_CHECKED : 0), 6, L"GM");
+        AppendMenuW(rt_menu, MF_STRING | (rt == 1 ? MF_CHECKED : 0), 2, L"GS");
+        if (p.HasGm2()) AppendMenuW(rt_menu, MF_STRING | (rt == 2 ? MF_CHECKED : 0), 7, L"GM2");
+        AppendMenuW(m, MF_POPUP, (UINT_PTR)rt_menu, T(L"Reset Type", L"Reset-Typ"));
+    }
+    if (p.HasSystemMode()) { // SC-88 / SC-88 Pro: System Mode Set (default Mode 2)
+        HMENU sm_menu = CreatePopupMenu();
+        const int sm  = p.system_mode.load();
+        AppendMenuW(sm_menu, MF_STRING | (sm == 0 ? MF_CHECKED : 0), 8, L"Mode 1");
+        AppendMenuW(sm_menu, MF_STRING | (sm == 1 ? MF_CHECKED : 0), 9, L"Mode 2");
+        AppendMenuW(m, MF_POPUP, (UINT_PTR)sm_menu, T(L"System Mode", L"System-Modus"));
+    }
     AppendMenuW(m, MF_STRING, 1, T(L"All notes off", L"Alle Noten aus"));
 
     RECT r;
@@ -327,8 +342,13 @@ void ShowSetupMenu(Editor& e)
     } else if (cmd >= 100) {
         p.SetMaxVoices(cmd - 100); // stored in the plugin state by the host
         p.NotifyStateChanged();
-    } else if (cmd == 1 || cmd == 2) {
+    } else if (cmd == 1) {
         p.ui_command = cmd;
+    } else if (cmd == 2 || (cmd >= 6 && cmd <= 9)) { // reset type / system mode, stored in the state
+        if (cmd == 8 || cmd == 9) p.system_mode = cmd - 8;
+        else p.reset_type = cmd == 6 ? 0 : (cmd == 7 ? 2 : 1);
+        p.ui_command = cmd;
+        p.NotifyStateChanged();
     }
 }
 

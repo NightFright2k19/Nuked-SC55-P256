@@ -25,7 +25,7 @@ public:
 	struct Entry {
 		uint64_t key;
 		uint64_t seq;
-		bool is_reset; // GS reset / GM on: needs settle time after replay
+		bool is_reset; // GS reset / GM on / system mode: needs settle time after replay
 		std::vector<uint8_t> bytes;
 		uint8_t port = 0; // MIDI input to replay on
 	};
@@ -87,18 +87,31 @@ public:
 		}
 	}
 
+	// GM System On/Off, GM2 System On (F0 7E xx 09 0n F7), GS Reset (40 00 7F) and, on
+	// the 88emu devices, System Mode Set (00 00 7F, Mode 1/2): the module starts over
+	static bool IsReset(std::span<const uint8_t> m)
+	{
+		const bool gm_on = m.size() >= 6 && m[1] == 0x7e && m[3] == 0x09;
+		const bool roland_dt1 = m.size() >= 10 && m[1] == 0x41 &&
+		                        m[3] == 0x42 && m[4] == 0x12;
+#ifdef NUKED_SC55_ENGINE_88PRO
+		const bool mode_set = roland_dt1 && m[5] == 0x00 && m[6] == 0x00 && m[7] == 0x7f;
+#else
+		const bool mode_set = false; // ignored by the SC-55 firmware
+#endif
+		return gm_on || mode_set ||
+		       (roland_dt1 && m[5] == 0x40 && m[6] == 0x00 && m[7] == 0x7f);
+	}
+
 	void AddSysEx(std::span<const uint8_t> m, int port = 0)
 	{
 		if (m.size() < 2) return;
 		cur_port = uint8_t(port & 3);
 
-		const bool gm_on = m.size() >= 6 && m[1] == 0x7e && m[3] == 0x09;
 		const bool roland_dt1 = m.size() >= 10 && m[1] == 0x41 &&
 		                        m[3] == 0x42 && m[4] == 0x12;
-		const bool gs_reset = roland_dt1 && m[5] == 0x40 && m[6] == 0x00 &&
-		                      m[7] == 0x7f;
 
-		if (gm_on || gs_reset) {
+		if (IsReset(m)) {
 			// Everything before a reset is irrelevant
 			Clear();
 			Put(Key(6, 0, 0), m, true);
