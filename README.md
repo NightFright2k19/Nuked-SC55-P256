@@ -323,7 +323,7 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 | Entry | Meaning |
 | --- | --- |
 | Max polyphony | 24 / 48 / 64 / 96 / 128 / 160 / 192 / 224 / 256 (SC-55mk2: 28 / 56 / ...) |
-| Reset Type | submenu GM / GS (SC-8850: GM / GS / GM2): sends that reset to all units at once and marks it (default GS, stored in the state) |
+| Reset Type | submenu GM / GS (SC-8850: GM / GS / GM2): clicking an entry sends that reset to all units (nothing is marked or stored) |
 | System Mode (SC-88, SC-88 Pro) | submenu Mode 1 / Mode 2: sends System Mode Set (`F0 41 10 42 12 00 00 7F 0n ..`) to all units and marks it (default Mode 2, stored in the state) |
 | All notes off | stops all sounding notes |
 | Tone map (SC-88 Pro) | SC-55 / SC-88 / SC-88 Pro |
@@ -340,13 +340,13 @@ The menu language (German or English) follows `GetUserDefaultUILanguage()`; ever
 The DLL **never writes files**. The only state is the plug-in state, saved by the host in the CLAP `state` extension or as a VST2 chunk (opcodes 23/24). A change in the menu is reported to the host (CLAP `state.mark_dirty`, VST2 `audioMasterUpdateDisplay`). The state is a short ASCII string:
 
 ```
-NSC55P1 max_voices=<n> gain=<-120..120> rtype=<0..1>                           SC-55 plug-ins (gain in 0.1 dB)
-NSC55P1 max_voices=<n> gain=<-120..120> rtype=<0..1> smode=<0..1>               SC-88
-NSC55P1 max_voices=<n> map=<0..2> gain=<-120..120> pnote=<0..127> rtype=<0..1> smode=<0..1>    SC-88 Pro
-NSC55P1 max_voices=<n> gain=<-120..120> rtype=<0..2>                           SC-8850
+NSC55P1 max_voices=<n> gain=<-120..120>                                 SC-55 plug-ins (gain in 0.1 dB)
+NSC55P1 max_voices=<n> gain=<-120..120> smode=<0..1>                    SC-88
+NSC55P1 max_voices=<n> map=<0..2> gain=<-120..120> pnote=<0..127> smode=<0..1>    SC-88 Pro
+NSC55P1 max_voices=<n> gain=<-120..120>                                 SC-8850
 ```
 
-`rtype` = last reset type chosen in the SETUP menu (0 = GM, 1 = GS, 2 = GM2), `smode` = last system mode (0 = Mode 1, 1 = Mode 2). Both are only the marks in the menu: loading a state sends nothing, and the start-up stays as before (SC-55 / SC-55mkII: GS reset at boot, 88emu devices: factory state without a reset).
+`smode` = last system mode chosen in the SETUP menu (0 = Mode 1, 1 = Mode 2). It is only the mark in the menu: loading a state sends nothing, and the start-up stays as before (SC-55 / SC-55mkII: GS reset at boot, 88emu devices: factory state without a reset).
 
 A new plug-in instance starts with the maximum number of voices. Old chunks without `map=` start with the SC-88 Pro map (before Issue #20: SC-88); chunks with `map=` keep their map. Whether a particular host or driver keeps the chunk is up to the host; if it does not, the plug-in starts with the maximum each time, which is harmless.
 

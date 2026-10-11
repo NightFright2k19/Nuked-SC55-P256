@@ -267,8 +267,6 @@ public:
 	std::atomic<int> max_voices{256};   // user limit (setup menu)
 	std::atomic<int> ui_command{0};     // 1 = all sound off, 2 = GS reset, 3/4 = PART </> button, 5 = ALL button (SC-88 Pro),
 	                                    // 6 = GM reset, 7 = GM2 reset (SC-8850), 8/9 = System Mode 1/2 (SC-88, SC-88 Pro)
-	// SETUP menu "Reset Type" (last reset sent from the menu, stored in the state): 0 = GM, 1 = GS, 2 = GM2
-	std::atomic<int> reset_type{1};
 	// SETUP menu "System Mode" (SC-88, SC-88 Pro; last mode set from the menu): 0 = Mode 1, 1 = Mode 2
 	std::atomic<int> system_mode{1};
 	bool HasGm2() const;

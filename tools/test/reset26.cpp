@@ -98,8 +98,8 @@ int main(int argc,char**argv){
     for(auto& c: cs){
       if((c.cmd==7&&!is8850)||(c.cmd>=8&&!is88)) continue;
       int awake0=ns->NumAwake(); dirty(); ns->ui_command=c.cmd; onset=-1; const long t0=smp; block({M(0x90,60,110)}); const double a=meas(); const long on=onset; block({M(0x80,60,0)}); idle(1.5);
-      printf("   %-6s Note im selben Block: %.1f dB (%s), Einsatz nach %.0f ms, wach %d -> %d, Typ %d, Modus %d\n",c.n,a,std::fabs(a-ref)<1.0?"ok":"FALSCH",
-             on<0?-1.0:(on-t0)/44.1,awake0,ns->NumAwake(),ns->reset_type.load(),ns->system_mode.load());
+      printf("   %-6s Note im selben Block: %.1f dB (%s), Einsatz nach %.0f ms, wach %d -> %d, Modus %d\n",c.n,a,std::fabs(a-ref)<1.0?"ok":"FALSCH",
+             on<0?-1.0:(on-t0)/44.1,awake0,ns->NumAwake(),ns->system_mode.load());
     }
     // units woken after a menu reset replay it (state log): many notes on fresh units
     dirty(); ns->ui_command=2; idle(1.0);

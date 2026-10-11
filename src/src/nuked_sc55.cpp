@@ -984,7 +984,6 @@ int NukedSc55::StateString(char* buf, const size_t size) const
 	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d", max_voices.load(),
 	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)));
 #endif
-	n += std::snprintf(buf + n, size - n, " rtype=%d", reset_type.load());
 	if (HasSystemMode()) n += std::snprintf(buf + n, size - n, " smode=%d", system_mode.load());
 	return n;
 }
@@ -1009,8 +1008,6 @@ bool NukedSc55::ParseState(const char* buf)
 		gain_db = std::clamp(std::atoi(m + 5) / 10.0f, kGainMinDb, kGainMaxDb);
 #endif
 	// SETUP menu marks only; loading sends nothing (start-up stays as it is)
-	if (const char* m = std::strstr(buf, "rtype="); m && m[6] >= '0' && m[6] <= (HasGm2() ? '2' : '1'))
-		reset_type = m[6] - '0';
 	if (const char* m = std::strstr(buf, "smode="); HasSystemMode() && m && m[6] >= '0' && m[6] <= '1')
 		system_mode = m[6] - '0';
 	return true;
@@ -1583,11 +1580,11 @@ void NukedSc55::HandleUiCommands()
 		                              0x00, 0x7f, 0x01, 0x00, 0xf7};
 		std::span<const uint8_t> msg;
 		switch (cmd) {
-		case 6: msg = gm; reset_type = 0; break;
-		case 7: msg = gm2; reset_type = 2; break;
+		case 6: msg = gm; break;
+		case 7: msg = gm2; break;
 		case 8: msg = md1; system_mode = 0; break;
 		case 9: msg = md2; system_mode = 1; break;
-		default: msg = gs; reset_type = 1; break;
+		default: msg = gs; break;
 		}
 		state_log.AddSysEx(msg);
 		QueueMidi(router.RouteSysEx(msg), msg.data(), msg.size(), 0);
