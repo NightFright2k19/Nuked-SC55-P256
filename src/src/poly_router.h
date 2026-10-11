@@ -53,6 +53,7 @@ public:
 		load.assign(n, 0);
 		pending.assign(n, 0);
 		awake.assign(n, true);
+		double_module = false; // the firmware starts in Mode 1
 		Reset();
 	}
 
@@ -67,6 +68,22 @@ public:
 		std::fill(pending.begin(), pending.end(), 0);
 		rr = 0;
 	}
+
+	// Mode 2 (Double Module, SC-88 / SC-88 Pro): GM On / GS Reset initialise only the
+	// part group (logical channels) of the MIDI IN they arrive on
+	void ResetPort(int port)
+	{
+		for (int ch = port * 16; ch < port * 16 + 16; ++ch) {
+			owners[ch].fill(0);
+			pinned[ch]      = -1;
+			mono[ch]        = false;
+			portamento[ch]  = false;
+			drum_home[ch]   = -1;
+			part_rx_ch[ch]  = ch % 16;
+			part_rhythm[ch] = (ch % 16 == 9);
+		}
+	}
+	void SetTrackSystemMode(bool on) { track_mode = on; }
 
 	int NumInstances() const { return n; }
 
@@ -168,6 +185,7 @@ private:
 	std::array<int, NumChannels> pinned{};
 	std::array<bool, NumChannels> mono{}, portamento{};
 	std::array<int, NumChannels> drum_home{};
+	bool track_mode = false, double_module = false;
 
 	// GS part state (part index 0..15 = part A01..A16, 16..31 = B01..B16);
 	// a part receives on its own port
@@ -310,7 +328,8 @@ private:
 	{
 		// GM System On: F0 7E xx 09 01 F7
 		if (m.size() >= 6 && m[0] == 0xf0 && m[1] == 0x7e && m[3] == 0x09) {
-			Reset();
+			if (double_module) ResetPort(port);
+			else Reset();
 			return;
 		}
 		// Roland GS DT1: F0 41 dev 42 12 aa bb cc data... sum F7
@@ -322,12 +341,14 @@ private:
 		const auto data = m.subspan(8, m.size() - 10); // minus checksum+F7
 
 		if (a == 0x40 && b == 0x00 && c == 0x7f) { // GS Reset
-			Reset();
+			if (double_module) ResetPort(port);
+			else Reset();
 			return;
 		}
 #ifdef NUKED_SC55_ENGINE_88PRO
 		if (a == 0x00 && b == 0x00 && c == 0x7f) { // System Mode Set (SC-88 family, SC-8850)
 			Reset();
+			double_module = track_mode && !data.empty() && data[0] == 0x01;
 			return;
 		}
 #endif

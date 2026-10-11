@@ -81,6 +81,13 @@ int main(int argc,char**argv){
     voices("Boot"); block({S(MO1)}); idle(2.0); voices("Mode 1"); block({S(MO2)}); idle(2.0); voices("Mode 2");
     block({S(GS)}); idle(2.0); voices("GS danach"); block({S(MO1)}); idle(2.0); voices("Mode 1"); block({S(GS)}); idle(2.0); voices("GS danach");
     test("Boot");
+    // Mode 2 (Double Module): a reset received on one MIDI IN initialises only that group (manual p.194)
+    auto groups=[&](const char* mode,std::vector<uint8_t>& ms,const char* rn,std::vector<uint8_t>& rm,int port){
+      block({S(ms)}); idle(2.0); alloff(); dirty(0); dirty(1); block({S(rm,port)}); idle(1.5);
+      const double a=note(0), b=note(1);
+      printf("   %-7s %-3s an Port %c: A01 %.1f dB (%s), B01 %.1f dB (%s)\n",mode,rn,'A'+port,a,std::fabs(a-ref)<1.0?"zurueck":"bleibt",b,std::fabs(b-ref)<1.0?"zurueck":"bleibt"); };
+    for(int port=0;port<2;port++){ groups("Mode 1",MO1,"GS",GS,port); groups("Mode 2",MO2,"GS",GS,port); groups("Mode 2",MO2,"GM",GM,port); }
+    block({S(MO1)}); idle(2.0);
     block({S(MO1)}); idle(2.0); test("Mode 1");
     block({S(MO2)}); idle(2.0); test("Mode 2");
     block({S(MO1)}); idle(2.0); test("Mode 1");

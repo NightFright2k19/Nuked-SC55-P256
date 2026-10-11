@@ -331,6 +331,8 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 
 After a reset from the menu, the plug-in holds back the host's next MIDI events for 100 ms (System Mode: 200 ms) and then plays them in their original order, so that the firmware has finished the reset (measured with `tools/test/reset26.cpp`: notes sound exactly as after boot from 50-100 ms after GM / GS / GM2 and from 150 ms after a System Mode Set on the SC-88 Pro). Resets that come from the host or a MIDI file are passed on unchanged, as before.
 
+**System Mode (SC-88, SC-88 Pro, see the SC-88 Pro manual p.116 and p.194):** Mode 1 (Single Module, factory setting) is one 32-part module with one set of system effects (reverb, chorus, delay, EQ). Mode 2 (Double Module) works as two 16-part modules on MIDI IN A and IN B, each with its own reverb, chorus, master level / pan / key shift / tune; delay and EQ are not available and the insertion effect works only on part group A. A System Mode Set initialises everything except the tone maps (the firmware is busy for about 150 ms). In Mode 2, GM On and GS Reset initialise only the part group of the MIDI IN they arrive on (checked in the emulation with `tools/test/mode2.cpp`); the plug-in follows this in its state log and note router, so units that wake up later get the same state. GM / GS from the Send Reset menu are therefore sent on IN A and IN B in Mode 2, so the whole module is reset. A System Mode Set from the host also moves the check mark in the menu.
+
 The menu language (German or English) follows `GetUserDefaultUILanguage()`; every other Windows language gives English.
 
 ---

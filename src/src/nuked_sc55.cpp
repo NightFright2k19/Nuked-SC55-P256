@@ -634,6 +634,8 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	router.Init(NumInstances());
 	router.SetCapacity(partials_per_instance);
 	router.SetPacking(dynamic_instances);
+	router.SetTrackSystemMode(HasSystemMode());
+	state_log.SetTrackSystemMode(HasSystemMode());
 	router.SetWakeHandler([this]() {
 		for (int i = 0; i < router.Allowed(); ++i) {
 			if (!instances[i].awake) {
@@ -1172,6 +1174,8 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 			{
 				const bool reset = StateLog::IsReset(msg);
 				if (reset) UiResetParts();
+				if (const int mode = StateLog::SystemModeOf(msg); mode >= 0 && HasSystemMode())
+					system_mode = mode; // System Mode Set from the host: menu mark follows
 #ifdef NUKED_SC55_DEVICE_8850
 				if (reset) DotShow(false);
 				DotSysEx(msg);
@@ -1586,8 +1590,13 @@ void NukedSc55::HandleUiCommands()
 		case 9: msg = md2; system_mode = 1; break;
 		default: msg = gs; break;
 		}
-		state_log.AddSysEx(msg);
-		QueueMidi(router.RouteSysEx(msg), msg.data(), msg.size(), 0);
+		// Mode 2 (Double Module): GM On / GS Reset reach only the part group of the MIDI IN
+		// they arrive on, so the menu sends them on IN A and IN B to reset the whole module
+		const int ports = (cmd != 8 && cmd != 9 && state_log.DoubleModule()) ? 2 : 1;
+		for (uint8_t port = 0; port < ports; ++port) {
+			state_log.AddSysEx(msg, port);
+			QueueMidi(router.RouteSysEx(msg, port), msg.data(), msg.size(), 0, port);
+		}
 		UiResetParts();
 #ifdef NUKED_SC55_DEVICE_8850
 		DotShow(false);
