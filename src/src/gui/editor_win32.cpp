@@ -307,8 +307,8 @@ void ShowSetupMenu(Editor& e)
     if (p.HasSystemMode()) { // SC-88 / SC-88 Pro: System Mode Set (default Mode 1 = factory setting)
         HMENU sm_menu = CreatePopupMenu();
         const int sm  = p.system_mode.load();
-        AppendMenuW(sm_menu, MF_STRING | (sm == 0 ? MF_CHECKED : 0), 8, L"Mode 1");
-        AppendMenuW(sm_menu, MF_STRING | (sm == 1 ? MF_CHECKED : 0), 9, L"Mode 2");
+        AppendMenuW(sm_menu, MF_STRING | (sm == 0 ? MF_CHECKED : 0), 8, L"Mode 1 (Single Module)");
+        AppendMenuW(sm_menu, MF_STRING | (sm == 1 ? MF_CHECKED : 0), 9, L"Mode 2 (Double Module)");
         AppendMenuW(m, MF_POPUP, (UINT_PTR)sm_menu, T(L"System Mode", L"System-Modus"));
     }
     AppendMenuW(m, MF_STRING, 1, T(L"All notes off", L"Alle Noten aus"));

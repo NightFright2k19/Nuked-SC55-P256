@@ -324,7 +324,7 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 | --- | --- |
 | Max polyphony | 24 / 48 / 64 / 96 / 128 / 160 / 192 / 224 / 256 (SC-55mk2: 28 / 56 / ...) |
 | Send Reset | submenu GM / GS (SC-8850: GM / GS / GM2): clicking an entry sends that reset to all units (nothing is marked or stored) |
-| System Mode (SC-88, SC-88 Pro) | submenu Mode 1 / Mode 2: sends System Mode Set (`F0 41 10 42 12 00 00 7F 0n ..`) to all units and marks it (default Mode 1 = factory setting, stored in the state) |
+| System Mode (SC-88, SC-88 Pro) | submenu Mode 1 (Single Module) / Mode 2 (Double Module): sends System Mode Set (`F0 41 10 42 12 00 00 7F 0n ..`) to all units and marks it (default Mode 1 = factory setting, stored in the state) |
 | All notes off | stops all sounding notes |
 | Tone map (SC-88 Pro) | SC-55 / SC-88 / SC-88 Pro |
 | Prevw Note (SC-88 Pro) | submenu per octave |
