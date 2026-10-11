@@ -15,6 +15,7 @@
 // Devices with two MIDI inputs (SC-88 Pro): every entry remembers its input
 // port and is replayed on it; channel state is kept per port.
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <span>
@@ -25,7 +26,7 @@ public:
 	struct Entry {
 		uint64_t key;
 		uint64_t seq;
-		bool is_reset; // GS reset / GM on: needs settle time after replay
+		bool is_reset; // GS reset / GM on / system mode: needs settle time after replay
 		std::vector<uint8_t> bytes;
 		uint8_t port = 0; // MIDI input to replay on
 	};
@@ -33,6 +34,7 @@ public:
 	void Clear()
 	{
 		entries.clear();
+		double_module = false; // the firmware starts in Mode 1
 		bank_msb.fill(0);
 		bank_lsb.fill(0);
 		rpn_msb.fill(0x7f);
@@ -87,21 +89,63 @@ public:
 		}
 	}
 
+	// GM System On/Off, GM2 System On (F0 7E xx 09 0n F7), GS Reset (40 00 7F) and, on
+	// the 88emu devices, System Mode Set (00 00 7F, Mode 1/2): the module starts over
+	static bool IsReset(std::span<const uint8_t> m)
+	{
+		const bool gm_on = m.size() >= 6 && m[1] == 0x7e && m[3] == 0x09;
+		const bool roland_dt1 = m.size() >= 10 && m[1] == 0x41 &&
+		                        m[3] == 0x42 && m[4] == 0x12;
+#ifdef NUKED_SC55_ENGINE_88PRO
+		const bool mode_set = roland_dt1 && m[5] == 0x00 && m[6] == 0x00 && m[7] == 0x7f;
+#else
+		const bool mode_set = false; // ignored by the SC-55 firmware
+#endif
+		return gm_on || mode_set ||
+		       (roland_dt1 && m[5] == 0x40 && m[6] == 0x00 && m[7] == 0x7f);
+	}
+
+	// System Mode Set (00 00 7F dd): dd = 0 Mode 1 (Single Module), 1 Mode 2 (Double Module)
+	static int SystemModeOf(std::span<const uint8_t> m)
+	{
+		if (m.size() < 10 || m[1] != 0x41 || m[3] != 0x42 || m[4] != 0x12 ||
+		    m[5] != 0x00 || m[6] != 0x00 || m[7] != 0x7f)
+			return -1;
+		return m[8] == 0x01 ? 1 : 0;
+	}
+
+	// SC-88 / SC-88 Pro: follow System Mode Set. In Mode 2 (Double Module) GM On and
+	// GS Reset initialise only the part group of the MIDI IN they arrive on.
+	void SetTrackSystemMode(bool on) { track_mode = on; }
+	bool DoubleModule() const { return double_module; }
+
 	void AddSysEx(std::span<const uint8_t> m, int port = 0)
 	{
 		if (m.size() < 2) return;
 		cur_port = uint8_t(port & 3);
 
-		const bool gm_on = m.size() >= 6 && m[1] == 0x7e && m[3] == 0x09;
 		const bool roland_dt1 = m.size() >= 10 && m[1] == 0x41 &&
 		                        m[3] == 0x42 && m[4] == 0x12;
-		const bool gs_reset = roland_dt1 && m[5] == 0x40 && m[6] == 0x00 &&
-		                      m[7] == 0x7f;
 
-		if (gm_on || gs_reset) {
-			// Everything before a reset is irrelevant
+		if (const int mode = SystemModeOf(m); mode >= 0 && IsReset(m)) {
+			// everything is initialised; the mode itself stays in the log for waking units
 			Clear();
-			Put(Key(6, 0, 0), m, true);
+			double_module = track_mode && mode == 1;
+			Put(Key(5, 0, 0), m, true);
+			return;
+		}
+		if (IsReset(m)) {
+			if (double_module) {
+				// Mode 2: only this MIDI IN's part group starts over
+				std::erase_if(entries, [&](const Entry& e) { return e.port == cur_port && (e.key >> 56) != 5; });
+				ClearChannels(cur_port * 16, cur_port * 16 + 16);
+				Put(Key(6, cur_port, 0), m, true);
+			} else {
+				// Everything before a reset is irrelevant (except a System Mode Set)
+				std::erase_if(entries, [](const Entry& e) { return (e.key >> 56) != 5; });
+				ClearChannels(0, 64);
+				Put(Key(6, 0, 0), m, true);
+			}
 			return;
 		}
 		if (roland_dt1) {
@@ -117,6 +161,16 @@ private:
 	std::vector<Entry> entries;
 	uint64_t seq = 0;
 	uint8_t cur_port = 0; // port of the message being added
+	bool track_mode = false, double_module = false;
+
+	void ClearChannels(int from, int to)
+	{
+		for (int ch = from; ch < to; ++ch) {
+			bank_msb[ch] = bank_lsb[ch] = 0;
+			rpn_msb[ch] = rpn_lsb[ch] = 0x7f;
+			rpn_is_nrpn[ch] = false;
+		}
+	}
 	// per logical channel (port * 16 + MIDI channel)
 	std::array<uint8_t, 64> bank_msb{}, bank_lsb{};
 	std::array<uint8_t, 64> rpn_msb{}, rpn_lsb{};

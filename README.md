@@ -201,7 +201,7 @@ Every SC-55 instance outputs a constant 1/32 of full scale. It is measured after
 After boot, everything except `min_active` (1) sleeps.
 
 - **Going to sleep:** the output of an awake unit must stay below 2.5e-4 (about -72 dBFS after DC removal, which also covers reverb tails) for 1 s, **and** the remaining awake units must keep at least a quarter of a unit in reserve (or the unit is above the voice limit). The SC-55 mk1 emulation (v1.xx) toggles its output by one step (1.2e-4) even without a sounding voice, so the threshold has to be above that; the MkII does not show this residual noise. When a unit falls asleep, its note assignments are cleared.
-- **State log** (`src/state_log.h`): messages that a sleeping unit misses are logged compactly (last value per parameter, ordered by last occurrence) and replayed when it wakes. GS reset / GM on clears the log and gets 60 ms of settle time. Program changes are stored with the bank that was valid at the time, RPN/NRPN as a sequence; increment/decrement (96/97) and the "notes off" controllers are not logged.
+- **State log** (`src/state_log.h`): messages that a sleeping unit misses are logged compactly (last value per parameter, ordered by last occurrence) and replayed when it wakes. GS reset / GM on / GM2 on (and System Mode Set on the 88emu devices) clears the log and gets 60 ms of settle time (System Mode Set: 200 ms). Program changes are stored with the bank that was valid at the time, RPN/NRPN as a sequence; increment/decrement (96/97) and the "notes off" controllers are not logged.
 - **Replay speed:** 3000 MCU cycles per byte on the emulated UART (about 2.5 times MIDI speed), then the buffer is drained and 5 ms are added.
 - **Background warmer:** every 250 ms the audio thread hands the lowest of the **next two** sleeping units that is behind the state log, together with the missing log entries, to a separate thread (`try_lock` only, the audio thread never blocks). The warmer replays them. Result in the test song "grabbag": wake-up takes 0.3-0.9 ms with 0 bytes left to replay; without the warmer the first wake-up replayed 450 bytes (7.6 ms, more than the 11.6 ms block budget allowed).
 - **Rendering:** only awake instances are rendered and measured; one awake instance renders directly in the audio thread, several use a worker pool (the audio thread works with it).
@@ -266,7 +266,7 @@ The SC-8850 plug-in uses the same 88emu core with the SC-8850 firmware (compile-
 - **LCD:** the 160 x 64 dots of the firmware's graphic LCD, black on the orange glass like in the player, area-averaged to 262 x 105 px.
 - **SysEx display messages:** text messages (`45 10 00 xx`) are shown by the firmware itself. The SC-8850 firmware ignores the 16 x 16 bitmaps (`45 10 01 00` … `45 10 05 7F`, pages 1-10, page select `45 10 20 00`), so the plug-in keeps the pages and lays the shown one over the level meters of the play screen for 3.2 s after the last update, as on the SC-55 / SC-88 (one bar = one column, two dots per row). Menus are left alone. The panel size does not change.
 - **Controls:** every switch is held while the mouse button is down (at least 80 ms). VALUE: drag (right / up = clockwise, about 10 px per detent) or mouse wheel; a click without moving pushes the encoder. PREVIEW is the device's own key. GAIN: drag, wheel (0.8 dB per notch), double-click = 0 dB.
-- **VOICES / UNITS:** sounding voices, peak hold and awake units like on the SC-88 Pro panel. **SETUP** (bottom right, same place as on the SC-55 / SC-55mkII): max polyphony 128 / 256, GS reset, all notes off.
+- **VOICES / UNITS:** sounding voices, peak hold and awake units like on the SC-88 Pro panel. **SETUP** (bottom right, same place as on the SC-55 / SC-55mkII): max polyphony 128 / 256, Send Reset (GM / GS / GM2), all notes off.
 
 ## SC-88 engine (88emu)
 
@@ -285,7 +285,7 @@ The SC-88 plug-in uses the same 88emu core with the firmware of the first SC-88 
 - **Graphics:** the 88emu SC-88 panel art (GPLv3, The Usual Suspects) by `tools/make_sc88orig_panel.py`. Only the branding ("Nuked SC-88"), the playlist header (VOICES) and the VOLUME label (GAIN) are replaced; everything else is unchanged. Switches, rockers, LEDs, PREVIEW and the GAIN knob are rendered from the player's own vector graphics at the positions of its skin (`tools/make_sc88orig_sprites.py`, with the pressed tint).
 - **LCD:** the firmware's character LCD on the panel's glass, rendered like on the SC-88 Pro.
 - **Controls:** every switch is held while the mouse button is down (at least 80 ms), so holding a rocker repeats like on the device. GAIN: drag, wheel (0.8 dB per notch), double-click = 0 dB.
-- **VOICES / UNITS** as on the other 88emu panels. **SETUP** (bottom, between the logo and the EFX lamp; same place on the SC-88 Pro): max polyphony 64 / 128 / 192 / 256, GS reset, all notes off.
+- **VOICES / UNITS** as on the other 88emu panels. **SETUP** (bottom, between the logo and the EFX lamp; same place on the SC-88 Pro): max polyphony 64 / 128 / 192 / 256, Send Reset (GM / GS), System Mode (Mode 1 / Mode 2), all notes off.
 
 ---
 
@@ -299,7 +299,7 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 - **LCD:** the firmware's character LCD on the original glass (313 x 113 px, rendered at full size and reduced so the dots stay even). Text and bitmap SysEx messages are shown by the firmware itself.
 - **Front panel = the device's own panel:** ALL, MUTE, PART < >, INSTRUMENT, LEVEL, PAN, REVERB, CHORUS, KEY SHIFT and MIDI CH go to unit 0, so the LCD, the ALL / MUTE lamps and the key repeat work as on the hardware. Every switch is held while the mouse button is down (at least 80 ms). Until 0.6 s after the last switch the plug-in compares unit 0's parameter memory and sends every change as GS DT1 (instrument as CC 0 + program change) to the other units and into the state log, so units that wake later play the same sounds. Part MUTE flags are copied to all awake units; ALL + MUTE silences the output.
 - **GAIN:** -12 ... +12 dB, 0 dB in the middle (default) and bit-identical to the previous output. Drag (right / up = louder), mouse wheel (0.8 dB per notch), double-click = 0 dB.
-- **VOICES / UNITS:** sounding voices with peak hold and awake units like on the other 88emu panels. **SETUP** (bottom right, same place as on the SC-8850): max polyphony, GS reset, all notes off.
+- **VOICES / UNITS:** sounding voices with peak hold and awake units like on the other 88emu panels. **SETUP** (bottom right, same place as on the SC-8850): max polyphony, Send Reset (GM / GS), all notes off.
 - **Window class:** contains the module handle, so v1.21 and MkII can run in the same host.
 
 ### SC-88 Pro panel (918 x 280 px)
@@ -323,10 +323,15 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 | Entry | Meaning |
 | --- | --- |
 | Max polyphony | 24 / 48 / 64 / 96 / 128 / 160 / 192 / 224 / 256 (SC-55mk2: 28 / 56 / ...) |
-| GS reset | sends a GS reset to all units |
+| Send Reset | submenu GM / GS (SC-8850: GM / GS / GM2): clicking an entry sends that reset to all units (nothing is marked or stored) |
+| System Mode (SC-88, SC-88 Pro) | submenu Mode 1 (Single Module) / Mode 2 (Double Module): sends System Mode Set (`F0 41 10 42 12 00 00 7F 0n ..`) to all units and marks it (default Mode 1 = factory setting, stored in the state) |
 | All notes off | stops all sounding notes |
 | Tone map (SC-88 Pro) | SC-55 / SC-88 / SC-88 Pro |
 | Prevw Note (SC-88 Pro) | submenu per octave |
+
+After a reset from the menu, the plug-in holds back the host's next MIDI events for 100 ms (System Mode: 200 ms) and then plays them in their original order, so that the firmware has finished the reset (measured with `tools/test/reset26.cpp`: notes sound exactly as after boot from 50-100 ms after GM / GS / GM2 and from 150 ms after a System Mode Set on the SC-88 Pro). Resets that come from the host or a MIDI file are passed on unchanged, as before.
+
+**System Mode (SC-88, SC-88 Pro, see the SC-88 Pro manual p.116 and p.194):** Mode 1 (Single Module, factory setting) is one 32-part module with one set of system effects (reverb, chorus, delay, EQ). Mode 2 (Double Module) works as two 16-part modules on MIDI IN A and IN B, each with its own reverb, chorus, master level / pan / key shift / tune; delay and EQ are not available and the insertion effect works only on part group A. A System Mode Set initialises everything except the tone maps (the firmware is busy for about 150 ms). In Mode 2, GM On and GS Reset initialise only the part group of the MIDI IN they arrive on (checked in the emulation with `tools/test/mode2.cpp`); the plug-in follows this in its state log and note router, so units that wake up later get the same state. GM / GS from the Send Reset menu are therefore sent on IN A and IN B in Mode 2, so the whole module is reset. A System Mode Set from the host also moves the check mark in the menu.
 
 The menu language (German or English) follows `GetUserDefaultUILanguage()`; every other Windows language gives English.
 
@@ -337,10 +342,13 @@ The menu language (German or English) follows `GetUserDefaultUILanguage()`; ever
 The DLL **never writes files**. The only state is the plug-in state, saved by the host in the CLAP `state` extension or as a VST2 chunk (opcodes 23/24). A change in the menu is reported to the host (CLAP `state.mark_dirty`, VST2 `audioMasterUpdateDisplay`). The state is a short ASCII string:
 
 ```
-NSC55P1 max_voices=<n> gain=<-120..120>                     SC-55 plug-ins (gain in 0.1 dB)
-NSC55P1 max_voices=<n> map=<0..2> vol=<0..1000> pnote=<0..127>    SC-88 Pro
-NSC55P1 max_voices=<n> gain=<-120..120>                     SC-8850 (gain in 0.1 dB)
+NSC55P1 max_voices=<n> gain=<-120..120>                                 SC-55 plug-ins (gain in 0.1 dB)
+NSC55P1 max_voices=<n> gain=<-120..120> smode=<0..1>                    SC-88
+NSC55P1 max_voices=<n> map=<0..2> gain=<-120..120> pnote=<0..127> smode=<0..1>    SC-88 Pro
+NSC55P1 max_voices=<n> gain=<-120..120>                                 SC-8850
 ```
+
+`smode` = last system mode chosen in the SETUP menu (0 = Mode 1, 1 = Mode 2). It is only the mark in the menu: loading a state sends nothing, and the start-up stays as before (SC-55 / SC-55mkII: GS reset at boot, 88emu devices: factory state without a reset).
 
 A new plug-in instance starts with the maximum number of voices. Old chunks without `map=` start with the SC-88 Pro map (before Issue #20: SC-88); chunks with `map=` keep their map. Whether a particular host or driver keeps the chunk is up to the host; if it does not, the plug-in starts with the maximum each time, which is harmless.
 

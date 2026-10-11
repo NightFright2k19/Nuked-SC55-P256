@@ -105,7 +105,7 @@ struct Bridge {
 	std::vector<clap_event_midi_sysex_t> chunk_sysex;
 	std::vector<const clap_event_header_t*> chunk_events;
 
-	char state_chunk[64] = {};
+	char state_chunk[NukedSc55::kStateSize] = {};
 	ERect edit_rect{};
 
 	NukedSc55* Engine() const
@@ -399,44 +399,16 @@ intptr_t Dispatcher(AEffect* fx, int32_t opcode, int32_t index, intptr_t value,
 
 	case effGetChunk:
 		if (auto ns = b->Engine(); ns && ptr) {
-#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88)
-			const int n = std::snprintf(b->state_chunk, sizeof(b->state_chunk), "NSC55P1 max_voices=%d gain=%d",
-			                            ns->max_voices.load(),
-			                            static_cast<int>(std::lround(ns->gain_db.load() * 10.0f)));
-#elif defined(NUKED_SC55_ENGINE_88PRO)
-			const int n = std::snprintf(b->state_chunk, sizeof(b->state_chunk),
-			                            "NSC55P1 max_voices=%d map=%d gain=%d pnote=%d", ns->max_voices.load(),
-			                            ns->tone_map.load(),
-			                            static_cast<int>(std::lround(ns->gain_db.load() * 10.0f)),
-			                            ns->preview_note.load());
-#else
-			const int n = std::snprintf(b->state_chunk, sizeof(b->state_chunk), "NSC55P1 max_voices=%d gain=%d",
-			                            ns->max_voices.load(),
-			                            static_cast<int>(std::lround(ns->gain_db.load() * 10.0f)));
-#endif
+			const int n = ns->StateString(b->state_chunk, sizeof(b->state_chunk));
 			*static_cast<void**>(ptr) = b->state_chunk;
 			return n;
 		}
 		return 0;
 	case effSetChunk:
 		if (auto ns = b->Engine(); ns && ptr && value > 0) {
-			char buf[64] = {};
+			char buf[NukedSc55::kStateSize] = {};
 			std::memcpy(buf, ptr, std::min<size_t>(sizeof(buf) - 1, size_t(value)));
-			int v = 0;
-			if (std::sscanf(buf, "NSC55P1 max_voices=%d", &v) == 1) ns->SetMaxVoices(v);
-#ifdef NUKED_SC55_ENGINE_88PRO
-			if (const char* m = std::strstr(buf, "map="); NukedSc55::HasToneMap() && m && m[4] >= '0' && m[4] <= '2')
-				ns->tone_map = m[4] - '0';
-			if (const char* m = std::strstr(buf, "gain="); m)
-				ns->gain_db = std::clamp(std::atoi(m + 5) / 10.0f, NukedSc55::kGainMinDb, NukedSc55::kGainMaxDb);
-			else if (const char* v = std::strstr(buf, "vol="); v)
-				ns->gain_db = NukedSc55::GainFromLegacyVolume(std::atoi(v + 4));
-			if (const char* m = std::strstr(buf, "pnote="); m)
-				ns->preview_note = std::clamp(std::atoi(m + 6), 0, 127);
-#else
-			if (const char* m = std::strstr(buf, "gain="); m) // older states: no GAIN = 0 dB
-				ns->gain_db = std::clamp(std::atoi(m + 5) / 10.0f, NukedSc55::kGainMinDb, NukedSc55::kGainMaxDb);
-#endif
+			ns->ParseState(buf);
 		}
 		return 1;
 

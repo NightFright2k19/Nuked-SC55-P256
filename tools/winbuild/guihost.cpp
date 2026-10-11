@@ -21,16 +21,19 @@ static DWORD WINAPI MenuThread(void*){
   int sx=g_W-80, sy=g_H-50; if(const char* xy=getenv("SETUP_XY")) sscanf(xy,"%d,%d",&sx,&sy); // SC-55/8850: 848,255, SC-88: 328,255
   PostMessage(g_ed,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(sx,sy));
   Sleep(900);
-  // Bildschirm-Screenshot inkl. Menü
-  HDC sdc=GetDC(nullptr); int W=760,H=560; HDC mem=CreateCompatibleDC(sdc);
+  // MENU_NAV: Tasten vor dem Screenshot (D/U/R/L = Pfeile, E = Enter, X = Escape), z. B. Untermenü öffnen
+  auto keys=[](const char* k){ for(;k&&*k;++k){ WORD vk=*k=='D'?VK_DOWN:*k=='U'?VK_UP:*k=='R'?VK_RIGHT:*k=='L'?VK_LEFT:*k=='E'?VK_RETURN:VK_ESCAPE;
+    keybd_event(vk,0,0,0); keybd_event(vk,0,KEYEVENTF_KEYUP,0); Sleep(150);} };
+  keys(getenv("MENU_NAV")); Sleep(500);
+  // Bildschirm-Screenshot inkl. Menü (MENU_WH=<b>,<h>, Standard 760,560)
+  HDC sdc=GetDC(nullptr); int W=760,H=560; if(const char* wh=getenv("MENU_WH")) sscanf(wh,"%d,%d",&W,&H); HDC mem=CreateCompatibleDC(sdc);
   BITMAPINFO bi{}; bi.bmiHeader.biSize=sizeof(bi.bmiHeader); bi.bmiHeader.biWidth=W; bi.bmiHeader.biHeight=-H; bi.bmiHeader.biPlanes=1; bi.bmiHeader.biBitCount=32;
   void* bits=nullptr; HBITMAP bm=CreateDIBSection(mem,&bi,DIB_RGB_COLORS,&bits,nullptr,0); SelectObject(mem,bm);
   BitBlt(mem,0,0,W,H,sdc,0,0,SRCCOPY); GdiFlush();
   FILE* f=fopen("Z:\\tmp\\menu.bmp","wb"); BITMAPFILEHEADER fh{0x4D42,(DWORD)(54+W*H*4),0,0,54}; BITMAPINFOHEADER ih=bi.bmiHeader;
   fwrite(&fh,sizeof fh,1,f); fwrite(&ih,sizeof ih,1,f); fwrite(bits,4,W*H,f); fclose(f);
-  // Eintrag "64 Stimmen" wählen: 3x Pfeil runter (Kopfzeile ist deaktiviert) + Enter
-  for(int i=0;i<3;i++){ keybd_event(VK_DOWN,0,0,0); keybd_event(VK_DOWN,0,KEYEVENTF_KEYUP,0); Sleep(80);} 
-  keybd_event(VK_RETURN,0,0,0); keybd_event(VK_RETURN,0,KEYEVENTF_KEYUP,0);
+  // Eintrag "64 Stimmen" wählen: 3x Pfeil runter (Kopfzeile ist deaktiviert) + Enter; MENU_DONE: eigene Tasten
+  keys(getenv("MENU_DONE")?getenv("MENU_DONE"):"DDDE");
   return 0; }
 static void pump(){ MSG m; while(PeekMessage(&m,nullptr,0,0,PM_REMOVE)){TranslateMessage(&m);DispatchMessage(&m);} }
 int main(int,char**a){
