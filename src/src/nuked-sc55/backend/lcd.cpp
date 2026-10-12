@@ -43,6 +43,43 @@ void LCD_Enable(lcd_t& lcd, bool enable)
     lcd.enable = enable;
 }
 
+// Issue #36: last cell of a firmware refresh written, see lcd_t::LCD_Shown
+static void LCD_RefreshDone(lcd_t& lcd)
+{
+    constexpr int H = lcd_t::kLcdHist;
+    const int now = static_cast<int>(lcd.LCD_Refreshes % H);
+    for (int r = 0; r < 2; ++r)
+    {
+        const int o = r * 40;
+        const uint8_t* const row = lcd.LCD_Data + o;
+        const uint8_t* const prev = lcd.LCD_Hist[(now + H - 1) % H] + o;
+        if (lcd.LCD_Refreshes == 0 || memcmp(row, prev, 40) == 0)
+        {
+            memcpy(lcd.LCD_Shown + o, row, 40);
+            lcd.LCD_Unstable[r] = 0;
+        }
+        else if (++lcd.LCD_Unstable[r] >= H)
+        {
+            // the row of the last H refreshes (this one included) closest to all the others: a
+            // refresh that caught a redraw differs from its neighbours (newest one on a tie)
+            const auto rowof = [&](int k) { return (k == 0) ? row : lcd.LCD_Hist[(now + H - k) % H] + o; };
+            int best = 0, best_d = 1 << 30;
+            for (int k = 0; k < H; ++k)
+            {
+                int d = 0;
+                for (int j = 0; j < H; ++j)
+                    for (int c = 0; c < 40; ++c)
+                        d += rowof(k)[c] != rowof(j)[c];
+                if (d < best_d) best = k, best_d = d;
+            }
+            memcpy(lcd.LCD_Shown + o, rowof(best), 40);
+            lcd.LCD_Unstable[r] = 0;
+        }
+    }
+    memcpy(lcd.LCD_Hist[now], lcd.LCD_Data, 80);
+    ++lcd.LCD_Refreshes;
+}
+
 void LCD_Write(lcd_t& lcd, uint32_t address, uint8_t data)
 {
     // No point taking a lock and updating LCD state if there's no one to observe it.
@@ -113,6 +150,7 @@ void LCD_Write(lcd_t& lcd, uint32_t address, uint8_t data)
         }
         else
         {
+            const bool refresh_done = lcd.LCD_N && lcd.LCD_DD_RAM == 0x57;
             if (lcd.LCD_N)
             {
                 if (lcd.LCD_DD_RAM & 0x40)
@@ -140,6 +178,8 @@ void LCD_Write(lcd_t& lcd, uint32_t address, uint8_t data)
                 lcd.LCD_DD_RAM--;
             }
             lcd.LCD_DD_RAM &= 0x7f;
+            if (refresh_done)
+                LCD_RefreshDone(lcd);
         }
     }
     //fprintf(stderr, "%i %.2x ", address, data);

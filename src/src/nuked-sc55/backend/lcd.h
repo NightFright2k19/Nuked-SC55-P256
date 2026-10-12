@@ -76,6 +76,20 @@ struct lcd_t {
     uint8_t LCD_Data[80]{};
     uint8_t LCD_CG[64]{};
 
+    // Text as presented (Nuked SC-55 Poly, issue #36). The SC-55 firmware copies a RAM image
+    // of the display to the controller every ~70 ms (one refresh = DDRAM 00-17 and 40-57).
+    // While a SysEx text scrolls, the firmware redraws the instrument field into that image
+    // for a moment and the scroll routine puts the text back; a refresh in between shows a
+    // stray character or name fragment for one refresh (the slow glass of the real unit
+    // hardly shows it, the emulated LCD does). A row of LCD_Shown takes a refresh's content
+    // once two refreshes in a row agree; if it keeps changing, after 8 refreshes the row of the
+    // last 8 that is closest to the others is shown. Not part of the emulated hardware.
+    static constexpr int kLcdHist = 8;
+    uint8_t LCD_Shown[80]{};
+    uint8_t LCD_Hist[kLcdHist][80]{};
+    uint8_t LCD_Unstable[2]{};
+    uint32_t LCD_Refreshes = 0;
+
     // updated by MCU via LCD_Enable
     std::atomic<bool> enable = false;
 

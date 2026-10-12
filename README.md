@@ -75,7 +75,7 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 ### User interface (Windows)
 
 - **Editor panel** for every model, derived from the 88emu panel art: the device's own LCD and switches, GAIN knob, voice meter, SETUP menu.
-- **Original LCD** rendered from the emulated LCD controller: SysEx text and bitmap messages (`45 10 00 xx`, `45 10 01 xx`) are shown exactly as the firmware displays them.
+- **Original LCD** rendered from the emulated LCD controller: SysEx text and bitmap messages (`45 10 00 xx`, `45 10 01 xx`) are shown exactly as the firmware displays them. On the SC-55 and SC-55mk2 a display row changes only once two of the firmware's display refreshes (every ~70 ms) agree, so scrolling text runs steadily instead of flickering with fragments of the instrument name (sound unchanged).
 - **Menu language** follows the Windows UI language (German or English); the printed panel labels stay English like on the hardware.
 
 ### Identification
