@@ -253,7 +253,7 @@ void Slot85(Editor& e, HDC dc, const RECT& r, const char* s)
 
 uint32_t PanelButtons85(const Editor& e)
 {
-    return e.held85 | (e.push85 > 0 ? (1u << E85_BIT_VALUE) : 0u);
+    return e.held85 | e.latch85 | (e.push85 > 0 ? (1u << E85_BIT_VALUE) : 0u);
 }
 
 void Draw8850(Editor& e, HDC dc)
@@ -267,7 +267,7 @@ void Draw8850(Editor& e, HDC dc)
     const uint32_t leds = p.PanelLeds();
     for (const auto& b : E85_BTNS) {
         const int face = b.led < 0 ? 0 : ((leds >> b.led) & 1u) ? 2 : 1;
-        Switch85(dc, b, face, (e.held85 >> b.bit) & 1u);
+        Switch85(dc, b, face, ((e.held85 | e.latch85) >> b.bit) & 1u);
     }
     Blend85(dc, 169, 111, E85_Y_PRV + ((e.held85 >> E85_BIT_PREVIEW) & 1u) * E85_PRV_SZ, E85_PRV_SZ);
     Blend85(dc, E85_VALUE_X, E85_VALUE_Y, E85_Y_VAL + (e.value85 & 3) * E85_VAL_SZ, E85_VAL_SZ,
@@ -340,12 +340,21 @@ bool Mouse8850(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return true;
         }
         return false; // GAIN drag: shared code
+    case WM_RBUTTONDOWN: { // right click: hold the switch until the next left-click switch (key combinations)
+        const int h = Hit8850((short)LOWORD(lp), (short)HIWORD(lp));
+        if (h >= 1 && h <= E85_NBTN) {
+            e.latch85 ^= 1u << E85_BTNS[h - 1].bit;
+            send();
+        }
+        return true;
+    }
     case WM_LBUTTONUP:
     case WM_CAPTURECHANGED:
         if (e.held85 && !e.release85) { // released by the timer once held long enough
             e.release85 = true;
             if (GetTickCount() - e.press85 >= E85_MIN_HOLD_MS) {
-                e.held85 = 0;
+                e.held85  = 0;
+                e.latch85 = 0;
                 send();
             }
             if (msg == WM_LBUTTONUP) ReleaseCapture();
@@ -362,7 +371,8 @@ bool Mouse8850(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_TIMER:
         if (e.push85 > 0 && --e.push85 == 0) send();
         if (e.release85 && e.held85 && GetTickCount() - e.press85 >= E85_MIN_HOLD_MS) {
-            e.held85 = 0;
+            e.held85  = 0;
+            e.latch85 = 0;
             send();
         }
         return false;

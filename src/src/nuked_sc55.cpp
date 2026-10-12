@@ -774,12 +774,14 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 #ifdef NUKED_SC55_DEVICE_88
 	// Front panel of unit 0: edits of the last block passed on, GUI input, ALL + MUTE
 	E88EditPump();
+	E88PanelTune();
 	E88PanelInput();
 	E88PanelMutes();
 #endif
 #ifdef NUKED_SC55_DEVICE_88PRO
 	// Front panel of unit 0: edits of the last block passed on, GUI input
 	E88EditPump();
+	E88PanelTune();
 	E88PanelInput();
 #endif
 #ifdef NUKED_SC55_ENGINE_88PRO
@@ -1214,30 +1216,90 @@ constexpr Sys55 kSys55[] = {
 	{0x02, 0x00, 0x04}, // MASTER VOLUME (ALL + LEVEL)
 	{0x05, 0x00, 0x05}, // MASTER KEY SHIFT (ALL + KEY SHIFT)
 	{0x06, 0x00, 0x06}, // MASTER PAN (ALL + PAN)
-	{0x2d, 0x01, 0x33}, // REVERB LEVEL (ALL + REVERB)
-	{0x34, 0x01, 0x3a}, // CHORUS LEVEL (ALL + CHORUS)
+	{0x2a, 0x01, 0x30}, // REVERB MACRO (system menu), sets the reverb parameters below
+	{0x2b, 0x01, 0x31}, {0x2c, 0x01, 0x32}, {0x2d, 0x01, 0x33}, // REVERB CHARACTER, PRE-LPF, LEVEL (ALL + REVERB)
+	{0x2e, 0x01, 0x34}, {0x2f, 0x01, 0x35},                     // REVERB TIME, DELAY FEEDBACK
+	{0x32, 0x01, 0x38}, // CHORUS MACRO (system menu), sets the chorus parameters below
+	{0x33, 0x01, 0x39}, {0x34, 0x01, 0x3a}, {0x35, 0x01, 0x3b}, // CHORUS PRE-LPF, LEVEL (ALL + CHORUS), FEEDBACK
+	{0x36, 0x01, 0x3c}, {0x37, 0x01, 0x3d}, {0x38, 0x01, 0x3e}, // CHORUS DELAY, RATE, DEPTH
+	{0x39, 0x01, 0x3f},                                         // CHORUS SEND LEVEL TO REVERB
 };
+constexpr int kSys55Tune = 0x00;    // MASTER TUNE (system menu): 16 bit, the value of 40 00 00..03 (0x400 = 440 Hz)
+constexpr int kSys55Reserve = 0x18; // PARTIAL RESERVE of GS blocks 0..15 (part menu) = 40 01 10..1F
 constexpr uint8_t kPart55[][2] = { // offset in the block -> GS 40 1x a2
 	{0x0c, 0x02}, // Rx. CHANNEL (MIDI CH)
 	{0x0e, 0x16}, // PITCH KEY SHIFT
 	{0x10, 0x19}, // PART LEVEL
 	{0x11, 0x1c}, // PART PANPOT
+	{0x12, 0x1a}, {0x13, 0x1b}, // VELOCITY SENSE DEPTH, OFFSET (part menu)
+	{0x14, 0x1d}, {0x15, 0x1e}, // KEY RANGE LOW, HIGH (part menu)
 	{0x16, 0x21}, // CHORUS SEND
 	{0x17, 0x22}, // REVERB SEND
+	{0x18, 0x30}, {0x19, 0x31}, {0x1a, 0x32}, {0x1b, 0x33}, // VIBRATO RATE, DEPTH, TVF CUTOFF, RESONANCE (part menu)
+	{0x1c, 0x34}, {0x1d, 0x35}, {0x1e, 0x36}, {0x1f, 0x37}, // ATTACK, DECAY, RELEASE, VIBRATO DELAY (part menu)
 };
+constexpr uint8_t kCtrl55[][2] = { // offset in the block -> GS 40 2x a2 (part menu)
+	{0x35, 0x04}, // MOD LFO1 PITCH DEPTH (Mod. Depth)
+	{0x3c, 0x10}, // BEND PITCH CONTROL (Bend Range)
+};
+// Offset 0x0d of the block: bit 7 = POLY (40 1x 13), bits 0-1 = ASSIGN MODE (14),
+// bits 5-6 = USE FOR RHYTHM PART (15; bit 4 is set with it) (Part Mode, M/P Mode)
+constexpr int kPart55Mode = 0x0d;
+constexpr int kPart55Fine = 0x0f; // FINE TUNE, 0x80 = 0 (copied, see E55ApplyRxSwitches)
+// Offsets 0x0a / 0x0b of the block: Rx switches of the part (bit -> GS 40 1x a2), 0 = off.
+// Bit 1 of 0x0a (Rx NOTE MESSAGE) is the part MUTE, passed on separately.
+constexpr uint8_t kRx55A[8] = {0x12, 0x00, 0x07, 0x06, 0x05, 0x04, 0x03, 0x0a};
+constexpr uint8_t kRx55B[8] = {0x09, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11};
 constexpr int kPart55Bank = 0x08, kPart55Prog = 0x09; // INSTRUMENT: sent as CC 0 + program change
 constexpr int kPart55Flags = 0x0a;                    // bit 1 clear = part muted (MUTE)
 constexpr uint8_t kMute55Bit = 0x02;
 constexpr uint8_t kLamp55All = 0x40, kLamp55Mute = 0x20; // panel port bits, active low
 constexpr double kPanel55Seconds = 0.6; // edits are passed on until this long after the last switch
+constexpr uint32_t kBtn55MidiCh = (1u << 8) | (1u << 9);
 } // namespace
+
+// System menu Rx switches without a GS parameter (Rx Inst Change, Rx GS Reset, Rx SysEx;
+// mk2 also Rx GM On and Rx Function Control): their place in the parameter memory, found
+// per firmware by toggling them in the menu. They are copied from unit 0 to the other units,
+// as is the part FINE TUNE of the mk2 part menu (its stored form has no simple GS value).
+std::span<const uint16_t> NukedSc55::E55RxSwitches() const
+{
+	static constexpr uint16_t v100[] = {0x4df4, 0x4df5, 0x4df6};
+	static constexpr uint16_t v110[] = {0x4df6, 0x4df7, 0x4df8}; // also v1.20, v1.21
+	static constexpr uint16_t v200[] = {0x4e66, 0x4e67, 0x4e68};
+	static constexpr uint16_t mk2[]  = {0x5c2c, 0x5c2d, 0x5c2e, 0x5c9d, 0x5c9e};
+	switch (model) {
+	case Model::Sc55_v1_00: return v100;
+	case Model::Sc55_v1_10:
+	case Model::Sc55_v1_20:
+	case Model::Sc55_v1_21: return v110;
+	case Model::Sc55_v2_00: return v200;
+	case Model::Sc55mk2_v1_01: return mk2;
+	default: return {};
+	}
+}
+
+void NukedSc55::E55ApplyRxSwitches(Instance& inst)
+{
+	if (!inst.emu || &inst == &instances[0] || !instances[0].emu) return;
+	const uint8_t* src = instances[0].emu->GetMCU().sram;
+	uint8_t* dst       = inst.emu->GetMCU().sram;
+	for (const uint16_t a : E55RxSwitches()) dst[a] = src[a];
+	for (int x = 0; x < 16; ++x) {
+		const int a = kSram55Part + kSram55PartSize * x + kPart55Fine;
+		dst[a] = src[a];
+	}
+}
 
 // Audio thread, start of a block: GUI switches to unit 0, lamps back to the GUI
 void NukedSc55::E55PanelInput()
 {
 	if (instances.empty() || !instances[0].emu) return;
 	auto& mcu = instances[0].emu->GetMCU();
-	const uint32_t buttons = ui_panel_buttons.load(std::memory_order_relaxed);
+	uint32_t buttons = ui_panel_buttons.load(std::memory_order_relaxed);
+	// ALL + MIDI CH changes the device ID, which has no GS parameter: unit 0 would then ignore
+	// the host's GS messages and the other units not. Not given to the firmware, as on the SC-88.
+	if (ui_panel_leds.load(std::memory_order_relaxed) & 1u) buttons &= ~kBtn55MidiCh;
 	if (buttons != 0 || buttons != applied_buttons) {
 		panel_active_until = render_frame_count + 1 +
 		                     static_cast<uint64_t>(render_sample_rate_hz * kPanel55Seconds);
@@ -1263,28 +1325,63 @@ void NukedSc55::E55PanelPump()
 		panel_seen_valid = true;
 	}
 	const auto others = ~PolyRouter::Mask{1};
-	const auto dt1 = [&](uint8_t a1, uint8_t a2, uint8_t v) {
-		const int sum = 0x40 + a1 + a2 + v;
-		const uint8_t m[11] = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x40, a1, a2, v,
-		                       static_cast<uint8_t>((128 - sum % 128) % 128), 0xf7};
-		const std::span<const uint8_t> msg{m, sizeof(m)};
+	const auto sysex = [&](uint8_t a1, uint8_t a2, const uint8_t* d, int n) { // GS DT1 40 a1 a2 d[0..n-1]
+		uint8_t m[32] = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x40, a1, a2};
+		int k = 8, sum = 0x40 + a1 + a2;
+		for (int i = 0; i < n; ++i) sum += (m[k++] = d[i] & 0x7f);
+		m[k++] = static_cast<uint8_t>((128 - sum % 128) % 128);
+		m[k++] = 0xf7;
+		const std::span<const uint8_t> msg{m, static_cast<size_t>(k)};
 		state_log.AddSysEx(msg, 0);
-		QueueMidi(router.RouteSysEx(msg, 0) & others, m, sizeof(m), 0, 0);
+		QueueMidi(router.RouteSysEx(msg, 0) & others, m, static_cast<size_t>(k), 0, 0);
 	};
+	const auto dt1 = [&](uint8_t a1, uint8_t a2, uint8_t v) { sysex(a1, a2, &v, 1); };
 	const auto shrt = [&](uint8_t s, uint8_t d1, uint8_t d2, size_t len) {
 		const uint8_t m[3] = {s, d1, d2};
 		state_log.AddShort(m, 0);
 		UiTrackShort(m, 0);
 		QueueMidi(router.RouteShort(m, 0) & others, m, len, 0, 0);
 	};
+	const auto changed = [&](int off, int n) {
+		return std::memcmp(sram + off, panel_seen.data() + off, static_cast<size_t>(n)) != 0;
+	};
 	if (render_frame_count < panel_active_until) {
+		if (changed(kSys55Tune, 2)) {
+			const int tune = sram[kSys55Tune] << 8 | sram[kSys55Tune + 1];
+			const uint8_t d[4] = {static_cast<uint8_t>(tune >> 12 & 15), static_cast<uint8_t>(tune >> 8 & 15),
+			                      static_cast<uint8_t>(tune >> 4 & 15), static_cast<uint8_t>(tune & 15)};
+			sysex(0x00, 0x00, d, 4);
+		}
 		for (const auto& p : kSys55)
 			if (sram[p.off] != panel_seen[p.off]) dt1(p.a1, p.a2, sram[p.off]);
+		if (changed(kSys55Reserve, 16)) sysex(0x01, 0x10, sram + kSys55Reserve, 16);
+		bool raw = false;
+		for (int x = 0; x < 16; ++x) raw |= changed(kSram55Part + kSram55PartSize * x + kPart55Fine, 1);
+		const auto rxs = E55RxSwitches();
+		for (size_t k = 0; k <= rxs.size(); ++k) {
+			if (k < rxs.size() ? sram[rxs[k]] == rx_seen55[k] : !raw) continue;
+			for (int i = 1; i < NumInstances(); ++i)
+				if (instances[i].awake) E55ApplyRxSwitches(instances[i]);
+			break;
+		}
 		for (int x = 0; x < 16; ++x) {
 			const int b = kSram55Part + kSram55PartSize * x;
 			for (const auto& p : kPart55)
 				if (sram[b + p[0]] != panel_seen[b + p[0]])
 					dt1(static_cast<uint8_t>(0x10 | x), p[1], sram[b + p[0]]);
+			for (const auto& p : kCtrl55)
+				if (sram[b + p[0]] != panel_seen[b + p[0]])
+					dt1(static_cast<uint8_t>(0x20 | x), p[1], sram[b + p[0]]);
+			const uint8_t m = sram[b + kPart55Mode], was = panel_seen[b + kPart55Mode];
+			if ((m ^ was) & 0x80) dt1(static_cast<uint8_t>(0x10 | x), 0x13, m >> 7);
+			if ((m ^ was) & 0x03) dt1(static_cast<uint8_t>(0x10 | x), 0x14, m & 3);
+			if ((m ^ was) & 0x60) dt1(static_cast<uint8_t>(0x10 | x), 0x15, m >> 5 & 3);
+			for (int k = 0; k < 16; ++k) {
+				const int off = k < 8 ? 0x0a : 0x0b;
+				const uint8_t a2 = k < 8 ? kRx55A[k] : kRx55B[k - 8], bit = uint8_t(1u << (k & 7));
+				if (a2 != 0 && ((sram[b + off] ^ panel_seen[b + off]) & bit))
+					dt1(static_cast<uint8_t>(0x10 | x), a2, (sram[b + off] & bit) ? 1 : 0);
+			}
 			if (sram[b + kPart55Bank] != panel_seen[b + kPart55Bank] ||
 			    sram[b + kPart55Prog] != panel_seen[b + kPart55Prog]) {
 				const uint8_t ch = sram[b + 0x0c];
@@ -1296,6 +1393,10 @@ void NukedSc55::E55PanelPump()
 		}
 	}
 	std::memcpy(panel_seen.data(), sram, panel_seen.size());
+	{
+		const auto rxs = E55RxSwitches();
+		for (size_t k = 0; k < rxs.size() && k < rx_seen55.size(); ++k) rx_seen55[k] = sram[rxs[k]];
+	}
 
 	uint16_t rx = 0; // bit x set = GS block x not muted
 	for (int x = 0; x < 16; ++x)
@@ -1844,8 +1945,10 @@ void NukedSc55::E88RenderFrames(Instance& inst, size_t frames)
 			if (inst.seq_pos >= inst.seq_len) {
 				inst.applied_map = inst.seq_map;
 				inst.seq_len     = 0;
-			} else if (inst.seq_pos % 2 == 1) { // release
-				emu88_set_panel_buttons(inst.ctx, 0);
+			} else if (inst.seq_pos % 2 == 1) { // release (switches the next step holds stay down)
+				const int step = inst.seq_pos / 2;
+				emu88_set_panel_buttons(inst.ctx, step + 1 < 4 && inst.seq_pos + 1 < inst.seq_len
+				                                      ? inst.seq_mask[step] & inst.seq_mask[step + 1] : 0);
 				inst.seq_left = static_cast<uint32_t>(rate * 0.35);
 			} else { // next press
 				emu88_set_panel_buttons(inst.ctx, inst.seq_mask[inst.seq_pos / 2]);
@@ -1929,6 +2032,107 @@ void NukedSc55::E88Forward(const uint8_t port, const uint8_t* msg, const size_t 
 	log("%s panel: %zu bytes to the other units", ModelName(), size);
 }
 
+#if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
+namespace {
+constexpr uint32_t kBtn88Select = 1u << 25, kBtn88InstL = 1u << 3, kBtn88All = 1u << 6;
+// Work RAM: MASTER TUNE (40 00 00..03 as a 16-bit value, 0x400 = 440 Hz)
+#ifdef NUKED_SC55_DEVICE_88
+constexpr uint32_t kRam88Tune = 0x8040;
+#else
+constexpr uint32_t kRam88Tune = 0x5040;
+#endif
+constexpr double kPanel88Seconds = 0.6; // master tune is passed on until this long after the last switch
+} // namespace
+
+// Audio thread, before the GUI switches reach unit 0: ALL pressed while unit 0 asks
+// "..., Sure?" confirms a panel function; the plugin repeats it on the other units.
+void NukedSc55::E88PanelConfirm(const uint32_t buttons)
+{
+	auto& inst = instances[0];
+	const uint32_t pressed = buttons & ~confirm_prev;
+	confirm_prev           = buttons;
+	if (buttons != 0)
+		panel_used_until = render_frame_count + 1 + static_cast<uint64_t>(render_sample_rate_hz * kPanel88Seconds);
+	if (!(pressed & kBtn88All) || !inst.ctx) return;
+	uint8_t dd[80], cg[64];
+	int on = 0;
+	if (!emu88_get_display_memory(inst.ctx, 0, dd, cg, &on)) return;
+	const std::string_view row(reinterpret_cast<const char*>(dd), 24);
+	if (row.find("Sure?") == std::string_view::npos) return;
+	static const uint8_t gm[]  = {0xf0, 0x7e, 0x7f, 0x09, 0x01, 0xf7};
+	static const uint8_t md1[] = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x00, 0x00, 0x7f, 0x00, 0x01, 0xf7};
+	static const uint8_t md2[] = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x00, 0x00, 0x7f, 0x01, 0x00, 0xf7};
+	if (row.find("Init GM") != std::string_view::npos) {
+		const int ports = state_log.DoubleModule() ? 2 : 1;
+		for (uint8_t port = 0; port < ports; ++port) E88Forward(port, gm, sizeof(gm));
+		UiResetParts();
+	} else if (row.find("Mode1") != std::string_view::npos || row.find("Mode2") != std::string_view::npos) {
+		const bool two = row.find("Mode2") != std::string_view::npos;
+		E88Forward(0, two ? md2 : md1, sizeof(md1));
+		system_mode = two ? 1 : 0; // SETUP menu mark follows
+		UiResetParts();
+	} else if (row.find("CM-64") != std::string_view::npos) {
+		state_log.AddSysEx(StateLog::kCm64Marker, 0);
+		for (int i = 1; i < NumInstances(); ++i)
+			if (instances[i].awake) E88StartCm64(instances[i]);
+		UiResetParts();
+		log("%s panel: Initialize CM-64 on the other units", ModelName());
+	}
+}
+
+// Panel sequence SELECT + INST < (Initialize CM-64), ALL (confirm) on another unit
+void NukedSc55::E88StartCm64(Instance& inst)
+{
+	if (!inst.ctx) return;
+	inst.seq_mask[0] = kBtn88Select; // SELECT held, then INST <
+	inst.seq_mask[1] = kBtn88Select | kBtn88InstL;
+	inst.seq_mask[2] = kBtn88All;
+	inst.seq_len     = 6; // press + release per step, keeps the tone map
+	inst.seq_pos     = 0;
+	inst.seq_map     = inst.applied_map;
+	inst.seq_left    = static_cast<uint32_t>(emu88_get_device_samplerate(inst.ctx) * 0.15);
+	emu88_set_panel_buttons(inst.ctx, inst.seq_mask[0]);
+}
+
+// Blocking variant (wake / background warmer): renders until the function has run.
+void NukedSc55::E88Cm64Sync(Instance& inst)
+{
+	while (inst.seq_len > 0) { // a tone map sequence still running
+		E88RenderFrames(inst, inst.seq_left);
+		inst.buf_l.clear();
+		inst.buf_r.clear();
+	}
+	E88StartCm64(inst);
+	while (inst.seq_len > 0) {
+		E88RenderFrames(inst, inst.seq_left);
+		inst.buf_l.clear();
+		inst.buf_r.clear();
+	}
+	E88Drain(inst, 0, 0.3);
+}
+
+// MASTER TUNE changed in unit 0's menu -> DT1 to the other units and the state log
+void NukedSc55::E88PanelTune()
+{
+	auto& inst = instances[0];
+	if (!inst.ctx) return;
+	uint8_t t[2] = {};
+	emu88_peek_work_ram(inst.ctx, kRam88Tune, t, 2);
+	if (t[0] == tune_seen[0] && t[1] == tune_seen[1]) return;
+	tune_seen[0] = t[0];
+	tune_seen[1] = t[1];
+	if (render_frame_count >= panel_used_until) return; // from the host: every unit has it
+	const int tune = t[0] << 8 | t[1];
+	uint8_t m[14] = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x00,
+	                 static_cast<uint8_t>(tune >> 12 & 15), static_cast<uint8_t>(tune >> 8 & 15),
+	                 static_cast<uint8_t>(tune >> 4 & 15), static_cast<uint8_t>(tune & 15), 0, 0xf7};
+	int sum = 0;
+	for (int k = 5; k < 12; ++k) sum += m[k];
+	m[12] = static_cast<uint8_t>((128 - (sum & 0x7f)) & 0x7f);
+	E88Forward(0, m, sizeof(m));
+}
+#endif
+
 namespace {
 #ifdef NUKED_SC55_DEVICE_88
 // SC-88 (control ROM 1.01, the only one the builder accepts): switch bits (88emu sc88types.h)
@@ -1975,6 +2179,9 @@ void NukedSc55::E88PanelInput()
 	auto& inst = instances[0];
 	if (!inst.ctx) return;
 	uint32_t buttons = ui_panel_buttons.load(std::memory_order_relaxed);
+#if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
+	E88PanelConfirm(buttons);
+#endif
 #ifdef NUKED_SC55_DEVICE_88
 	// In ALL mode, EQ, INST MAP and MIDI CH change panel states of the whole unit that have no
 	// GS parameter (EQ off for everything, all tone maps, device ID) and could not be passed on.
@@ -2482,6 +2689,14 @@ void NukedSc55::ReplayInto(Instance& inst, const std::vector<StateLog::Entry>& e
 	E88ApplyMapSync(inst, tone_map.load());
 	size_t bytes = 0;
 	for (const auto& e : entries) {
+#if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
+		if (StateLog::IsCm64Marker(e.bytes)) {
+			E88Drain(inst, bytes, 0.005);
+			bytes = 0;
+			E88Cm64Sync(inst);
+			continue;
+		}
+#endif
 		emu88_parse_stream_on_port(inst.ctx, e.port, e.bytes.data(), static_cast<uint32_t>(e.bytes.size()));
 		bytes += e.bytes.size();
 		if (e.is_reset) {
@@ -2648,6 +2863,14 @@ void NukedSc55::Wake(const int i)
 	{
 		size_t bytes = 0;
 		state_log.ForEachSince(inst.sleep_seq, [&](const StateLog::Entry& e) {
+#if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
+			if (StateLog::IsCm64Marker(e.bytes)) {
+				E88Drain(inst, bytes, 0.005);
+				bytes = 0;
+				E88Cm64Sync(inst);
+				return;
+			}
+#endif
 			emu88_parse_stream_on_port(inst.ctx, e.port, e.bytes.data(), static_cast<uint32_t>(e.bytes.size()));
 			bytes += e.bytes.size();
 			replayed_bytes += static_cast<int>(e.bytes.size());
@@ -2694,6 +2917,7 @@ void NukedSc55::Wake(const int i)
 	});
 	step_until_drained(0.005);
 	E55ApplyMutes(inst, applied_mute55); // panel MUTE flags are not part of the state log
+	E55ApplyRxSwitches(inst);            // nor the system menu's Rx switches
 #endif
 
 	inst.read_pos      = 0;
