@@ -883,7 +883,7 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	{
 		int voices = 0;
 		for (int i = 0; i < NumInstances(); ++i) {
-			if (instances[i].awake) voices += ActivePartials(i);
+			voices += SoundingPartials(i);
 		}
 		ui_voices.store(voices, std::memory_order_relaxed);
 		uint64_t mask = 0;
@@ -1374,10 +1374,21 @@ int NukedSc55::ActivePartials(const int i) const
 	return n;
 }
 
+// Partials that count as load. After an abrupt stop (All Sound Off) the SC-55
+// firmware can leave partials parked at a tiny non-zero TVA level that never
+// decays; an instance that has been silent for the whole sleep period has no
+// audible voice left, so those must not block sleeping or steer routing.
+int NukedSc55::SoundingPartials(const int i) const
+{
+	const auto& inst = instances[i];
+	if (!inst.awake || inst.silent_frames >= sleep_after_frames) return 0;
+	return ActivePartials(i);
+}
+
 void NukedSc55::MeasureLoad()
 {
 	for (int i = 0; i < NumInstances(); ++i) {
-		router.SetMeasuredLoad(i, instances[i].awake ? ActivePartials(i) : 0);
+		router.SetMeasuredLoad(i, SoundingPartials(i));
 	}
 }
 

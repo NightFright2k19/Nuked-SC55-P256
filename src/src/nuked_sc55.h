@@ -231,6 +231,7 @@ public:
 		return n;
 	}
 	int ActivePartials(int instance) const;
+	int SoundingPartials(int instance) const;
 
 	// Diagnostics (tests only)
 	struct InstanceDiag {
