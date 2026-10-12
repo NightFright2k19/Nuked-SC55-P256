@@ -110,6 +110,7 @@ struct Editor {
     uint32_t held85 = 0;       // panel switches held with the mouse (bit = 88emu / MCU button)
     bool release85  = false;   // mouse released, switches let go after the minimum hold
     DWORD press85   = 0;       // tick of the press
+    uint32_t latch85 = 0;      // switches held by a right click (key combinations); let go with the next left-click switch
 #ifdef NUKED_SC55_DEVICE_8850
     int push85      = 0;       // VALUE push pulse, timer frames left
     int value85     = 0;       // VALUE knob position (detents; 4 knurl phases)

@@ -105,6 +105,15 @@ public:
 		       (roland_dt1 && m[5] == 0x40 && m[6] == 0x00 && m[7] == 0x7f);
 	}
 
+	// Private marker of the plugin (non-commercial ID 7D; the firmware ignores it): the panel
+	// function "Initialize CM-64" of the SC-88 / SC-88 Pro, which has no MIDI message. It
+	// initialises the module like a reset; replaying it runs the panel function.
+	static constexpr uint8_t kCm64Marker[] = {0xf0, 0x7d, 'P', '2', '5', '6', 'C', 'M', '6', '4', 0xf7};
+	static bool IsCm64Marker(std::span<const uint8_t> m)
+	{
+		return std::equal(m.begin(), m.end(), std::begin(kCm64Marker), std::end(kCm64Marker));
+	}
+
 	// System Mode Set (00 00 7F dd): dd = 0 Mode 1 (Single Module), 1 Mode 2 (Double Module)
 	static int SystemModeOf(std::span<const uint8_t> m)
 	{
@@ -134,8 +143,8 @@ public:
 			Put(Key(5, 0, 0), m, true);
 			return;
 		}
-		if (IsReset(m)) {
-			if (double_module) {
+		if (IsReset(m) || IsCm64Marker(m)) {
+			if (double_module && !IsCm64Marker(m)) {
 				// Mode 2: only this MIDI IN's part group starts over
 				std::erase_if(entries, [&](const Entry& e) { return e.port == cur_port && (e.key >> 56) != 5; });
 				ClearChannels(cur_port * 16, cur_port * 16 + 16);

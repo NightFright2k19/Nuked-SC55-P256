@@ -160,7 +160,7 @@ void Draw55(Editor& e, HDC dc)
     // Switches and lamps as the firmware lights them, darker while held
     const uint32_t leds = p.PanelLeds();
     for (const auto& b : E55_BTNS) {
-        const bool held = (e.held85 >> b.bit) & 1u;
+        const bool held = ((e.held85 | e.latch85) >> b.bit) & 1u;
         const int lit   = (b.led >= 0 && ((leds >> b.led) & 1u)) ? 2 : 0;
         Blend55(dc, b.sprite + lit + (held ? 1 : 0));
     }
@@ -181,7 +181,7 @@ void Draw55(Editor& e, HDC dc)
 bool Mouse55(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     NukedSc55& p = *e.plugin;
-    const auto send = [&] { p.ui_panel_buttons = e.held85; };
+    const auto send = [&] { p.ui_panel_buttons = e.held85 | e.latch85; };
     switch (msg) {
     case WM_LBUTTONDOWN:
     case WM_LBUTTONDBLCLK: {
@@ -210,12 +210,21 @@ bool Mouse55(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         return true;
     }
+    case WM_RBUTTONDOWN: { // right click: hold the switch until the next left-click switch (key combinations)
+        const int h = Hit55((short)LOWORD(lp), (short)HIWORD(lp));
+        if (h >= 1 && h <= E55_NBTN) {
+            e.latch85 ^= 1u << E55_BTNS[h - 1].bit;
+            send();
+        }
+        return true;
+    }
     case WM_LBUTTONUP:
     case WM_CAPTURECHANGED:
         if (e.held85 && !e.release85) { // released by the timer once held long enough
             e.release85 = true;
             if (GetTickCount() - e.press85 >= E55_MIN_HOLD_MS) {
-                e.held85 = 0;
+                e.held85  = 0;
+                e.latch85 = 0;
                 send();
             }
             if (msg == WM_LBUTTONUP) ReleaseCapture();
@@ -223,7 +232,8 @@ bool Mouse55(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return false; // GAIN drag: shared code
     case WM_TIMER:
         if (e.release85 && e.held85 && GetTickCount() - e.press85 >= E55_MIN_HOLD_MS) {
-            e.held85 = 0;
+            e.held85  = 0;
+            e.latch85 = 0;
             send();
         }
         return false;

@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <span>
 #include <thread>
 #include <utility>
 #include <filesystem>
@@ -369,9 +370,12 @@ private:
 	std::array<uint8_t, 0x700> panel_seen{}; // unit 0's parameter memory (SRAM 0..6FF) as last seen
 	bool panel_seen_valid = false;
 	uint16_t applied_mute55 = 0xffff; // part MUTE flags applied to the other units (bit = GS block)
+	std::array<uint8_t, 8> rx_seen55{}; // unit 0's system Rx switches as last seen
 	bool all_mute55 = false;          // ALL + MUTE: whole module silent
 	void E55PanelInput();
 	void E55PanelPump();
+	std::span<const uint16_t> E55RxSwitches() const;
+	void E55ApplyRxSwitches(Instance& inst);
 	void E55ApplyMutes(Instance& inst, uint16_t rx);
 public:
 #endif
@@ -384,6 +388,15 @@ private:
 	bool all_eq_on   = true; // SC-88: ALL + EQ, EQ switch of all parts (applied as GS parameters)
 	void E88EditPump();
 	void E88SendAll(uint8_t port, const uint8_t* msg, size_t size);
+	// Panel functions of unit 0 without a GS parameter (SELECT + ..., confirmed with ALL):
+	// Initialize GM / CM-64 and Set Mode 1 / 2 are repeated on the other units and logged.
+	void E88PanelConfirm(uint32_t buttons);
+	void E88PanelTune();
+	void E88StartCm64(Instance& inst);
+	void E88Cm64Sync(Instance& inst);
+	uint32_t confirm_prev = 0;     // GUI switches at the last check
+	uint64_t panel_used_until = 0; // render frame until which unit 0's master tune is passed on
+	uint8_t tune_seen[2] = {0x04, 0x00};
 public:
 #endif
 #ifdef NUKED_SC55_DEVICE_8850
