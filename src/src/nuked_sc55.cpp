@@ -1443,18 +1443,43 @@ void NukedSc55::RenderAudio(const uint32_t num_frames)
 		});
 	}
 
-	// Silence detection (for putting idle instances to sleep)
+	// Silence detection (for putting idle instances to sleep). Measured as
+	// the peak-to-peak span since the silent run began, so any constant
+	// output offset (unit 0 keeps its idle DC, and the idle level after
+	// playing can differ from the one measured at boot) can't hide silence.
 	for (auto& inst : instances) {
 		if (!inst.awake) continue;
+		float lo_l = inst.buf_l[inst.read_pos], hi_l = lo_l;
+		float lo_r = inst.buf_r[inst.read_pos], hi_r = lo_r;
 		float peak = 0.0f;
 		for (uint32_t f = 0; f < num_frames; ++f) {
-			peak = std::max(peak, std::abs(inst.buf_l[inst.read_pos + f] - inst.dc_l));
-			peak = std::max(peak, std::abs(inst.buf_r[inst.read_pos + f] - inst.dc_r));
+			const float l = inst.buf_l[inst.read_pos + f];
+			const float r = inst.buf_r[inst.read_pos + f];
+			lo_l = std::min(lo_l, l); hi_l = std::max(hi_l, l);
+			lo_r = std::min(lo_r, r); hi_r = std::max(hi_r, r);
+			peak = std::max(peak, std::max(std::abs(l - inst.dc_l), std::abs(r - inst.dc_r)));
 		}
-		inst.last_peak     = peak;
-		// "Silent": below two output LSBs of the SC-55 (~-72 dBFS); the mk1
-		// output keeps toggling by one LSB even without any sounding voice.
-		inst.silent_frames = (peak < 2.5e-4f) ? inst.silent_frames + num_frames : 0;
+		inst.last_peak = peak;
+		if (inst.silent_frames == 0) {
+			inst.sil_lo_l = lo_l; inst.sil_hi_l = hi_l;
+			inst.sil_lo_r = lo_r; inst.sil_hi_r = hi_r;
+		} else {
+			inst.sil_lo_l = std::min(inst.sil_lo_l, lo_l); inst.sil_hi_l = std::max(inst.sil_hi_l, hi_l);
+			inst.sil_lo_r = std::min(inst.sil_lo_r, lo_r); inst.sil_hi_r = std::max(inst.sil_hi_r, hi_r);
+		}
+		// "Silent": span below four output LSBs of the SC-55 (~-66 dBFS
+		// peak-to-peak); the mk1 output keeps toggling by one LSB even
+		// without any sounding voice.
+		const bool quiet = inst.sil_hi_l - inst.sil_lo_l < 5e-4f &&
+		                   inst.sil_hi_r - inst.sil_lo_r < 5e-4f;
+		if (quiet) {
+			inst.silent_frames += num_frames;
+		} else {
+			// restart the run with this block alone
+			inst.silent_frames = (hi_l - lo_l < 5e-4f && hi_r - lo_r < 5e-4f) ? num_frames : 0;
+			inst.sil_lo_l = lo_l; inst.sil_hi_l = hi_l;
+			inst.sil_lo_r = lo_r; inst.sil_hi_r = hi_r;
+		}
 	}
 
 	// Mix: sum all awake instances (each a complete SC-55 incl. effects)
