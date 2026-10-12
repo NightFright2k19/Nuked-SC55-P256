@@ -20,7 +20,7 @@ g++ -O2 -std=c++20 -I$C -I$C/backend -I$S/src ref.cpp $C/backend/*.cpp $C/common
 
 echo "  test/ (CLAP-Ebene, linkt die Objekte des Linux-Builds)"
 cd $T/test; OBJ=$(find $S/build -name '*.o')
-for t in host play e1 diag peaks lcddump mem act idle; do
+for t in host play e1 diag peaks lcddump lcdscroll mem act idle; do
   g++ -O2 -std=c++23 -I$S/include -I$S/src -I$S/build $t.cpp $OBJ -lspeexdsp -lpthread -o $t
 done
 

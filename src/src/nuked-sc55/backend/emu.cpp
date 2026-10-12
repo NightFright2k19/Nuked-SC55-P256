@@ -310,6 +310,10 @@ void Emulator::CopyStateFrom(const Emulator& other)
         d.LCD_RAM_MODE = s.LCD_RAM_MODE;
         std::memcpy(d.LCD_Data, s.LCD_Data, sizeof(d.LCD_Data));
         std::memcpy(d.LCD_CG, s.LCD_CG, sizeof(d.LCD_CG));
+        std::memcpy(d.LCD_Shown, s.LCD_Shown, sizeof(d.LCD_Shown));
+        std::memcpy(d.LCD_Hist, s.LCD_Hist, sizeof(d.LCD_Hist));
+        std::memcpy(d.LCD_Unstable, s.LCD_Unstable, sizeof(d.LCD_Unstable));
+        d.LCD_Refreshes = s.LCD_Refreshes;
         d.enable = s.enable.load();
         d.width = s.width; d.height = s.height;
     }

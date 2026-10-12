@@ -1339,7 +1339,8 @@ bool NukedSc55::GetLcd(const int unit, LcdSnapshot& out)
 #else
 	lcd_t& lcd = instances[unit].emu->GetLCD();
 	std::lock_guard lk(lcd.mutex); // the MCU writes the LCD under this mutex
-	std::memcpy(out.dd, lcd.LCD_Data, sizeof(out.dd));
+	// text as presented: rows settle per firmware refresh (issue #36, see lcd_t::LCD_Shown)
+	std::memcpy(out.dd, lcd.LCD_Refreshes ? lcd.LCD_Shown : lcd.LCD_Data, sizeof(out.dd));
 	std::memcpy(out.cg, lcd.LCD_CG, sizeof(out.cg));
 	out.on = lcd.enable.load();
 	return true;
