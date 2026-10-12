@@ -53,7 +53,10 @@ static void LCD_RefreshDone(lcd_t& lcd)
         const int o = r * 40;
         const uint8_t* const row = lcd.LCD_Data + o;
         const uint8_t* const prev = lcd.LCD_Hist[(now + H - 1) % H] + o;
-        if (lcd.LCD_Refreshes == 0 || memcmp(row, prev, 40) == 0)
+        const uint8_t* const prev2 = lcd.LCD_Hist[(now + H - 2) % H] + o;
+        // the same as the refresh before, or as the one before that (a redraw caught in between)
+        if (lcd.LCD_Refreshes == 0 || memcmp(row, prev, 40) == 0 ||
+            (lcd.LCD_Refreshes >= 2 && memcmp(row, prev2, 40) == 0))
         {
             memcpy(lcd.LCD_Shown + o, row, 40);
             lcd.LCD_Unstable[r] = 0;

@@ -82,8 +82,8 @@ struct lcd_t {
     // for a moment and the scroll routine puts the text back; a refresh in between shows a
     // stray character or name fragment for one refresh (the slow glass of the real unit
     // hardly shows it, the emulated LCD does). A row of LCD_Shown takes a refresh's content
-    // once two refreshes in a row agree; if it keeps changing, after 8 refreshes the row of the
-    // last 8 that is closest to the others is shown. Not part of the emulated hardware.
+    // once it equals one of the two refreshes before; if it keeps changing, after 8 refreshes
+    // the row of the last 8 that is closest to the others is shown. Not part of the emulated hardware.
     static constexpr int kLcdHist = 8;
     uint8_t LCD_Shown[80]{};
     uint8_t LCD_Hist[kLcdHist][80]{};
