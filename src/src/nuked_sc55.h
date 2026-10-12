@@ -110,6 +110,7 @@ private:
 		size_t read_pos = 0;
 		std::vector<QueuedMidi> queue;   // events for the current block
 		float dc_l = 0.0f, dc_r = 0.0f;  // idle output offset to cancel
+		float sil_lo_l = 0, sil_hi_l = 0, sil_lo_r = 0, sil_hi_r = 0; // span of the current silent run
 #ifdef NUKED_SC55_ENGINE_88PRO
 		emu88_context ctx = nullptr;     // SC-88 Pro / SC-8850 / SC-88 unit (88emu)
 		std::shared_ptr<std::atomic<bool>> booted = std::make_shared<std::atomic<bool>>(false);
