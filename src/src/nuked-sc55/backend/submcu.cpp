@@ -1315,6 +1315,12 @@ void SM_HandleInterrupt(submcu_t& sm)
     if (sm.sr & SM_STATUS_I)
         return;
 
+    // Every vector below needs an enabled, requested interrupt or the
+    // collision condition; skip the checks when there is none.
+    if ((sm.device_mode[SM_DEV_INT_ENABLE] & sm.device_mode[SM_DEV_INT_REQUEST]) == 0
+        && (sm.device_mode[SM_DEV_COLLISION] & 0xc0) != 0xc0)
+        return;
+
     if ((sm.device_mode[SM_DEV_UART1_CTRL] & 0x8) != 0
         && (sm.device_mode[SM_DEV_INT_ENABLE] & 0x80) != 0
         && (sm.device_mode[SM_DEV_INT_REQUEST] & 0x80) != 0)
@@ -1392,26 +1398,36 @@ void SM_HandleInterrupt(submcu_t& sm)
 
 void SM_UpdateTimer(submcu_t& sm)
 {
-    while (sm.timer_cycles < sm.cycles)
+    // Bit-exact bulk form of the original loop (one prescaler step per 16
+    // cycles while the timer runs): runs of non-zero prescaler steps are
+    // taken at once.
+    if (sm.timer_cycles >= sm.cycles)
+        return;
+    uint64_t n = (sm.cycles - sm.timer_cycles + 15) / 16;
+    sm.timer_cycles += n * 16;
+    if ((sm.device_mode[SM_DEV_TIMER_CTRL] & 0x20) != 0 || sm.sleep)
+        return;
+    while (n > 0)
     {
-        if ((sm.device_mode[SM_DEV_TIMER_CTRL] & 0x20) == 0 && !sm.sleep)
+        if (sm.timer_prescaler == 0)
         {
-            if (sm.timer_prescaler == 0)
-            {
-                sm.timer_prescaler = sm.device_mode[SM_DEV_PRESCALER];
+            sm.timer_prescaler = sm.device_mode[SM_DEV_PRESCALER];
 
-                if (sm.timer_counter == 0)
-                {
-                    sm.timer_counter = sm.device_mode[SM_DEV_TIMER];
-                    sm.device_mode[SM_DEV_INT_REQUEST] |= 0x8;
-                }
-                else
-                    sm.timer_counter--;
+            if (sm.timer_counter == 0)
+            {
+                sm.timer_counter = sm.device_mode[SM_DEV_TIMER];
+                sm.device_mode[SM_DEV_INT_REQUEST] |= 0x8;
             }
             else
-                sm.timer_prescaler--;
+                sm.timer_counter--;
+            --n;
         }
-        sm.timer_cycles += 16;
+        else
+        {
+            const uint64_t k = n < sm.timer_prescaler ? n : sm.timer_prescaler;
+            sm.timer_prescaler = (decltype(sm.timer_prescaler))(sm.timer_prescaler - k);
+            n -= k;
+        }
     }
 }
 

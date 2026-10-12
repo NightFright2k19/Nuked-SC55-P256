@@ -113,6 +113,7 @@ void TIMER_Reset(mcu_timer_t& timer)
     for (bool& d : timer.frt_dirty) d = true;
     timer.tmr_dirty  = true;
     timer.next_event = 0;
+    for (uint64_t& t : timer.tnext) t = 0;
 
     for (int i = 0; i < 3; ++i)
     {
@@ -145,6 +146,7 @@ void TIMER_Write(mcu_timer_t& timer, uint32_t address, uint8_t data)
         return;
     frt_t& frt = timer.frt[t];
     timer.frt_dirty[t] = true;
+    timer.tnext[t]     = 0; // recomputed with the new registers at the next clock
 
     address &= 0x0f;
     switch (address)
@@ -241,6 +243,7 @@ void TIMER2_Write(mcu_timer_t& timer, uint32_t address, uint8_t data)
     timer.next_event = 0;
     tmr_t& tmr = timer.tmr;
     timer.tmr_dirty = true;
+    timer.tnext[3]  = 0; // recomputed with the new registers at the next clock
 
     switch (address)
     {
@@ -380,7 +383,7 @@ static inline void TIMER_TickTmr(mcu_timer_t& timer)
 // Number of timer cycles c in [t0, t1) with (c & mask) == 0
 static inline uint64_t TIMER_TicksIn(uint64_t t0, uint64_t t1, uint64_t mask)
 {
-    const int sh = std::popcount(mask); // mask = 2^sh - 1
+    const int sh = std::countr_one(mask); // mask = 2^sh - 1 (countr_one compiles to tzcnt/bsf, popcount to a libgcc call)
     return ((t1 + mask) >> sh) - ((t0 + mask) >> sh);
 }
 
@@ -432,6 +435,41 @@ static void TIMER_AdvanceFrt(mcu_timer_t& timer, int i, uint64_t t1)
     timer.tpos[i] = t1;
 }
 
+// Advance the 8-bit timer by n of its own ticks (original logic per eventful tick)
+static void TIMER_StepTmr(mcu_timer_t& timer, uint64_t n)
+{
+    tmr_t& tmr = timer.tmr;
+    while (n > 0)
+    {
+        if (timer.tmr_dirty || tmr.tcnt == tmr.tcora || tmr.tcnt == tmr.tcorb || tmr.tcnt == 0xff)
+        {
+            TIMER_TickTmr(timer);
+            timer.tmr_dirty = false;
+            --n;
+            continue;
+        }
+        const uint64_t da = (uint8_t)(tmr.tcora - tmr.tcnt);
+        const uint64_t db = (uint8_t)(tmr.tcorb - tmr.tcnt);
+        const uint64_t dv = (uint8_t)(0xff - tmr.tcnt);
+        uint64_t k = da < db ? da : db;
+        if (dv < k) k = dv;
+        if (n < k) k = n;
+        tmr.tcnt = (uint8_t)(tmr.tcnt + k);
+        n -= k;
+    }
+}
+
+// The 8-bit timer with all its interrupts disabled (SC-55mk2: a 6-cycle
+// compare-match-A clear loop) changes nothing the MCU can see until it
+// accesses the timer registers, and those accesses sync first. Its counter
+// is then a function of the tick count alone: after 256 ticks it runs in a
+// cycle of at most 256 ticks and its sticky flags no longer change, so whole
+// cycles can be skipped.
+static inline bool TIMER_TmrQuiet(const mcu_timer_t& timer)
+{
+    return (timer.tmr.tcr & (TMR_TCR_OVIE | TMR_TCR_CMIEA | TMR_TCR_CMIEB)) == 0;
+}
+
 static void TIMER_AdvanceTmr(mcu_timer_t& timer, uint64_t t1)
 {
     const uint64_t t0 = timer.tpos[3];
@@ -441,24 +479,21 @@ static void TIMER_AdvanceTmr(mcu_timer_t& timer, uint64_t t1)
     if (mask != 0)
     {
         uint64_t n = TIMER_TicksIn(t0, t1, mask);
-        while (n > 0)
+        if (n > 1024 && TIMER_TmrQuiet(timer))
         {
-            if (timer.tmr_dirty || tmr.tcnt == tmr.tcora || tmr.tcnt == tmr.tcorb || tmr.tcnt == 0xff)
+            TIMER_StepTmr(timer, 512); // now inside the cycle, flags settled
+            n -= 512;
+            const uint8_t c0 = tmr.tcnt;
+            uint64_t len = 0;
+            do
             {
-                TIMER_TickTmr(timer);
-                timer.tmr_dirty = false;
+                TIMER_StepTmr(timer, 1);
+                ++len;
                 --n;
-                continue;
-            }
-            const uint64_t da = (uint8_t)(tmr.tcora - tmr.tcnt);
-            const uint64_t db = (uint8_t)(tmr.tcorb - tmr.tcnt);
-            const uint64_t dv = (uint8_t)(0xff - tmr.tcnt);
-            uint64_t k = da < db ? da : db;
-            if (dv < k) k = dv;
-            if (n < k) k = n;
-            tmr.tcnt = (uint8_t)(tmr.tcnt + k);
-            n -= k;
+            } while (tmr.tcnt != c0);
+            n %= len;
         }
+        TIMER_StepTmr(timer, n);
     }
     timer.tpos[3] = t1;
 }
@@ -486,6 +521,7 @@ static uint64_t TIMER_NextEventOf(const mcu_timer_t& timer, int i)
     const tmr_t&   tmr  = timer.tmr;
     const uint64_t mask = timer.tmr_step_table[tmr.tcr & (TMR_TCR_CKS0 | TMR_TCR_CKS1 | TMR_TCR_CKS2)];
     if (mask == 0) return UINT64_MAX;
+    if (TIMER_TmrQuiet(timer)) return UINT64_MAX; // advanced when the MCU accesses it
     const uint64_t first = (t + mask) & ~mask;
     uint64_t d = 0;
     if (!timer.tmr_dirty && tmr.tcnt != tmr.tcora && tmr.tcnt != tmr.tcorb && tmr.tcnt != 0xff)
