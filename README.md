@@ -66,6 +66,7 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 ### Core and speed
 
 - **Bit-exact lazy timer evaluation** in `mcu_timer.cpp`: event-free timer ticks only increment a counter. About **35-40 % less CPU** per instance (with `-O3 -flto`), output identical to the original core.
+- **Bit-exact timer and sub-MCU shortcuts** (Issue #28): the 8-bit timer skips whole counting cycles while all its interrupts are off (the SC-55mk2 runs it as a 6-cycle loop), and the SC-55mk2 sub-MCU takes its timer prescaler and interrupt checks in bulk. SC-55mk2 about 12 % and SC-55 about 9 % less CPU under full load, output still identical to the original core.
 - **Packing and wake logic:** notes fill the lowest awake instance first; a single awake instance renders directly in the audio thread without any threading overhead.
 - **Memory:** wave ROMs are shared between SC-55 units (one block, untouched pages cost nothing); the unused 4 MB LCD pixel buffer per unit is gone; 88emu units share one decoded wave ROM.
 - **Faster loading:** SC-55 units are cloned from unit 0 instead of each booting itself (SC-55mk2 load time 6.4 s to 0.6 s under Wine); SC-88 Pro units boot in the background.
