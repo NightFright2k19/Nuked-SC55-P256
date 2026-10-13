@@ -395,7 +395,7 @@ The patcher (`patcher.py`, texts in `patcher_i18n.py`) is a small window around 
 - **ROM files:** searched in the patcher's folder and all subfolders (by SHA-256, names do not matter). If no complete set is found there, it asks for the folder; **Change…** picks another one at any time. Each model is listed as complete, incomplete (with the missing parts) or not found.
 - **Patch:** builds every complete model into `Plugins/CLAP/<name>.clap` and `Plugins/VST2/<name>.dll` next to the patcher (the folder is created if needed). **Details** shows which file was used for which part.
 - **Same result as the script:** the patcher calls the functions of `p256_builder.py`; the plug-ins are byte-identical to those of `python p256_builder.py`.
-- **Languages:** English, German, French, Italian, Spanish, Portuguese, Chinese (Mandarin), Hindi, Bengali, Russian, Japanese, Turkish. The system language is used if available, otherwise English; the menu at the top right switches it.
+- **Languages:** Arabic, Bengali, Chinese (Mandarin), Czech, Danish, Dutch, English, French, German, Greek, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Korean, Persian, Polish, Portuguese, Romanian, Russian, Serbian, Spanish, Swedish, Thai, Turkish, Ukrainian, Vietnamese. The system language is used if available, otherwise English; the menu at the top right switches it.
 - **Without a window:** `patcher --build [folder]` builds from the given folder (default: the patcher's folder) and prints the result; `patcher --selftest` checks the bundled templates.
 
 > [!NOTE]

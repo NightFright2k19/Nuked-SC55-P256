@@ -81,7 +81,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install PyInstaller
-        run: python -m pip install --upgrade pip pyinstaller
+        run: python -m pip install --upgrade pip pyinstaller python-bidi arabic-reshaper   # bidi/reshaper: right-to-left texts on Linux
 
       - name: Build patcher
         env:

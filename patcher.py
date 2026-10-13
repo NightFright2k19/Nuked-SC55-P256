@@ -51,8 +51,10 @@ def system_language(known) -> str:
         names.append(locale.getlocale()[0] or '')
     except Exception:
         pass
+    alias = {'iw': 'he', 'in': 'id', 'ji': 'yi'}          # old ISO codes still used by some systems
     for n in names:
         code = n.replace('-', '_').split('_')[0].split('.')[0].lower()
+        code = alias.get(code, code)
         if code in known:
             return code
     return 'en'
@@ -109,6 +111,27 @@ def selftest() -> int:
     return 0
 
 
+RTL = {'ar', 'fa', 'he'}
+
+
+def shape_rtl(text: str, width: int = 0) -> str:
+    """Tk on Linux (Xft) neither joins Arabic letters nor reorders right-to-left text; Windows and
+    macOS do both themselves. On Linux the text is prepared with arabic_reshaper and python-bidi
+    (bundled in the release build); without them it is shown unchanged. Long texts are wrapped
+    here (width = characters per line) before reordering, since Tk would wrap the reordered text
+    from the wrong end."""
+    if sys.platform in ('win32', 'darwin'):
+        return text
+    try:
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+    except ImportError:
+        return text
+    import textwrap
+    lines = textwrap.wrap(text, width) if width else [text]
+    return '\n'.join(get_display(arabic_reshaper.reshape(line)) for line in lines)
+
+
 def main_window():
     import tkinter as tk
     from tkinter import ttk, filedialog
@@ -121,17 +144,20 @@ def main_window():
               status=('scanning', {}), asked=False)
     q = queue.Queue()
 
-    def T(key, **kw):
-        return TEXT[st['lang']].get(key, TEXT['en'][key]).format(**kw)
+    def T(key, width=0, **kw):
+        text = TEXT[st['lang']].get(key, TEXT['en'][key]).format(**kw)
+        return shape_rtl(text, width) if st['lang'] in RTL else text
+
+    shown = {code: shape_rtl(name) if code in RTL else name for code, name in LANGUAGES.items()}
 
     frame = ttk.Frame(root, padding=14)
     frame.grid(sticky='nsew')
     head = ttk.Frame(frame)
     head.grid(row=0, column=0, columnspan=3, sticky='ew')
     ttk.Label(head, text=NAME, font=('TkDefaultFont', 13, 'bold')).pack(side='left')
-    lang_var = tk.StringVar(value=LANGUAGES[st['lang']])
-    lang_box = ttk.Combobox(head, textvariable=lang_var, values=list(LANGUAGES.values()),
-                            state='readonly', width=11)
+    lang_var = tk.StringVar(value=shown[st['lang']])
+    lang_box = ttk.Combobox(head, textvariable=lang_var, values=list(shown.values()),
+                            state='readonly', width=16, height=len(LANGUAGES))
     lang_box.pack(side='right')
     intro = ttk.Label(frame, wraplength=520)
     intro.grid(row=1, column=0, columnspan=3, sticky='w', pady=(2, 10))
@@ -166,7 +192,7 @@ def main_window():
         return [it for it in st['items'] if not it['missing']]
 
     def refresh():
-        intro['text'] = T('intro')
+        intro['text'] = T('intro', 70)
         box['text'] = T('files')
         folder_lbl['text'] = T('folder') + ':'
         folder_val['text'] = str(st['folder'])
@@ -185,7 +211,7 @@ def main_window():
             ttk.Label(rows, text=text, foreground='#555').grid(row=i, column=2, sticky='e')
         target['text'] = T('target') + ':  ' + str(PLUGINS)
         key, kw = st['status']
-        status['text'] = T(key, **kw)
+        status['text'] = T(key, 40, **kw)
         det_btn['text'] = T('hide') if st['details'] else T('details')
         patch_btn['text'] = T('patch')
         open_btn['text'] = T('open_folder')
@@ -282,7 +308,7 @@ def main_window():
             subprocess.Popen(['xdg-open', p])
 
     def pick_lang(_=None):
-        st['lang'] = {v: k for k, v in LANGUAGES.items()}[lang_var.get()]
+        st['lang'] = {v: k for k, v in shown.items()}[lang_var.get()]
         refresh()
 
     def poll():
