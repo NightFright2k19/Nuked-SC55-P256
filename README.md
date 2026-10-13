@@ -190,7 +190,7 @@ All instances boot identically and receive identical controller and SysEx data. 
 | Retrigger of a held key | Same instance if at least 2 partials are free there, otherwise a normal pick. |
 | Mono mode (CC 126/127) and portamento (CC 65) | The channel is pinned to one instance. |
 | Rhythm parts | Exclusive groups (hi-hat, whistle, guiro, cuica, triangle, surdo; notes 27-29, 42/44/46, 71/72, 73/74, 78/79, 80/81, 86/87) stay on one instance per channel so that choke groups work. GS SysEx "Use for Rhythm Part" (`40 1x 15`) and "Rx Channel" (`40 1x 02`) are tracked. |
-| Everything else | CC, program change, pitch bend, pressure, SysEx and resets go to **all awake** instances. |
+| Everything else | CC, program change, pitch bend, pressure, SysEx and resets go to **all awake** instances. Exception: display SysEx goes to unit 0 only (see [Display SysEx](#display-sysex)). |
 
 **Load measurement:** the load of an instance is its number of sounding partials plus 2 per note sent since the last measurement. A slot counts as active when its TVA envelope level (`pcm.ram2[slot][10]`) is non-zero; the voice mask of the chip is always full and cannot be used. For the 88emu core, a voice is active when `combinedAmp_2300 != 0`.
 
@@ -214,6 +214,12 @@ After boot, everything except `min_active` (1) sleeps.
 
 ---
 
+### Display SysEx
+
+Display messages (Roland model `45`: text `45 10 00 xx`, 16 x 16 bitmaps `45 10 01 xx`, the SC-8850's 160 x 64 bitmaps `45 20 0x 00`) only change the LCD, which the panel shows from unit 0. On all models they go to unit 0 alone and are not logged for waking other units, so songs full of bitmaps cost no CPU on the other units.
+
+The firmware takes MIDI in at its own pace (SC-55: emulated UART, SC-88 / SC-88 Pro: MIDI wire speed, SC-8850: USB, slowed down by drawing the bitmaps). When the host sends a large burst, for example all SysEx up to the new position after seeking, display data would queue up and hold back the notes behind it for seconds (on the SC-55 the 8 KB input buffer could even overflow). So a display message goes straight to unit 0, sample-accurate, as long as nothing is waiting and unit 0 has less than 512 bytes not yet taken in; otherwise it waits in a short queue (at most 64; newer data for the same address replaces older data) that is handed on as unit 0 catches up. GS Reset / GM On empties the queue. In normal playback the LCD shows exactly what it showed before.
+
 ## Capital Tone Fallback (SC-55mk2)
 
 With CTF, a module falls back to the capital (basic) tone of a program when the selected variation tone does not exist, instead of staying silent. The SC-55 firmware does this by itself; the original SC-55mk2 firmware does not, which is why the mk2 ROM gets patched.
@@ -231,7 +237,7 @@ With CTF, a module falls back to the capital (basic) tone of a program when the 
 The SC-88 Pro variant does not use the Nuked core. It uses **88emu**, a low-level emulation of the SC-88 / SC-88VL / SC-88Pro / SC-8850 with the original firmware, written by The Usual Suspects and part of [Gearmulator](https://github.com/dsp56300/gearmulator) (marked "early access alpha" there, GPLv3).
 
 - **Pinned version:** Gearmulator `96deb437794baf109fb996a2f8806ce2ee949246`, with the submodules dsp56300 `c1d6593`, asmjit `3577608`, mc68k `cc3693a`, freetype `8289165`, lunasvg `f8aabfb` (+ plutovg `5e4712c`) and RmlUi `d2e83ba`. `tools/build_88emu.sh <target> <source>` fetches and builds exactly this state (about 8-10 min on one core).
-- **Patches** (`third_party/88emu/`): `88emu-nuked-poly.patch` adds `emu88_get_active_voice_count` (voice counter), `emu88_set_sc88pro_rom_images` (a normalised ROM set from memory, bypassing the file scan), `emu88_dump_sc88pro_rom_images` (build tool) and `emu88_get_display_memory` (LCD). It also carries the upstream fix [c41eb8d3](https://github.com/dsp56300/gearmulator/commit/c41eb8d3) from after the pin: on the SC-88 and SC-88 Pro, DT1 SysEx to the address blocks `08` and `0C` (e.g. `0C 20 04`, the Pro's SC-88 mode) now reaches the firmware instead of being dropped. `dsp56300-mingw.patch` restricts SEH (`__try`) to MSVC.
+- **Patches** (`third_party/88emu/`): `88emu-nuked-poly.patch` adds `emu88_get_active_voice_count` (voice counter), `emu88_set_sc88pro_rom_images` (a normalised ROM set from memory, bypassing the file scan), `emu88_dump_sc88pro_rom_images` (build tool), `emu88_get_display_memory` (LCD) and `emu88_get_midi_in_backlog` (MIDI not yet taken in by the firmware). It also carries the upstream fix [c41eb8d3](https://github.com/dsp56300/gearmulator/commit/c41eb8d3) from after the pin: on the SC-88 and SC-88 Pro, DT1 SysEx to the address blocks `08` and `0C` (e.g. `0C 20 04`, the Pro's SC-88 mode) now reaches the firmware instead of being dropped. `dsp56300-mingw.patch` restricts SEH (`__try`) to MSVC.
 - **Engine variant:** compile-time `NUKED_SC55_ENGINE_88PRO` (model index 6). All differences sit in `#ifdef` blocks at about ten coupling points, so the SC-55 code is unchanged.
 - **Units:** 64 voices per unit, 4 units. 88emu renders at the device rate of 32 kHz, which goes through the existing resampler. Boot takes about 0.7 s per unit.
 - **Ports:** both MIDI inputs, 32 parts (A01-B16): CLAP note ports "MIDI IN A" and "MIDI IN B"; on VST2 (one input) the port select messages `F5 01` / `F5 02`.
@@ -286,7 +292,8 @@ The SC-8850 plug-in uses the same 88emu core with the SC-8850 firmware (compile-
 
 - **Graphics:** the 88emu SC-8850 panel art (GPLv3, The Usual Suspects), halved by `tools/make_sc8850_panel.py`. Only the branding ("Nuked SC-8850"), the playlist header (VOICES) and the VOLUME label (GAIN) are replaced; everything else is unchanged. The switches, LEDs, PREVIEW, VALUE encoder (4 knurl phases) and the GAIN knob are the player's sprites at the positions of its skin (`tools/make_sc8850_sprites.py`, with half-pixel phases and the pressed tint).
 - **LCD:** the 160 x 64 dots of the firmware's graphic LCD, black on the orange glass like in the player, area-averaged to 262 x 105 px.
-- **SysEx display messages:** text messages (`45 10 00 xx`) are shown by the firmware itself. The SC-8850 firmware ignores the 16 x 16 bitmaps (`45 10 01 00` … `45 10 05 7F`, pages 1-10, page select `45 10 20 00`), so the plug-in keeps the pages and lays the shown one over the level meters of the play screen for 3.2 s after the last update, as on the SC-55 / SC-88 (one bar = one column, two dots per row). Menus are left alone. The panel size does not change.
+- **SysEx display messages:** text messages (`45 10 00 xx`) are shown by the firmware itself. The SC-8850 firmware ignores the 16 x 16 bitmaps (`45 10 01 00` … `45 10 05 7F`, pages 1-10, page select `45 10 20 00`), so the plug-in keeps the pages and lays the shown one over the level meters of the play screen for 3.2 s after the last update, as on the SC-55 / SC-88 (one bar = one column, two dots per row). Menus are left alone. The panel size does not change. The SC-8850's own 160 x 64 bitmap messages (`45 20 0x 00`) are drawn by the firmware.
+- **Display SysEx** goes to unit 0 only and is paced, as on all models (see [Display SysEx](#display-sysex)).
 - **Controls:** every switch is held while the mouse button is down (at least 80 ms). A right click holds a switch until the next left-click switch is let go, for the key combinations of the manual (PART < + >, EDIT + ..., SHIFT + ...). VALUE: drag (right / up = clockwise, about 10 px per detent) or mouse wheel; a click without moving pushes the encoder. PREVIEW is the device's own key. GAIN: drag, wheel (0.8 dB per notch), double-click = 0 dB.
 - **VOICES / UNITS:** sounding voices, peak hold and awake units like on the SC-88 Pro panel. **SETUP** (bottom right, same place as on the SC-55 / SC-55mkII): max polyphony 128 / 256, Send Reset (GM / GS / GM2), all notes off.
 
@@ -371,6 +378,7 @@ All of these are optional.
 | `NUKED_SC55_NO_WARMER=1` | test switch: no background synchronisation |
 | `NUKED_SC55_NO_CLONE=1` | test switch (SC-55): every unit boots itself |
 | `NUKED_SC55_NO_BGBOOT=1` | test switch (SC-88 Pro): all units boot before start |
+| `NUKED_SC55_NO_DISPPACE=1` | test switch: display SysEx to all units, unpaced (old behaviour) |
 
 Build-time options (CMake cache variable or compiler define):
 

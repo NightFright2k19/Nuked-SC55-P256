@@ -1,5 +1,5 @@
 diff --git a/source/ronaldo/88emu/88lib/boards/sc88.h b/source/ronaldo/88emu/88lib/boards/sc88.h
-index 363de6c..f395bcc 100644
+index 363de6c..8570101 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc88.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc88.h
 @@ -118,6 +118,17 @@ namespace emu88Lib
@@ -20,6 +20,20 @@ index 363de6c..f395bcc 100644
  		// ---- Audio ----
  		// Advance the board by exactly one audio frame and return the stereo
  		// output. The H8 runs a fixed cycle budget per frame (Bresenham, so no
+@@ -182,6 +193,13 @@ namespace emu88Lib
+ 		// If this grows, the firmware is not consuming as fast as the host is
+ 		// delivering.
+ 		size_t midiInBacklog() const { return m_midiInQueue.size(); }
++		// Nuked SC-55 Poly: bytes queued for the firmware (emu88_get_midi_in_backlog)
++		size_t midiInBacklogBytes() const
++		{
++			size_t n = 0;
++			for(const auto& r : m_midiInQueue) n += std::max<size_t>(r.payload.size(), r.wireBytes);
++			return n;
++		}
+ 
+ 		Lcd&       lcd()       { return m_lcd; }
+ 		const Lcd& lcd() const { return m_lcd; }
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8850.cpp b/source/ronaldo/88emu/88lib/boards/sc8850.cpp
 index 0aa2451..72ae629 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8850.cpp
@@ -74,7 +88,7 @@ index 0aa2451..72ae629 100644
  		if(m_cpuRom.size() != CpuRomSize)
  		{
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8850.h b/source/ronaldo/88emu/88lib/boards/sc8850.h
-index 1ac9850..09b054e 100644
+index 1ac9850..2424c43 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8850.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc8850.h
 @@ -4,6 +4,7 @@
@@ -85,11 +99,12 @@ index 1ac9850..09b054e 100644
  #include <utility>
  #include <vector>
  
-@@ -112,6 +113,21 @@ namespace emu88Lib
+@@ -112,6 +113,22 @@ namespace emu88Lib
  
  		bool isValid() const { return m_valid; }
  		SampleFrame renderSample();
 +		// Nuked SC-55 Poly: firmware work RAM (01000000-0107FFFF), 0 outside
++		size_t usbInputBacklog() const { return m_usb.inputBacklog(); }
 +		uint8_t peekWorkRam(const uint32_t _address)
 +		{
 +			if(_address < WorkRamBase || _address >= WorkRamBase + WorkRamSize) return 0;
@@ -107,7 +122,7 @@ index 1ac9850..09b054e 100644
  
  		hwLib::SED1335& lcd() { return m_lcd; }
  		const hwLib::SED1335& lcd() const { return m_lcd; }
-@@ -247,7 +263,10 @@ namespace emu88Lib
+@@ -247,7 +264,10 @@ namespace emu88Lib
  		std::vector<uint8_t> m_cpuRom;
  		std::vector<uint8_t> m_programRom;
  		std::vector<uint8_t> m_dataRom;
@@ -166,18 +181,21 @@ index 2053225..9b6ea87 100644
  		, m_subMcu([this](Sc88SubMcu::Record&& _r) { m_midiInQueue.emplace_back(std::move(_r)); },
  		           SmSysExStage, SmCommand - SmSysExStage)
 diff --git a/source/ronaldo/88emu/88lib/boards/sc88pro.h b/source/ronaldo/88emu/88lib/boards/sc88pro.h
-index 9f21044..08f97ac 100644
+index 9f21044..57003c3 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc88pro.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc88pro.h
-@@ -4,6 +4,7 @@
+@@ -2,8 +2,10 @@
+ 
+ #include <array>
  #include <cstdint>
++#include <algorithm>
  #include <deque>
  #include <functional>
 +#include <memory>
  #include <utility>
  #include <vector>
  
-@@ -95,6 +96,17 @@ namespace emu88Lib
+@@ -95,6 +97,17 @@ namespace emu88Lib
  	class Sc88Pro
  	{
  	public:
@@ -195,7 +213,21 @@ index 9f21044..08f97ac 100644
  
  		// External interrupt pins as this board wires them. The gate array
  		// shares IRQ0 through its own status register; the XP is one line over.
-@@ -246,7 +258,10 @@ namespace emu88Lib
+@@ -181,6 +194,13 @@ namespace emu88Lib
+ 
+ 		bool usesSerialMidi() const { return m_serialMidi; }
+ 		size_t midiInBacklog() const { return m_midiInQueue.size() + (m_midiMailboxFull ? 1u : 0u); }
++		// Nuked SC-55 Poly: bytes queued for the firmware (emu88_get_midi_in_backlog)
++		size_t midiInBacklogBytes() const
++		{
++			size_t n = 0;
++			for(const auto& r : m_midiInQueue) n += std::max<size_t>(r.payload.size(), r.wireBytes);
++			return n;
++		}
+ 
+ 		// Bytes the firmware has transmitted, per SCI channel.
+ 		const std::vector<uint8_t>& serialOut(uint8_t _ch) const { return m_serialOut[_ch & 1]; }
+@@ -246,7 +266,10 @@ namespace emu88Lib
  
  		std::vector<uint8_t> m_rom;
  		std::vector<uint8_t> m_sram = std::vector<uint8_t>(SramSize, 0);
@@ -208,7 +240,7 @@ index 9f21044..08f97ac 100644
  		xpLib::XP m_xp;
  		Lcd m_lcd;
 diff --git a/source/ronaldo/88emu/88lib/c_interface.cpp b/source/ronaldo/88emu/88lib/c_interface.cpp
-index 9ccf846..5c8fa70 100644
+index 9ccf846..9490fc5 100644
 --- a/source/ronaldo/88emu/88lib/c_interface.cpp
 +++ b/source/ronaldo/88emu/88lib/c_interface.cpp
 @@ -1,3 +1,4 @@
@@ -247,7 +279,7 @@ index 9ccf846..5c8fa70 100644
  	}
  
  	void updateResampler()
-@@ -515,3 +533,164 @@ void emu88_render_bit16s(const emu88_context _context, int16_t* _stream, const u
+@@ -515,3 +533,172 @@ void emu88_render_bit16s(const emu88_context _context, int16_t* _stream, const u
  }
  
  } // extern "C"
@@ -381,6 +413,14 @@ index 9ccf846..5c8fa70 100644
 +	return n;
 +}
 +
++size_t emu88_get_midi_in_backlog(emu88_context context)
++{
++	if (!context || !context->device) return 0;
++	size_t n = 0;
++	for (const auto& e : context->midiIn) n += e.sysex.empty() ? 3 : e.sysex.size();
++	return n + context->device->midiInBacklog();
++}
++
 +int emu88_peek_work_ram(emu88_context context, uint32_t address, uint8_t* buffer, size_t size)
 +{
 +	if (!context || !context->device || !buffer) return 0;
@@ -413,10 +453,10 @@ index 9ccf846..5c8fa70 100644
 +	return EMU88_RC_OK;
 +}
 diff --git a/source/ronaldo/88emu/88lib/c_interface.h b/source/ronaldo/88emu/88lib/c_interface.h
-index c9a5132..55d989f 100644
+index c9a5132..e3b14a6 100644
 --- a/source/ronaldo/88emu/88lib/c_interface.h
 +++ b/source/ronaldo/88emu/88lib/c_interface.h
-@@ -227,6 +227,49 @@ EMU88_EXPORT int emu88_is_display_on(emu88_context context, unsigned screen);
+@@ -227,6 +227,51 @@ EMU88_EXPORT int emu88_is_display_on(emu88_context context, unsigned screen);
   * closed synth produces silence. */
  EMU88_EXPORT void emu88_render_bit16s(emu88_context context, int16_t* stream, uint32_t length);
  EMU88_EXPORT void emu88_render_float(emu88_context context, float* stream, uint32_t length);
@@ -460,6 +500,8 @@ index c9a5132..55d989f 100644
 + * or the SC-88 Pro (SRAM 0000-FFFF).
 + * Render thread only. Returns 1 on those boards, 0 otherwise. */
 +EMU88_EXPORT int emu88_peek_work_ram(emu88_context context, uint32_t address, uint8_t* buffer, size_t size);
++/* Nuked SC-55 Poly: MIDI input not yet taken in by the firmware (queued bytes; SC-8850: incl. USB mailbox) */
++EMU88_EXPORT size_t emu88_get_midi_in_backlog(emu88_context context);
 +/* Write the normalized SC-88 Pro ROM set found on the ROM paths to four files (build tool). */
 +EMU88_EXPORT emu88_return_code emu88_dump_sc88pro_rom_images(const char* controlPath, const char* waveAPath,
 +	const char* waveBPath, const char* waveCPath);
@@ -467,7 +509,7 @@ index c9a5132..55d989f 100644
  #ifdef __cplusplus
  }
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.cpp b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-index 69c6751..c0aa20c 100644
+index 69c6751..e776147 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 @@ -154,6 +154,12 @@ namespace emu88Lib
@@ -483,7 +525,7 @@ index 69c6751..c0aa20c 100644
  			auto rom = RomLoader::findROM(model);
  			if(!rom.isValid() || rom.model() != model) break;
  			auto waveData = m_model == DeviceModel::Xpgs
-@@ -714,3 +720,29 @@ namespace emu88Lib
+@@ -714,3 +720,39 @@ namespace emu88Lib
  			m_activeChannels &= ~channelMask;
  	}
  }
@@ -494,6 +536,16 @@ index 69c6751..c0aa20c 100644
 +	{
 +		return m_sc88Pro ? m_sc88Pro->activeVoiceCount() : m_sc8850 ? m_sc8850->activeVoiceCount()
 +			: m_sc88 ? m_sc88->activeVoiceCount() : -1;
++	}
++
++	size_t HardwareDevice::midiInBacklog() const
++	{
++		size_t n = 0;
++		for(const auto& e : m_midiIn) n += e.sysex.empty() ? 3 : e.sysex.size();
++		if(m_sc8850) n += m_sc8850->usbInputBacklog();
++		if(m_sc88Pro) n += m_sc88Pro->midiInBacklogBytes();
++		if(m_sc88) n += m_sc88->midiInBacklogBytes();
++		return n;
 +	}
 +
 +	bool HardwareDevice::peekWorkRam(const uint32_t _address, uint8_t* _dst, const size_t _size)
@@ -514,10 +566,10 @@ index 69c6751..c0aa20c 100644
 +	}
 +}
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.h b/source/ronaldo/88emu/88lib/hardwareDevice.h
-index 3ad2087..ed57c4e 100644
+index 3ad2087..bfbdb2a 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.h
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.h
-@@ -45,6 +45,11 @@ namespace emu88Lib
+@@ -45,6 +45,13 @@ namespace emu88Lib
  	class HardwareDevice final : public synthLib::Device
  	{
  	public:
@@ -525,12 +577,14 @@ index 3ad2087..ed57c4e 100644
 +		int activeVoiceCount() const;
 +		// Nuked SC-55 Poly: firmware work RAM of the SC-8850 (render thread), false elsewhere
 +		bool peekWorkRam(uint32_t _address, uint8_t* _dst, size_t _size);
++		// Nuked SC-55 Poly: MIDI bytes accepted but not yet taken in by the firmware
++		size_t midiInBacklog() const;
 +
  		struct DisplaySnapshot
  		{
  			enum class Type : uint8_t { None, Character, Graphic };
 diff --git a/source/ronaldo/88emu/88lib/mcu/sc88_submcu.cpp b/source/ronaldo/88emu/88lib/mcu/sc88_submcu.cpp
-index ba0424e9..447cf6e2 100644
+index ba0424e..447cf6e 100644
 --- a/source/ronaldo/88emu/88lib/mcu/sc88_submcu.cpp
 +++ b/source/ronaldo/88emu/88lib/mcu/sc88_submcu.cpp
 @@ -326,12 +326,16 @@ namespace emu88Lib
@@ -557,7 +611,7 @@ index ba0424e9..447cf6e2 100644
  
  		// The main firmware routes patch/drum parameters to the A or B part
 diff --git a/source/ronaldo/88emu/88lib/mcu/sc88_submcu.h b/source/ronaldo/88emu/88lib/mcu/sc88_submcu.h
-index f53ec19e..a8b5e4d3 100644
+index f53ec19..a8b5e4d 100644
 --- a/source/ronaldo/88emu/88lib/mcu/sc88_submcu.h
 +++ b/source/ronaldo/88emu/88lib/mcu/sc88_submcu.h
 @@ -24,7 +24,8 @@ namespace emu88Lib
@@ -724,7 +778,7 @@ index e0d8ff6..c318594 100644
          // SC-8850 uses the SH7016's 64 KiB internal ROM, a 1 MiB CS0
          // executable flash and a 2 MiB CS3 data/tone flash.
 diff --git a/source/ronaldo/88emu/88lib/tests/sc88_submcu_test.cpp b/source/ronaldo/88emu/88lib/tests/sc88_submcu_test.cpp
-index e9b74219..42358dda 100644
+index e9b7421..42358dd 100644
 --- a/source/ronaldo/88emu/88lib/tests/sc88_submcu_test.cpp
 +++ b/source/ronaldo/88emu/88lib/tests/sc88_submcu_test.cpp
 @@ -145,6 +145,29 @@ namespace

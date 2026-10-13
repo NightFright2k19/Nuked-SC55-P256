@@ -222,6 +222,24 @@ private:
 	void MeasureLoad();
 	void RenderInstance(Instance& inst, uint32_t num_frames);
 
+private:
+	// Display SysEx (Roland model 45: text, 16 x 16 bitmaps, SC-8850 160 x 64 bitmaps) only changes the LCD,
+	// which the panel shows from unit 0. It goes to unit 0 alone, is not logged for waking, and is
+	// paced: the firmware takes display data in slowly (bitmaps are drawn on arrival), so a burst
+	// (seeking in a song resends everything) would queue up for seconds and delay all MIDI behind
+	// it. Waiting messages are coalesced per address (only the newest picture counts) and handed on
+	// while unit 0 has less than kDispBacklog bytes waiting. Issue #42 (SC-8850), then all models.
+	static constexpr size_t kDispBacklog = 512, kDispMax = 64, kDispBytes = 256;
+	struct DispMsg { uint8_t port = 0; uint16_t size = 0; std::array<uint8_t, kDispBytes> bytes{}; };
+	std::vector<DispMsg> disp_pending;       // oldest first, at most kDispMax
+	bool disp_pace = true;                   // NUKED_SC55_NO_DISPPACE=1: old path (all units, unpaced)
+	static bool IsDisplaySysEx(std::span<const uint8_t> msg);
+	void DispQueue(std::span<const uint8_t> msg, uint8_t port);
+	void DispFeed();
+	bool DispReady() const;                // nothing waiting and unit 0 has room
+public:
+	size_t MidiBacklog(int i) const;       // diagnostics: MIDI bytes unit i has not taken in yet
+	size_t DispPending() const { return disp_pending.size(); }
 public:
 	// For the sample callback
 	static void ReceiveSample(void* userdata, const AudioFrame<int32_t>& in);

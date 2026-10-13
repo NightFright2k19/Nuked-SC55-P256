@@ -530,6 +530,9 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 		return false;
 	}
 	StopWarmer(); // no background access while (re)booting
+	disp_pace = get_env_var("NUKED_SC55_NO_DISPPACE") != "1";
+	disp_pending.clear();
+	disp_pending.reserve(kDispMax);
 	lcd_ready = false;
 
 	// Speed up the devices' bootup delay
@@ -1169,6 +1172,16 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 				port = static_cast<uint8_t>(sysex_event->port_index);
 			else port = selected_port;
 #endif
+			if (disp_pace && IsDisplaySysEx(msg)) {
+#ifdef NUKED_SC55_DEVICE_8850
+				DotSysEx(msg);
+#endif
+				if (DispReady()) // nothing waiting: straight to unit 0, sample-accurate
+					QueueMidi(PolyRouter::Mask{1}, msg.data(), msg.size(), render_frame, port);
+				else
+					DispQueue(msg, port);
+				break;
+			}
 #ifdef NUKED_SC55_DEVICE_8850
 			host_change[kNumParts] = render_frame_count + render_frame + 1;
 #endif
@@ -1176,6 +1189,7 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 			{
 				const bool reset = StateLog::IsReset(msg);
 				if (reset) UiResetParts();
+				if (reset) disp_pending.clear(); // pictures sent before a reset are void
 				if (const int mode = StateLog::SystemModeOf(msg); mode >= 0 && HasSystemMode())
 					system_mode = mode; // System Mode Set from the host: menu mark follows
 #ifdef NUKED_SC55_DEVICE_8850
@@ -1530,6 +1544,7 @@ void NukedSc55::RenderAudio(const uint32_t num_frames)
 {
 	log("RenderAudio: num_frames: %d", num_frames);
 
+	DispFeed();
 	// Only awake instances; a single one is rendered inline (no thread
 	// hand-off), which keeps low-polyphony CPU use at the original level.
 	awake_list.clear();
@@ -3100,4 +3115,70 @@ void NukedSc55::ResampleAndPublishFrames(const uint32_t num_out_frames,
 		render_buf[0].clear();
 		render_buf[1].clear();
 	}
+}
+
+// ---- Display SysEx pacing (all models, issue #42) ----
+
+bool NukedSc55::IsDisplaySysEx(const std::span<const uint8_t> msg)
+{
+	return msg.size() >= 10 && msg.size() <= kDispBytes && msg[0] == 0xf0 && msg[1] == 0x41 &&
+	       msg[3] == 0x45 && msg[4] == 0x12 && msg.back() == 0xf7;
+}
+
+void NukedSc55::DispQueue(const std::span<const uint8_t> msg, const uint8_t port)
+{
+	// newest data for the same address replaces a message still waiting
+	for (auto& d : disp_pending) {
+		if (d.port == port && d.size == msg.size() && d.bytes[5] == msg[5] && d.bytes[6] == msg[6] &&
+		    d.bytes[7] == msg[7]) {
+			std::copy(msg.begin(), msg.end(), d.bytes.begin());
+			return;
+		}
+	}
+	if (disp_pending.size() >= kDispMax) disp_pending.erase(disp_pending.begin());
+	DispMsg d;
+	d.port = port;
+	d.size = static_cast<uint16_t>(msg.size());
+	std::copy(msg.begin(), msg.end(), d.bytes.begin());
+	disp_pending.push_back(d);
+}
+
+size_t NukedSc55::MidiBacklog(const int i) const
+{
+	const auto& inst = instances[i];
+	if (!inst.awake) return 0;
+#ifdef NUKED_SC55_ENGINE_88PRO
+	if (!inst.ctx) return 0;
+	size_t n = emu88_get_midi_in_backlog(inst.ctx);
+#else
+	const auto& mcu = inst.emu->GetMCU();
+	size_t n = (mcu.uart_write_ptr + uart_buffer_size - mcu.uart_read_ptr) % uart_buffer_size;
+#endif
+	for (const auto& ev : inst.queue) n += ev.size;
+	return n;
+}
+
+bool NukedSc55::DispReady() const
+{
+	if (!disp_pending.empty() || instances.empty() || !instances[0].awake) return false;
+#ifdef NUKED_SC55_ENGINE_88PRO
+	if (!instances[0].booted->load(std::memory_order_acquire)) return false;
+#endif
+	return MidiBacklog(0) < kDispBacklog;
+}
+
+void NukedSc55::DispFeed()
+{
+	if (disp_pending.empty() || instances.empty() || !instances[0].awake) return;
+#ifdef NUKED_SC55_ENGINE_88PRO
+	if (!instances[0].booted->load(std::memory_order_acquire)) return;
+#endif
+	size_t backlog = MidiBacklog(0);
+	size_t n = 0;
+	while (n < disp_pending.size() && backlog < kDispBacklog) {
+		const auto& d = disp_pending[n++];
+		QueueMidi(PolyRouter::Mask{1}, d.bytes.data(), d.size, 0, d.port);
+		backlog += d.size;
+	}
+	disp_pending.erase(disp_pending.begin(), disp_pending.begin() + static_cast<std::ptrdiff_t>(n));
 }
