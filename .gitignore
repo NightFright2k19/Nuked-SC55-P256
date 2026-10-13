@@ -1,0 +1,7 @@
+__pycache__/
+/output/
+/Plugins/
+/build/
+/dist/
+*.spec
+patcher_version.py

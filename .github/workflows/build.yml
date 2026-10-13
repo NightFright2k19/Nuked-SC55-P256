@@ -1,12 +1,19 @@
 name: Nuked-SC55 P256 Autobuild
 
+# Releases contain the patcher (patcher.py frozen with PyInstaller, templates inside) for Windows,
+# Linux and macOS (Apple Silicon and Intel). The patcher runs the functions of p256_builder.py,
+# so it always produces the same plugins as the Python script, which stays in the repository
+# for development.
+
 on:
   push:
     branches: [main]
     paths:
       - 'templates/**'
       - 'p256_builder.py'
-
+      - 'patcher.py'
+      - 'patcher_i18n.py'
+      - '.github/workflows/build.yml'
   workflow_dispatch:
 
 permissions:
@@ -17,326 +24,169 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Create template archive
+  version:
+    name: Determine release number
     runs-on: ubuntu-24.04
-
+    outputs:
+      revision: ${{ steps.version.outputs.revision }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
 
-      - name: Determine next release number
+      - name: Check Python syntax and templates
+        run: |
+          set -euo pipefail
+          python3 -m py_compile p256_builder.py patcher.py patcher_i18n.py
+          python3 patcher.py --selftest
+
+      - name: Next release number
         id: version
         uses: actions/github-script@v8
         with:
           script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-
-            const releases = await github.paginate(
-              github.rest.repos.listReleases,
-              {
-                owner,
-                repo,
-                per_page: 100
-              }
-            );
-
-            let maxRevision = 0;
-
-            for (const release of releases) {
-              const match = release.tag_name.match(/^autobuild-r(\d+)$/);
-
-              if (match) {
-                maxRevision = Math.max(
-                  maxRevision,
-                  parseInt(match[1], 10)
-                );
-              }
+            const releases = await github.paginate(github.rest.repos.listReleases,
+              { owner: context.repo.owner, repo: context.repo.repo, per_page: 100 });
+            let max = 0;
+            for (const r of releases) {
+              const m = r.tag_name.match(/^autobuild-r(\d+)$/);
+              if (m) max = Math.max(max, parseInt(m[1], 10));
             }
+            core.setOutput('revision', max + 1);
+            core.setOutput('tag', `autobuild-r${max + 1}`);
+            console.log(`Next autobuild: r${max + 1}`);
 
-            const nextRevision = maxRevision + 1;
+  build:
+    name: Patcher ${{ matrix.label }}
+    needs: version
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: windows-latest, label: Windows,            asset: windows }
+          - { os: ubuntu-22.04,   label: Linux,              asset: linux }
+          - { os: macos-15,       label: macOS Apple Silicon, asset: macos-applesilicon }
+          - { os: macos-15-intel, label: macOS Intel,        asset: macos-intel }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
 
-            core.setOutput('revision', nextRevision);
-            core.setOutput('tag', `autobuild-r${nextRevision}`);
-            core.setOutput(
-              'zip',
-              `nuked_sc55_p256_autobuild_r${nextRevision}.zip`
-            );
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-            console.log(`Latest successful autobuild: r${maxRevision}`);
-            console.log(`Next autobuild: r${nextRevision}`);
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
 
-      - name: Prepare release package
+      - name: Build patcher
         env:
-          ZIP_NAME: ${{ steps.version.outputs.zip }}
+          REVISION: r${{ needs.version.outputs.revision }}
         run: |
           set -euo pipefail
+          echo "VERSION = '$REVISION'" > patcher_version.py
+          python -m PyInstaller --onefile --windowed --noconfirm --clean \
+            --name Nuked-SC55-P256-Patcher \
+            --add-data "templates:templates" \
+            --hidden-import p256_builder --hidden-import patcher_i18n --hidden-import patcher_version \
+            patcher.py
+          ls -la dist
 
-          PACKAGE_DIR="$GITHUB_WORKSPACE/package"
-
-          rm -rf "$PACKAGE_DIR"
-          rm -f "$ZIP_NAME"
-
-          mkdir -p \
-            "$PACKAGE_DIR/roms" \
-            "$PACKAGE_DIR/templates"
-
-          echo "Preparing release package..."
-
-          # ROM placeholder
-          if [ ! -f "roms/place_roms_here.txt" ]; then
-            echo "ERROR: roms/place_roms_here.txt was not found."
-            exit 1
-          fi
-
-          cp \
-            "roms/place_roms_here.txt" \
-            "$PACKAGE_DIR/roms/"
-
-          # Template files
-          shopt -s nullglob
-          template_files=(templates/*.p256tpl)
-
-          if [ ${#template_files[@]} -eq 0 ]; then
-            echo "ERROR: No .p256tpl files found directly in the templates directory."
-            exit 1
-          fi
-
-          echo
-          echo "Template files to package:"
-          printf ' - %s\n' "${template_files[@]}"
-
-          cp \
-            "${template_files[@]}" \
-            "$PACKAGE_DIR/templates/"
-
-          # Required files in the ZIP root
-          for file in \
-            LICENSE.md \
-            p256_builder.py \
-            README.md
-          do
-            if [ ! -f "$file" ]; then
-              echo "ERROR: Required file '$file' was not found."
-              exit 1
-            fi
-
-            cp "$file" "$PACKAGE_DIR/"
-          done
-
-          echo
-          echo "Package contents:"
-          find "$PACKAGE_DIR" \
-            -type f \
-            -printf '%P\n' \
-            | sort
-
-          echo
-          echo "Creating ZIP archive..."
-
-          (
-            cd "$PACKAGE_DIR"
-
-            zip -9 -r -X "../$ZIP_NAME" \
-              roms \
-              templates \
-              LICENSE.md \
-              p256_builder.py \
-              README.md
-          )
-
-          echo
-          echo "ZIP archive created:"
-          ls -lh "$ZIP_NAME"
-
-      - name: Verify ZIP contents
+      - name: Self test and package
         env:
-          ZIP_NAME: ${{ steps.version.outputs.zip }}
+          NAME: Nuked-SC55-P256-Patcher-r${{ needs.version.outputs.revision }}-${{ matrix.asset }}
         run: |
           set -euo pipefail
+          mkdir -p upload
+          case "${{ runner.os }}" in
+            Windows)
+              ./dist/Nuked-SC55-P256-Patcher.exe --selftest
+              cp dist/Nuked-SC55-P256-Patcher.exe "upload/$NAME.exe" ;;
+            Linux)
+              ./dist/Nuked-SC55-P256-Patcher --selftest
+              tar -C dist -czf "upload/$NAME.tar.gz" Nuked-SC55-P256-Patcher ;;
+            macOS)
+              ./dist/Nuked-SC55-P256-Patcher.app/Contents/MacOS/Nuked-SC55-P256-Patcher --selftest
+              ditto -c -k --keepParent dist/Nuked-SC55-P256-Patcher.app "upload/$NAME.zip" ;;
+          esac
+          ls -la upload
 
-          echo "ZIP contents:"
-          unzip -l "$ZIP_NAME"
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: patcher-${{ matrix.asset }}
+          path: upload/*
+          if-no-files-found: error
 
-          echo
-          echo "Verifying archive contents..."
+  release:
+    name: Create release
+    needs: [version, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download patchers
+        uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
 
-          PACKAGE_DIR="$GITHUB_WORKSPACE/package"
-
-          expected_files="$(
-            find "$PACKAGE_DIR" \
-              -type f \
-              -printf '%P\n' \
-              | sort
-          )"
-
-          # unzip -Z1 also reports directory entries such as
-          # "roms/" and "templates/". Ignore those because
-          # expected_files contains files only.
-          actual_files="$(
-            unzip -Z1 "$ZIP_NAME" \
-              | awk '!/\/$/ { print }' \
-              | sort
-          )"
-
-          if [ "$expected_files" != "$actual_files" ]; then
-            echo "ERROR: ZIP contents do not match the release package."
-            echo
-            echo "Expected files:"
-            printf '%s\n' "$expected_files"
-            echo
-            echo "Actual files:"
-            printf '%s\n' "$actual_files"
-            exit 1
-          fi
-
-          # Make sure that only the intended file types and paths
-          # are present in the archive.
-          unexpected_files="$(
-            printf '%s\n' "$actual_files" \
-              | grep -Ev \
-                '^(roms/place_roms_here\.txt|templates/[^/]+\.p256tpl|LICENSE\.md|p256_builder\.py|README\.md)$' \
-              || true
-          )"
-
-          if [ -n "$unexpected_files" ]; then
-            echo "ERROR: Unexpected files found in ZIP:"
-            printf '%s\n' "$unexpected_files"
-            exit 1
-          fi
-
-          # Make sure templates are not stored in subdirectories.
-          template_subdirs="$(
-            printf '%s\n' "$actual_files" \
-              | grep '^templates/.*/' \
-              || true
-          )"
-
-          if [ -n "$template_subdirs" ]; then
-            echo "ERROR: Template files found in subdirectories:"
-            printf '%s\n' "$template_subdirs"
-            exit 1
-          fi
-
-          echo
-          echo "ZIP contents verified successfully."
+      - name: List assets
+        run: ls -la assets
 
       - name: Create GitHub release
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ steps.version.outputs.tag }}
-          name: Autobuild r${{ steps.version.outputs.revision }}
+          tag: ${{ needs.version.outputs.tag }}
+          name: Autobuild r${{ needs.version.outputs.revision }}
           prerelease: true
-          artifacts: ${{ steps.version.outputs.zip }}
+          artifacts: assets/*
           artifactErrorsFailBuild: true
           body: |
-            This automated release contains latest files for the generation of **Nuked-SC55/88** CLAP/VST2 files.
+            The **Nuked SC-55 P256 Patcher** creates the **Nuked-SC55/88** CLAP/VST2 plugins (Windows x64) from your own ROM files. The templates are built in; no Python needed.
 
             **SUPPORTED ROMS**
             - SC-55 v1.21
-            - SC-55 MKII v1.01
+            - SC-55mk2 v1.01 (CTF is applied automatically)
             - SC-88
             - SC-88 Pro
             - SC-8850
 
+            **DOWNLOAD**
+            - Windows: `...-windows.exe`
+            - Linux: `...-linux.tar.gz` (extract, then run `Nuked-SC55-P256-Patcher`)
+            - macOS: `...-macos-applesilicon.zip` (M1 and newer) or `...-macos-intel.zip` (extract, then open the app)
+
             **INSTRUCTIONS**
-            - Place these files in a subdir called "templates"
-            - Another directory called "roms" (next to "templates") must contain your SC-55/88/8850 ROM files
-            - Execute the Python script (p256_builder.py, in the same dir as "templates" and "roms"): **python p256_builder.py**
-            - Converted files will end up in two new folders named "output/CLAP" and "output/VST2"
+            - Put the patcher in a folder together with your ROM files (subfolders are fine, file names do not matter). It can also be pointed to another folder.
+            - Start it, check the list of found models, click **Patch**.
+            - The plugins end up in `Plugins/CLAP` and `Plugins/VST2` next to the patcher.
+            - The files are not signed: Windows SmartScreen and macOS Gatekeeper warn on the first start. See README.md ("The patcher") for how to start it anyway.
+            - The generated plugins contain your ROMs. Do not share them.
 
       - name: Delete previous Autobuild releases and tags
         uses: actions/github-script@v8
         env:
-          CURRENT_REVISION: ${{ steps.version.outputs.revision }}
-          CURRENT_TAG: ${{ steps.version.outputs.tag }}
+          CURRENT_REVISION: ${{ needs.version.outputs.revision }}
+          CURRENT_TAG: ${{ needs.version.outputs.tag }}
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-
-            const currentRevision = parseInt(
-              process.env.CURRENT_REVISION,
-              10
-            );
-
+            const currentRevision = parseInt(process.env.CURRENT_REVISION, 10);
             const currentTag = process.env.CURRENT_TAG;
-
-            const releases = await github.paginate(
-              github.rest.repos.listReleases,
-              {
-                owner,
-                repo,
-                per_page: 100
-              }
-            );
-
+            const releases = await github.paginate(github.rest.repos.listReleases, { owner, repo, per_page: 100 });
             for (const release of releases) {
               const match = release.tag_name.match(/^autobuild-r(\d+)$/);
-
-              if (!match) {
-                continue;
-              }
-
-              const revision = parseInt(match[1], 10);
-
-              // Never delete the release/tag that was just created.
-              if (release.tag_name === currentTag) {
-                console.log(
-                  `Keeping current Autobuild release ${release.tag_name}.`
-                );
-                continue;
-              }
-
-              // Only remove older Autobuild releases.
-              if (revision >= currentRevision) {
-                console.log(
-                  `Keeping Autobuild release ${release.tag_name} ` +
-                  `because it is not older than the current revision.`
-                );
-                continue;
-              }
-
-              console.log(
-                `Deleting old Autobuild release ${release.tag_name} ` +
-                `(release ID ${release.id}).`
-              );
-
-              await github.rest.repos.deleteRelease({
-                owner,
-                repo,
-                release_id: release.id
-              });
-
-              console.log(
-                `Deleted release ${release.tag_name}.`
-              );
-
-              // Delete the corresponding Git tag as well.
+              if (!match || release.tag_name === currentTag) continue;
+              if (parseInt(match[1], 10) >= currentRevision) continue;
+              console.log(`Deleting old Autobuild release ${release.tag_name}.`);
+              await github.rest.repos.deleteRelease({ owner, repo, release_id: release.id });
               try {
-                await github.rest.git.deleteRef({
-                  owner,
-                  repo,
-                  ref: `tags/${release.tag_name}`
-                });
-
-                console.log(
-                  `Deleted Git tag ${release.tag_name}.`
-                );
+                await github.rest.git.deleteRef({ owner, repo, ref: `tags/${release.tag_name}` });
               } catch (error) {
-                if (error.status === 404) {
-                  console.log(
-                    `Git tag ${release.tag_name} was already absent.`
-                  );
-                } else {
-                  throw error;
-                }
+                if (error.status !== 404) throw error;
               }
             }
-
-            console.log(
-              `Cleanup complete. Current Autobuild tag ${currentTag} is preserved.`
-            );

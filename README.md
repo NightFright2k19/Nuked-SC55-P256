@@ -27,6 +27,7 @@ Single-file **CLAP** and **VST2** plug-ins (Windows x64) for the Roland **SC-55 
 - [Panels and controls](#panels-and-controls)
 - [Settings and plug-in state](#settings-and-plug-in-state)
 - [Configuration (environment variables)](#configuration-environment-variables)
+- [The patcher](#the-patcher)
 - [The P256 builder](#the-p256-builder)
 - [Building from source](#building-from-source)
 - [Performance and memory](#performance-and-memory)
@@ -87,22 +88,16 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 
 ## Quick start
 
-There are two ways to get the plug-ins. The first needs only Python.
+There are two ways to get the plug-ins. The first needs nothing but your ROM files.
 
-### Option A: the P256 builder (no compiler)
+### Option A: the patcher (no compiler, no Python)
 
-1. Install Python 3.8 or newer (no extra packages).
-2. Download the **P256 Builder** package from the Releases page and unpack it. It contains `p256_builder.py`, the `templates` folder (the finished plug-ins **without** ROMs) and an empty `roms` folder.
-3. Put your ROM files into `roms` (subfolders are searched, file names do not matter, see [Supported models](#supported-models-and-rom-sets)).
-4. Run:
+1. Download the **patcher** for your system from the [Releases](https://github.com/NightFright2k19/Nuked-SC55-P256/releases) page (Windows, Linux, macOS Apple Silicon or macOS Intel).
+2. Put it in a folder together with your ROM files (subfolders are searched, file names do not matter, see [Supported models](#supported-models-and-rom-sets)).
+3. Start it, check the list of found models and click **Patch**.
+4. Copy the results from `Plugins/CLAP/*.clap` and/or `Plugins/VST2/*.dll` to your plug-in folders (see [Using the plug-ins](#using-the-plug-ins)).
 
-   ```
-   python p256_builder.py
-   ```
-
-5. Copy the results from `output\CLAP\*.clap` and/or `output\VST2\*.dll` to your plug-in folders (see [Using the plug-ins](#using-the-plug-ins)).
-
-Everything for which a complete ROM set is found is built (SC-55 v1.21, SC-55mk2 v1.01, SC-88, SC-88 Pro, SC-8850). More in [The P256 builder](#the-p256-builder).
+Everything for which a complete ROM set is found is built (SC-55 v1.21, SC-55mk2 v1.01, SC-88, SC-88 Pro, SC-8850). More in [The patcher](#the-patcher).
 
 ### Option B: build from source
 
@@ -124,7 +119,7 @@ See [Building from source](#building-from-source).
 | SC-88 Pro | yes | 64 | 4 | 256 |
 | SC-8850 | yes | 128 | 2 | 256 |
 
-The ROMs are recognised **by content** (SHA-256), not by file name. Dumps of other versions are ignored. The hashes below are the first 16 digits; the full values are in `tools/p256_builder/p256_builder.py`.
+The ROMs are recognised **by content** (SHA-256), not by file name. Dumps of other versions are ignored. The hashes below are the first 16 digits; the full values are in `p256_builder.py`.
 
 | Model | Role | Typical file name | SHA-256 (start) |
 | --- | --- | --- | --- |
@@ -392,9 +387,24 @@ Build-time options (CMake cache variable or compiler define):
 
 ---
 
+## The patcher
+
+The patcher (`patcher.py`, texts in `patcher_i18n.py`) is a small window around the P256 builder. The releases contain it as a single executable per system, built with PyInstaller, with the ROM-less templates inside. It is not an installer: it writes nothing but the `Plugins` folder (no registry entries, nothing to uninstall).
+
+- **ROM files:** searched in the patcher's folder and all subfolders (by SHA-256, names do not matter). If no complete set is found there, it asks for the folder; **Change…** picks another one at any time. Each model is listed as complete, incomplete (with the missing parts) or not found.
+- **Patch:** builds every complete model into `Plugins/CLAP/<name>.clap` and `Plugins/VST2/<name>.dll` next to the patcher (the folder is created if needed). **Details** shows which file was used for which part.
+- **Same result as the script:** the patcher calls the functions of `p256_builder.py`; the plug-ins are byte-identical to those of `python p256_builder.py`.
+- **Languages:** English, German, French, Italian, Spanish, Portuguese, Chinese (Mandarin), Hindi, Bengali, Russian, Japanese, Turkish. The system language is used if available, otherwise English; the menu at the top right switches it.
+- **Without a window:** `patcher --build [folder]` builds from the given folder (default: the patcher's folder) and prints the result; `patcher --selftest` checks the bundled templates.
+
+> [!NOTE]
+> The patcher is **not signed**. On the first start Windows SmartScreen shows "Windows protected your PC": click **More info**, then **Run anyway**. macOS Gatekeeper refuses to open the app: right-click (or Control-click) it, choose **Open** and confirm; on newer macOS versions use **System Settings → Privacy & Security → Open Anyway**. Alternatively remove the quarantine flag in Terminal: `xattr -dr com.apple.quarantine "Nuked-SC55-P256-Patcher.app"`. Move the app out of the Downloads folder before starting it, so that the `Plugins` folder is created next to it. On Linux, make the file executable (`chmod +x Nuked-SC55-P256-Patcher`); it needs a desktop session.
+
+---
+
 ## The P256 builder
 
-`tools/p256_builder/p256_builder.py` (Python 3.8 or newer, standard library only) creates the finished plug-ins from the ROM-less templates in `templates` and your ROMs in `roms`.
+`p256_builder.py` (Python 3.8 or newer, standard library only) creates the finished plug-ins from the ROM-less templates in `templates` and your ROMs in `roms`. Releases use the [patcher](#the-patcher), which runs the same code; the script stays in the repository for development and for building directly from a checkout (put your ROMs into `roms`).
 
 ```
 python p256_builder.py
@@ -429,8 +439,6 @@ A template is the finished plug-in without ROMs. At the place where the ROMs bel
 > [!WARNING]
 > The generated plug-ins **contain your ROMs**. Do not share them.
 
-A short German version of the instructions is in `tools/p256_builder/LIESMICH.txt`, the English one in `tools/p256_builder/README-EN.txt`.
-
 ---
 
 ## Building from source
@@ -448,7 +456,7 @@ A short German version of the instructions is in `tools/p256_builder/LIESMICH.tx
 
 1. `tools/gen_embedded_roms.py` creates a C++ source that includes each ROM with `.incbin` for its slot (SC-55: 0 = rom1, 1 = rom2, 3/4/5 = wave ROMs; SC-55mk2: 0 = rom1, 1 = rom2 (CTF), 2 = rom_sm, 3/4 = wave ROMs).
 2. Compile with `-DNUKED_SC55_EMBED_ROMS`, `-DNUKED_SC55_ONLY_MODEL=<n>` and the display name / VST2 ID, `-O3 -flto`, and link `src/gui/editor_win32.cpp` and the version resource (`src/vst2/version.rc.in` with the placeholders `@NAME@`, `@FILE@`, `@VER_STR@`, `@VER_NUM@`, `@VENDOR@`, `@COMMENT@`). `tools/build-embedded-win64.sh.inc` contains the build function.
-3. For a **template** instead, call `gen_embedded_roms.py --slot <out.cpp> <romset> <name> <capacity>` (the build function does this when `NK_SLOT_CAP` is set) and run `tools/p256_builder/compact_template.py` on the result.
+3. For a **template** instead, call `gen_embedded_roms.py --slot <out.cpp> <romset> <name> <capacity>` (the build function does this when `NK_SLOT_CAP` is set) and run `src/tools/p256_builder/compact_template.py` on the result.
 
 The wave ROMs must be **descrambled** like in the file loader (`LoadRomset(info, nullptr)` from `rom_io.h` before `LoadRoms`). Without that, the level is wrong by a factor of 15-20.
 

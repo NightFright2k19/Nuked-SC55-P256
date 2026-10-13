@@ -19,6 +19,9 @@ SC-55mk2: If only the original rom2 (512 KB) is available, the CTF patch (Capita
 Fallback) is applied during the build; the result is checked against the known CTF checksum.
 
 Usage:  python p256_builder.py          (Python 3.8 or newer, no additional packages)
+
+Releases use the patcher (patcher.py), which runs these same functions; this script is kept
+for development and for building from the repository.
 """
 import base64
 import hashlib
@@ -84,9 +87,10 @@ def apply_ctf(rom2: bytes) -> bytes:
     return bytes(data)
 
 
-def walk_files(root: Path):
-    """All files below root, including linked directories (symlink/junctions), without loops."""
-    seen = set()
+def walk_files(root: Path, skip=()):
+    """All files below root, including linked directories (symlink/junctions), without loops.
+    Directories whose resolved path is in skip are left out."""
+    seen = {os.path.realpath(p) for p in skip}
     for dirpath, dirnames, filenames in os.walk(root, followlinks=True):
         real = os.path.realpath(dirpath)
         if real in seen:
@@ -98,12 +102,16 @@ def walk_files(root: Path):
             yield Path(dirpath) / name
 
 
-def scan_roms():
+def scan_roms(root: Path = ROMS, skip=()):
+    """Known ROM files below root: {(model, role): path}."""
     found = {}
-    for f in walk_files(ROMS):
-        if not f.is_file() or f.stat().st_size not in SIZES:
+    for f in walk_files(root, skip):
+        try:
+            if not f.is_file() or f.stat().st_size not in SIZES:
+                continue
+            sha = hashlib.sha256(f.read_bytes()).hexdigest()
+        except OSError:
             continue
-        sha = hashlib.sha256(f.read_bytes()).hexdigest()
         if sha in KNOWN and KNOWN[sha] not in found:
             found[KNOWN[sha]] = f
     return found
@@ -133,6 +141,45 @@ def fill_template(template: bytes, entries, name: str) -> bytes:
     return bytes(out)
 
 
+def plan(found):
+    """Per model: what was found. List of dicts (key, file, title, parts, have, missing, ctf)."""
+    result = []
+    for key, tpl_name, title, parts in MODELS:
+        roles = [r for _, r in parts]
+        have = {r: found.get((key, r)) for r in roles}
+        ctf = False
+        if key == "mk2" and have["rom2"] is None and (key, "rom2_orig") in found:
+            have["rom2"] = found[(key, "rom2_orig")]
+            ctf = True
+        result.append(dict(key=key, file=tpl_name, title=title, parts=parts, have=have, ctf=ctf,
+                           missing=[r for r in roles if have[r] is None]))
+    return result
+
+
+def build_model(item, templates: Path = TEMPLATES, output: Path = OUTPUT):
+    """Builds one complete model -> (clap path, vst2 path). Raises ValueError on failure."""
+    key, tpl_name, title, parts = item["key"], item["file"], item["title"], item["parts"]
+    tpl = templates / f"{tpl_name}.p256tpl"
+    if not tpl.is_file():
+        raise ValueError(f"template missing ({tpl})")
+    entries = []
+    for location, role in parts:
+        blob = item["have"][role].read_bytes()
+        if key == "mk2" and role == "rom2" and hashlib.sha256(blob).hexdigest() != CTF_SHA:
+            blob = apply_ctf(blob)
+            if hashlib.sha256(blob).hexdigest() != CTF_SHA:
+                raise ValueError("CTF patch did not produce the expected checksum")
+        entries.append((location, blob))
+    plugin = fill_template(tpl.read_bytes(), entries, title)
+    paths = []
+    for sub, ext in (("CLAP", ".clap"), ("VST2", ".dll")):
+        (output / sub).mkdir(parents=True, exist_ok=True)
+        path = output / sub / f"{tpl_name}{ext}"
+        path.write_bytes(plugin)
+        paths.append(path)
+    return tuple(paths)
+
+
 def main() -> int:
     print("Nuked SC-55 / SC-88 / SC-8850 P256 - Plugin Builder\n")
     if not ROMS.is_dir():
@@ -141,49 +188,24 @@ def main() -> int:
     if (HERE / "Nuked-SC55.clap").exists():
         print("Note: Nuked-SC55.clap is not required (the P256 functions are newer code,\n"
               "      the original file cannot be patched for this purpose). The build is created from 'templates'.\n")
-    found = scan_roms()
     built = 0
-    for key, tpl_name, title, parts in MODELS:
-        roles = [r for _, r in parts]
-        have = {r: found.get((key, r)) for r in roles}
-        ctf_note = ""
-        if key == "mk2" and have["rom2"] is None and (key, "rom2_orig") in found:
-            have["rom2"] = found[(key, "rom2_orig")]
-            ctf_note = " (CTF patch will be applied)"
-        missing = [r for r in roles if have[r] is None]
-        if missing:
-            if any(have.values()):
-                print(f"[--] {title}: incomplete, missing: {', '.join(missing)}")
+    for item in plan(scan_roms()):
+        title, tpl_name = item["title"], item["file"]
+        if item["missing"]:
+            if any(item["have"].values()):
+                print(f"[--] {title}: incomplete, missing: {', '.join(item['missing'])}")
             else:
                 print(f"[--] {title}: no ROMs found")
             continue
-        tpl = TEMPLATES / f"{tpl_name}.p256tpl"
-        if not tpl.is_file():
-            print(f"[!!] {title}: template missing ({tpl})")
-            continue
-        entries = []
-        for location, role in parts:
-            blob = have[role].read_bytes()
-            if key == "mk2" and role == "rom2" and hashlib.sha256(blob).hexdigest() != CTF_SHA:
-                blob = apply_ctf(blob)
-                if hashlib.sha256(blob).hexdigest() != CTF_SHA:
-                    print(f"[!!] {title}: CTF patch did not produce the expected checksum")
-                    entries = None
-                    break
-            entries.append((location, blob))
-        if entries is None:
-            continue
         try:
-            plugin = fill_template(tpl.read_bytes(), entries, title)
-        except ValueError as e:
+            build_model(item)
+        except (ValueError, OSError) as e:
             print(f"[!!] {title}: {e}")
             continue
-        for sub, ext in (("CLAP", ".clap"), ("VST2", ".dll")):
-            (OUTPUT / sub).mkdir(parents=True, exist_ok=True)
-            (OUTPUT / sub / f"{tpl_name}{ext}").write_bytes(plugin)
+        ctf_note = " (CTF patch will be applied)" if item["ctf"] else ""
         print(f"[ok] {title}{ctf_note}: output/CLAP/{tpl_name}.clap, output/VST2/{tpl_name}.dll")
-        for _, role in parts:
-            print(f"       {role:8} <- {have[role].relative_to(HERE)}")
+        for _, role in item["parts"]:
+            print(f"       {role:8} <- {item['have'][role].relative_to(HERE)}")
         built += 1
     print(f"\n{built} plugin(s) created." if built else "\nNo plugin created.")
     return 0 if built else 2
