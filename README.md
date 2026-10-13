@@ -225,7 +225,27 @@ With CTF, a module falls back to the capital (basic) tone of a program when the 
 - **Builder:** the CTF patch is embedded in `p256_builder.py` (77 sections, 15,561 bytes raw, zlib + Base64 808 characters). The result is checked against the SHA-256 of the known CTF `rom2`.
 - **Quick test:** bank 1, program 17. The SC-55 plays it, the original SC-55mk2 stays silent, the CTF SC-55mk2 plays it.
 
----
+
+## SC-88 engine (88emu)
+
+The SC-88 plug-in uses the same 88emu core with the firmware of the first SC-88 (compile-time `NUKED_SC55_DEVICE_88` on top of `NUKED_SC55_ENGINE_88PRO`, model index 8).
+
+- **Units:** 64 voices per unit, 4 units = 256 voices, like the SC-88 Pro.
+- **Two MIDI inputs, 32 parts (A01-B16):** CLAP note ports "MIDI IN A" and "MIDI IN B"; on VST2 the port select messages `F5 01` / `F5 02`.
+- **GAIN:** -12 ... +12 dB, 0 dB in the middle (default). At 0 dB the output is raised by 5 dB like the SC-88 Pro; the measured level then matches the SC-88 Pro within 0.1 dB (RMS of E1M1, Animus and grabbag).
+- **Front panel = the device's own panel:** all switches go to unit 0, so the firmware's LCD, LEDs and functions work as on the hardware (part and instrument selection, level / pan / reverb / chorus / key shift / MIDI channel, the SELECT rows vibrato / TVF / envelope, USER INST EDIT, ALL mode, PREVIEW). The SC-88 firmware writes every panel edit into a small log in its work RAM; the plug-in reads that log and sends each edit as a GS DT1 message to the other units and into the state log, so all units (including those that wake later) play the same sounds. Checked by comparing the parameter memory of the units.
+- **ALL mode:** ALL + MUTE mutes all units (taken from the firmware's panel flag); ALL + EQ switches the EQ of all 32 parts on all units. ALL + INST MAP and ALL + MIDI CH have no GS equivalent and are disabled.
+- **Panel functions without a GS parameter:** when ALL confirms Initialize GM (SELECT + PART >), Set Mode 1 / Mode 2 (SELECT + KEY SHIFT) or Initialize CM-64 (SELECT + INST <) on unit 0, the plug-in sends GM On or System Mode Set to the other units (the SETUP menu mark follows), or runs the same panel steps on them; units that wake later get it from the state log. MASTER TUNE from the menu is passed on as GS DT1.
+- **Patches:** `88emu-nuked-poly.patch` also adds `emu88_set_sc88_rom_images` (ROM set from memory; the raw dumps are normalised inside 88emu), the SC-88 voice counter and work RAM access.
+- **Builds:** `tools/winbuild/build88o.sh` (single file / template, ROM slots 0 = control, 1-4 = wave ROMs 0-3).
+
+### SC-88 panel (918 x 280 px)
+
+- **Graphics:** the 88emu SC-88 panel art (GPLv3, The Usual Suspects) by `tools/make_sc88orig_panel.py`. Only the branding ("Nuked SC-88"), the playlist header (VOICES) and the VOLUME label (GAIN) are replaced; everything else is unchanged. Switches, rockers, LEDs, PREVIEW and the GAIN knob are rendered from the player's own vector graphics at the positions of its skin (`tools/make_sc88orig_sprites.py`, with the pressed tint).
+- **LCD:** the firmware's character LCD on the panel's glass, rendered like on the SC-88 Pro.
+- **Controls:** every switch is held while the mouse button is down (at least 80 ms), so holding a rocker repeats like on the device. A right click holds a switch until the next left-click switch is let go, for the key combinations of the manual (SELECT + ..., USER INST + ..., ALL + ...). GAIN: drag, wheel (0.8 dB per notch), double-click = 0 dB.
+- **VOICES / UNITS** as on the other 88emu panels. **SETUP** (bottom, between the logo and the EFX lamp; same place on the SC-88 Pro): max polyphony 64 / 128 / 192 / 256, Send Reset (GM / GS), System Mode (Mode 1 / Mode 2), all notes off.
+
 
 ## SC-88 Pro engine (88emu)
 
@@ -249,27 +269,6 @@ Like the hardware, the map is switched with emulated panel keys. Both map keys *
 
 The panel keys toggle like on the device, the SETUP menu selects directly.
 
----
-
-## SC-88 engine (88emu)
-
-The SC-88 plug-in uses the same 88emu core with the firmware of the first SC-88 (compile-time `NUKED_SC55_DEVICE_88` on top of `NUKED_SC55_ENGINE_88PRO`, model index 8).
-
-- **Units:** 64 voices per unit, 4 units = 256 voices, like the SC-88 Pro.
-- **Two MIDI inputs, 32 parts (A01-B16):** CLAP note ports "MIDI IN A" and "MIDI IN B"; on VST2 the port select messages `F5 01` / `F5 02`.
-- **GAIN:** -12 ... +12 dB, 0 dB in the middle (default). At 0 dB the output is raised by 5 dB like the SC-88 Pro; the measured level then matches the SC-88 Pro within 0.1 dB (RMS of E1M1, Animus and grabbag).
-- **Front panel = the device's own panel:** all switches go to unit 0, so the firmware's LCD, LEDs and functions work as on the hardware (part and instrument selection, level / pan / reverb / chorus / key shift / MIDI channel, the SELECT rows vibrato / TVF / envelope, USER INST EDIT, ALL mode, PREVIEW). The SC-88 firmware writes every panel edit into a small log in its work RAM; the plug-in reads that log and sends each edit as a GS DT1 message to the other units and into the state log, so all units (including those that wake later) play the same sounds. Checked by comparing the parameter memory of the units.
-- **ALL mode:** ALL + MUTE mutes all units (taken from the firmware's panel flag); ALL + EQ switches the EQ of all 32 parts on all units. ALL + INST MAP and ALL + MIDI CH have no GS equivalent and are disabled.
-- **Panel functions without a GS parameter:** when ALL confirms Initialize GM (SELECT + PART >), Set Mode 1 / Mode 2 (SELECT + KEY SHIFT) or Initialize CM-64 (SELECT + INST <) on unit 0, the plug-in sends GM On or System Mode Set to the other units (the SETUP menu mark follows), or runs the same panel steps on them; units that wake later get it from the state log. MASTER TUNE from the menu is passed on as GS DT1.
-- **Patches:** `88emu-nuked-poly.patch` also adds `emu88_set_sc88_rom_images` (ROM set from memory; the raw dumps are normalised inside 88emu), the SC-88 voice counter and work RAM access.
-- **Builds:** `tools/winbuild/build88o.sh` (single file / template, ROM slots 0 = control, 1-4 = wave ROMs 0-3).
-
-### SC-88 panel (918 x 280 px)
-
-- **Graphics:** the 88emu SC-88 panel art (GPLv3, The Usual Suspects) by `tools/make_sc88orig_panel.py`. Only the branding ("Nuked SC-88"), the playlist header (VOICES) and the VOLUME label (GAIN) are replaced; everything else is unchanged. Switches, rockers, LEDs, PREVIEW and the GAIN knob are rendered from the player's own vector graphics at the positions of its skin (`tools/make_sc88orig_sprites.py`, with the pressed tint).
-- **LCD:** the firmware's character LCD on the panel's glass, rendered like on the SC-88 Pro.
-- **Controls:** every switch is held while the mouse button is down (at least 80 ms), so holding a rocker repeats like on the device. A right click holds a switch until the next left-click switch is let go, for the key combinations of the manual (SELECT + ..., USER INST + ..., ALL + ...). GAIN: drag, wheel (0.8 dB per notch), double-click = 0 dB.
-- **VOICES / UNITS** as on the other 88emu panels. **SETUP** (bottom, between the logo and the EFX lamp; same place on the SC-88 Pro): max polyphony 64 / 128 / 192 / 256, Send Reset (GM / GS), System Mode (Mode 1 / Mode 2), all notes off.
 
 ## SC-8850 engine (88emu)
 
@@ -390,6 +389,8 @@ Build-time options (CMake cache variable or compiler define):
 ## The patcher
 
 The patcher (`patcher.py`, texts in `patcher_i18n.py`) is a small window around the P256 builder. The releases contain it as a single executable per system, built with PyInstaller, with the ROM-less templates inside. It is not an installer: it writes nothing but the `Plugins` folder (no registry entries, nothing to uninstall).
+
+<img width="482" height="418" alt="p256_patcher" src="https://github.com/user-attachments/assets/cc45c97f-e621-4898-be97-19802dafa864" />
 
 - **ROM files:** searched in the patcher's folder and all subfolders (by SHA-256, names do not matter). If no complete set is found there, it asks for the folder; **Change…** picks another one at any time. Each model is listed as complete, incomplete (with the missing parts) or not found.
 - **Patch:** builds every complete model into `Plugins/CLAP/<name>.clap` and `Plugins/VST2/<name>.dll` next to the patcher (the folder is created if needed). **Details** shows which file was used for which part.
