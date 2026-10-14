@@ -18,6 +18,8 @@
 // Window class name of the editor (one per editor instance)
 #if defined(NUKED_SC55_DEVICE_8850)
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC8850P256Editor_"
+#elif defined(NUKED_SC55_DEVICE_8820)
+#define NUKED_SC55_WNDCLASS_PREFIX "NukedSC8820P256Editor_"
 #elif defined(NUKED_SC55_DEVICE_88)
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC88oP256Editor_"
 #elif defined(NUKED_SC55_ENGINE_88PRO)
@@ -190,11 +192,16 @@ bool GatherLcd(NukedSc55& p, lcdview::View& view)
 #if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
 #include "editor_sc88orig.inc"
 #endif
+#ifdef NUKED_SC55_DEVICE_8820
+#include "editor_sc8820.inc"
+#endif
 
 void Draw(Editor& e, HDC dc)
 {
 #if defined(NUKED_SC55_DEVICE_8850)
     Draw8850(e, dc);
+#elif defined(NUKED_SC55_DEVICE_8820)
+    Draw8820(e, dc);
 #elif defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     Draw88o(e, dc);
 #else
@@ -216,6 +223,8 @@ int HitButton(int x, int y)
 {
 #if defined(NUKED_SC55_DEVICE_8850)
     return Hit8850(x, y);
+#elif defined(NUKED_SC55_DEVICE_8820)
+    return Hit8820(x, y);
 #elif defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     return Hit88o(x, y);
 #else
@@ -296,6 +305,15 @@ void ShowSetupMenu(Editor& e)
         AppendMenuW(m, MF_POPUP, (UINT_PTR)pv_menu, pl);
     }
 #endif
+#ifdef NUKED_SC55_DEVICE_8820
+    {   // active INST MAP (shown only; chosen with the INST MAP button, as on the device)
+        const int tm = p.tone_map.load();
+        AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Inst map (INST MAP button)", L"Inst-Map (Taste INST MAP)"));
+        const wchar_t* names[4] = {L"   SC-55", L"   SC-88", L"   SC-88 Pro", L"   SC-8820"};
+        for (int i = 0; i < 4; ++i) AppendMenuW(m, MF_STRING | MF_GRAYED | (tm == i ? MF_CHECKED : 0), 0, names[i]);
+    }
+#endif
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     // "Send Reset": choosing an entry sends that reset at once (no mark, nothing stored)
     HMENU rt_menu = CreatePopupMenu();
@@ -321,6 +339,9 @@ void ShowSetupMenu(Editor& e)
 #if defined(NUKED_SC55_DEVICE_8850)
     const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTALIGN | TPM_BOTTOMALIGN,
                                    r.left + E85_SETUP.right, r.top + E85_SETUP.top - 2, 0, e.hwnd, nullptr);
+#elif defined(NUKED_SC55_DEVICE_8820)
+    const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTALIGN | TPM_BOTTOMALIGN,
+                                   r.left + E20_SETUP.right, r.top + E20_SETUP.top - 2, 0, e.hwnd, nullptr);
 #elif defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_BOTTOMALIGN,
                                    r.left + E88O_SETUP.left, r.top + E88O_SETUP.top - 2, 0, e.hwnd, nullptr);
@@ -364,6 +385,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     auto* e = reinterpret_cast<Editor*>(GetWindowLongPtrA(hwnd, GWLP_USERDATA));
 #ifdef NUKED_SC55_DEVICE_8850
     if (e && Mouse8850(*e, hwnd, msg, wp, lp)) return 0;
+#endif
+#ifdef NUKED_SC55_DEVICE_8820
+    if (e && Mouse8820(*e, hwnd, msg, wp, lp)) return 0;
 #endif
 #if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     if (e && Mouse88o(*e, hwnd, msg, wp, lp)) return 0;

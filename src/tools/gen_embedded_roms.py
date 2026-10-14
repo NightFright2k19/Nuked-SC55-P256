@@ -2,7 +2,7 @@
 # Erzeugt eine C++-Quelle, die ROM-Dateien per .incbin in die Binary einbettet.
 # Aufruf: gen_embedded_roms.py <out.cpp> <romset-enum> <name> <loc>=<datei> ...
 #    oder: gen_embedded_roms.py --slot <out.cpp> <romset-enum> <name> <kapazitaet>
-#          (ROM-lose Vorlage: reservierter Bereich, den tools/p256_builder befuellt)
+#          (ROM-lose Vorlage: reservierter Bereich, den p256_builder.py / der Patcher befuellt)
 import sys, os, struct
 if sys.argv[1] == "--slot":
     out, romset, name, cap = sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
@@ -16,7 +16,7 @@ if sys.argv[1] == "--slot":
     path = os.path.abspath(blob).replace("\\", "/")
     with open(out, "w") as f:
         f.write(f"""// ROM-lose Vorlage: ROMs werden nachtraeglich in den Bereich nk_romslot geschrieben
-// (tools/p256_builder). Der Inhalt ist fuer den Compiler unbekannt (.incbin).
+// (p256_builder.py). Der Inhalt ist fuer den Compiler unbekannt (.incbin).
 #include "embedded_roms.h"
 #include <cstdint>
 #ifdef _WIN32

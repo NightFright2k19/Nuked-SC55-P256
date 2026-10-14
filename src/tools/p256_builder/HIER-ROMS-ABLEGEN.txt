@@ -1,2 +1,0 @@
-Lege hier deine ROM-Dateien ab (Unterordner erlaubt, Dateinamen egal).
-Put your ROM files here (subfolders allowed, any file names).

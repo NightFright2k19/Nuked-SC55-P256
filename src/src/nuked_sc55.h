@@ -1,7 +1,8 @@
 #pragma once
 
 // SC-88 Pro (88emu engine without an SC-8850 / SC-88 device switch)
-#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88)
+#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88) && \
+    !defined(NUKED_SC55_DEVICE_8820)
 #define NUKED_SC55_DEVICE_88PRO 1
 #endif
 
@@ -62,7 +63,8 @@ public:
 #ifdef NUKED_SC55_ENGINE_88PRO
 		Sc88Pro,
 		Sc8850,
-		Sc88
+		Sc88,
+		Sc8820
 #endif
 	};
 
@@ -119,6 +121,10 @@ private:
 		// pending panel-button sequence (non-blocking, advanced while rendering)
 		int seq_len = 0, seq_pos = 0;
 		uint32_t seq_mask[4] = {};
+		uint32_t led_acc = 0;        // SC-8820: lamps ORed over a window (the firmware multiplexes them)
+		uint32_t led_acc_frames = 0;
+		uint32_t leds_shown = 0;     // last complete window
+		uint32_t led_win = 0;
 		uint32_t seq_frames[4] = {};
 		uint32_t seq_left = 0;
 		int seq_map = -1;
@@ -323,8 +329,23 @@ public:
 	// the plugin state: 0 = SC-55, 1 = SC-88, 2 = SC-88 Pro (default = factory setting).
 	float boot_dc_l = 0.0f, boot_dc_r = 0.0f; // idle offset measured on unit 0 after boot
 	bool clone_units = true; // start units as copies of unit 0 (NUKED_SC55_NO_CLONE=1: boot each)
+#ifdef NUKED_SC55_DEVICE_8820
+	static constexpr uint32_t kBtn8820InstMap = 1u, kBtn8820Preview = 2u;   // emu88_set_panel_buttons
+	static constexpr uint32_t kLed8820MapShown = 0x100u;                     // emu88_get_panel_leds
+	// bits 0-3 PART A level (4 blocks), 4-7 PART B level or map (55/88/88Pro/8820), 0x200 USB, 0x400 POWER
+	// SC-8820: 0 SC-55, 1 SC-88, 2 SC-88 Pro, 3 SC-8820 (boots with the SC-8820 map)
+	static constexpr int kMaxToneMap = 3, kMapRounds = 8; // one press per round
+	std::atomic<int> tone_map{3};
+	int last_tone_map = 3;
+	void E8820PanelInput();
+	std::atomic<uint32_t> ui_leds8820{0}; // unit 0's lamps, ORed over ~40 ms (GUI, via PanelLeds)
+	uint64_t gui_map_until = 0; // render frame up to which a map shown on unit 0 is the user's choice
+	static int E8820ShownMap(uint32_t leds);
+#else
+	static constexpr int kMaxToneMap = 2, kMapRounds = 2;
 	std::atomic<int> tone_map{2};
 	int last_tone_map = 2;
+#endif
 #ifdef NUKED_SC55_ENGINE_88PRO
 	// SC-88 Pro front panel (GUI thread writes, audio thread reads)
 	std::atomic<float> gain_db{0.0f};      // GAIN knob in dB, kGainMinDb..kGainMaxDb; 0 = default
@@ -355,8 +376,9 @@ private:
 	void InjectShort(uint8_t s, uint8_t d1, uint8_t d2, uint16_t port = 0);
 public:
 #endif
-#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
-	// Front panel of the SC-8850 / SC-88 / SC-88 Pro: the GUI drives unit 0's own panel (firmware
+#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO) || \
+    defined(NUKED_SC55_DEVICE_8820)
+	// Front panel of the SC-8850 / SC-88 / SC-88 Pro / SC-8820: the GUI drives unit 0's own panel (firmware
 	// menus, LCD, LEDs). Edits made there are passed on to the other units and the state log.
 	// SC-88 Pro: tone map keys, MUTE and PREVIEW stay plugin functions (all units, state).
 	std::atomic<uint32_t> ui_panel_buttons{0}; // switches held in the GUI (bit = 88emu button)

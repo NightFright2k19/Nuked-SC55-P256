@@ -1,3 +1,3 @@
-Place your ROM files for the SC-55 v1.21, SC-55mk2 v1.01, SC-88, SC-88 Pro and/or SC-8850 here
+Place your ROM files for the SC-55 v1.21, SC-55mk2 v1.01, SC-88, SC-88 Pro, SC-8820 and/or SC-8850 here
 (only needed for running p256_builder.py from the repository; the patcher searches its own folder).
 Subfolders within this folder are allowed. ROM file names do not matter.

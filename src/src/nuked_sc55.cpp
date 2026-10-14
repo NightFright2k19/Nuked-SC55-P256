@@ -270,6 +270,9 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 #if defined(NUKED_SC55_DEVICE_8850)
 		if (emu88_set_sc8850_rom_images(rp[0], rn[0], rp[1], rn[1], rp[2], rn[2], rp[3], rn[3]) !=
 		    EMU88_RC_OK) {
+#elif defined(NUKED_SC55_DEVICE_8820)
+		if (emu88_set_sc8820_rom_images(rp[0], rn[0], rp[1], rn[1], rp[2], rn[2], rp[3], rn[3]) !=
+		    EMU88_RC_OK) {
 #elif defined(NUKED_SC55_DEVICE_88)
 		if (emu88_set_sc88_rom_images(rp[0], rn[0], rp[1], rn[1], rp[2], rn[2], rp[3], rn[3], rp[4], rn[4]) !=
 		    EMU88_RC_OK) {
@@ -286,6 +289,7 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 			emu88_add_rom_path((base / "SC-88Pro").string().c_str());
 			emu88_add_rom_path((base / "SC-8850").string().c_str());
 			emu88_add_rom_path((base / "SC-88").string().c_str());
+			emu88_add_rom_path((base / "SC-8820").string().c_str());
 			emu88_add_rom_path(base.string().c_str());
 		}
 #endif
@@ -781,6 +785,10 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	E88PanelInput();
 	E88PanelMutes();
 #endif
+#ifdef NUKED_SC55_DEVICE_8820
+	// Front panel of unit 0: INST MAP / PREVIEW from the GUI; the map shown is adopted for all units
+	E8820PanelInput();
+#endif
 #ifdef NUKED_SC55_DEVICE_88PRO
 	// Front panel of unit 0: edits of the last block passed on, GUI input
 	E88EditPump();
@@ -979,7 +987,11 @@ bool NukedSc55::SaveState([[maybe_unused]] const clap_ostream_t* stream)
 // Settings only (CLAP state and VST2 chunk): "NSC55P1 max_voices=<n> ..."
 int NukedSc55::StateString(char* buf, const size_t size) const
 {
-#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88)
+#if defined(NUKED_SC55_DEVICE_8820)
+	// INST MAP (all parts) is the one panel setting; synchronised on all units, kept here
+	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d", max_voices.load(),
+	                      tone_map.load(), static_cast<int>(std::lround(gain_db.load() * 10.0f)));
+#elif defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88)
 	// the panel's own settings (tone maps, preview note, ...) live in the firmware
 	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d", max_voices.load(),
 	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)));
@@ -1001,7 +1013,8 @@ bool NukedSc55::ParseState(const char* buf)
 	if (std::sscanf(buf, "NSC55P1 max_voices=%d", &v) != 1) return false;
 	SetMaxVoices(v);
 #ifdef NUKED_SC55_ENGINE_88PRO
-	if (const char* m = std::strstr(buf, "map="); HasToneMap() && m && m[4] >= '0' && m[4] <= '2') {
+	if (const char* m = std::strstr(buf, "map="); HasToneMap() && m && m[4] >= '0' &&
+	                                                    m[4] <= (kMaxToneMap + '0')) {
 		tone_map = m[4] - '0';
 	}
 	if (const char* m = std::strstr(buf, "gain="); m) {
@@ -1775,7 +1788,7 @@ double NukedSc55::ResetSettleSeconds(const StateLog::Entry& e)
 bool NukedSc55::HasGm2() const
 {
 #ifdef NUKED_SC55_ENGINE_88PRO
-	return model == Model::Sc8850;
+	return model == Model::Sc8850 || model == Model::Sc8820; // both carry the GM2 logo
 #else
 	return false;
 #endif
@@ -1802,6 +1815,7 @@ const char* NukedSc55::ModelName() const
 	case Model::Sc88Pro: return "SC-88 Pro";
 	case Model::Sc8850: return "SC-8850";
 	case Model::Sc88: return "SC-88";
+	case Model::Sc8820: return "SC-8820";
 #endif
 	default: return "SC-55mk2 v1.01";
 	}
@@ -1856,6 +1870,8 @@ bool NukedSc55::E88BootUnit(const int i)
 		inst.ctx = emu88_create_context();
 #if defined(NUKED_SC55_DEVICE_8850)
 		emu88_select_device(inst.ctx, EMU88_DEVICE_SC8850);
+#elif defined(NUKED_SC55_DEVICE_8820)
+		emu88_select_device(inst.ctx, EMU88_DEVICE_SC8820);
 #elif defined(NUKED_SC55_DEVICE_88)
 		emu88_select_device(inst.ctx, EMU88_DEVICE_SC88);
 #else
@@ -1876,7 +1892,11 @@ bool NukedSc55::E88BootUnit(const int i)
 		inst.buf_l.reserve(1 << 16);
 		inst.buf_r.reserve(1 << 16);
 		inst.seq_len     = 0;
+#ifdef NUKED_SC55_DEVICE_8820
+		inst.applied_map = 3; // boots with the SC-8820 map
+#else
 		inst.applied_map = 2; // boots with the SC-88 Pro map
+#endif
 		E88ApplyMapSync(inst, tone_map.load());
 #ifdef NUKED_SC55_DEVICE_8850
 		if (i == 0) E88SyncBoot(inst); // what unit 0's panel can change, as booted
@@ -1954,16 +1974,37 @@ void NukedSc55::E88RenderFrames(Instance& inst, size_t frames)
 			inst.buf_r.push_back(tmp[2 * k + 1]);
 		}
 		frames -= n;
+#ifdef NUKED_SC55_DEVICE_8820
+		{
+			const uint32_t l = emu88_get_panel_leds(inst.ctx);
+			if (inst.seq_len > 0 && inst.seq_pos % 2 == 1) inst.led_acc |= l; // released: map shown
+			inst.led_win |= l;
+			if ((inst.led_acc_frames += n) >= 1280) { // ~40 ms at 32 kHz
+				inst.leds_shown     = inst.led_win;
+				inst.led_win        = 0;
+				inst.led_acc_frames = 0;
+			}
+		}
+#endif
 		if (inst.seq_len > 0 && (inst.seq_left = inst.seq_left > n ? inst.seq_left - n : 0) == 0) {
 			const double rate = emu88_get_device_samplerate(inst.ctx);
 			++inst.seq_pos;
 			if (inst.seq_pos >= inst.seq_len) {
+#ifdef NUKED_SC55_DEVICE_8820
+				if (const int shown = E8820ShownMap(inst.led_acc); shown >= 0) inst.applied_map = shown;
+#else
 				inst.applied_map = inst.seq_map;
+#endif
 				inst.seq_len     = 0;
 			} else if (inst.seq_pos % 2 == 1) { // release (switches the next step holds stay down)
 				const int step = inst.seq_pos / 2;
+#ifdef NUKED_SC55_DEVICE_8820
+				emu88_set_panel_buttons(inst.ctx, 0); // every press is released (same button again)
+				(void)step;
+#else
 				emu88_set_panel_buttons(inst.ctx, step + 1 < 4 && inst.seq_pos + 1 < inst.seq_len
 				                                      ? inst.seq_mask[step] & inst.seq_mask[step + 1] : 0);
+#endif
 				inst.seq_left = static_cast<uint32_t>(rate * 0.35);
 			} else { // next press
 				emu88_set_panel_buttons(inst.ctx, inst.seq_mask[inst.seq_pos / 2]);
@@ -1981,6 +2022,22 @@ void NukedSc55::E88StartMapSequence(Instance& inst, const int map)
 		return;
 	}
 	if (inst.seq_len > 0 || map == inst.applied_map) return;
+#ifdef NUKED_SC55_DEVICE_8820
+	{
+		// INST MAP steps 8820 -> 88 Pro -> 88 -> 55 -> 8820. A press while the map is not shown only
+		// shows it. Closed loop: one press at a time; the map the unit then shows (read from its lamps
+		// while the button is released) becomes applied_map, and the caller presses again until it is
+		// the wanted one.
+		inst.seq_mask[0] = kBtn8820InstMap;
+		inst.seq_map  = -1;     // set from the lamps at the end of the step
+		inst.led_acc  = 0;
+		inst.seq_len  = 2;
+		inst.seq_pos  = 0;
+		inst.seq_left = static_cast<uint32_t>(emu88_get_device_samplerate(inst.ctx) * 0.15);
+		emu88_set_panel_buttons(inst.ctx, inst.seq_mask[0]);
+		return;
+	}
+#endif
 	// The map buttons act on all parts only in ALL mode: enter it for the press and leave it
 	// again, unless ALL was already on (the ALL view chosen on the panel stays)
 	const bool all_on = (emu88_get_panel_leds(inst.ctx) & 1u) != 0;
@@ -1998,7 +2055,7 @@ void NukedSc55::E88StartMapSequence(Instance& inst, const int map)
 // Blocking variant (boot / background warmer only): renders until applied.
 void NukedSc55::E88ApplyMapSync(Instance& inst, const int map)
 {
-	for (int round = 0; round < 2 && inst.applied_map != map; ++round) {
+	for (int round = 0; round < kMapRounds && inst.applied_map != map; ++round) {
 		E88StartMapSequence(inst, map);
 		while (inst.seq_len > 0) {
 			E88RenderFrames(inst, inst.seq_left);
@@ -2029,7 +2086,11 @@ void NukedSc55::E88Drain(Instance& inst, const size_t bytes, const double extra_
 uint32_t NukedSc55::PanelLeds() const
 {
 	if (!lcd_ready.load() || instances.empty() || !instances[0].ctx) return 0;
+#ifdef NUKED_SC55_DEVICE_8820
+	return ui_leds8820.load(std::memory_order_relaxed); // multiplexed: ORed over a short window
+#else
 	return emu88_get_panel_leds(instances[0].ctx);
+#endif
 }
 #endif
 
@@ -3182,3 +3243,48 @@ void NukedSc55::DispFeed()
 	}
 	disp_pending.erase(disp_pending.begin(), disp_pending.begin() + static_cast<std::ptrdiff_t>(n));
 }
+
+#ifdef NUKED_SC55_DEVICE_8820
+// ---- SC-8820 front panel: INST MAP and VOLUME push (PREVIEW) of unit 0 -------------------------
+// The GUI's switches go to unit 0 as on the hardware. When unit 0 shows the map (after a press),
+// that map becomes the plugin's tone map; the other units follow with their own presses.
+void NukedSc55::E8820PanelInput()
+{
+	auto& inst = instances[0];
+	if (!inst.ctx) return;
+	if (inst.seq_len > 0) { // a map sequence of the plugin has the switches
+		applied_buttons = ~0u;
+		return;
+	}
+	ui_leds8820.store(inst.leds_shown, std::memory_order_relaxed);
+	const uint32_t buttons = ui_panel_buttons.load(std::memory_order_relaxed) & 3u;
+	if (buttons != applied_buttons) {
+		emu88_set_panel_buttons(inst.ctx, buttons);
+		applied_buttons = buttons;
+	}
+	// Only a press in the GUI chooses the map; maps that unit 0 shows while the plugin itself
+	// steps it towards the tone map are intermediate states.
+	if (buttons & kBtn8820InstMap)
+		gui_map_until = render_frame_count + static_cast<uint64_t>(render_sample_rate_hz * 1.5);
+	if (render_frame_count > gui_map_until) return;
+	const int shown = E8820ShownMap(inst.leds_shown);
+	if (shown < 0) return;
+	inst.applied_map = shown;
+	if (shown != tone_map.load()) tone_map.store(shown);
+}
+#endif
+
+#ifdef NUKED_SC55_DEVICE_8820
+// Map shown by the PART B indicator (lamps ORed over a window), -1 if none is shown.
+int NukedSc55::E8820ShownMap(const uint32_t leds)
+{
+	if ((leds & kLed8820MapShown) == 0) return -1;
+	switch ((leds >> 4) & 0xfu) {
+	case 0x1: return 0; // 55
+	case 0x2: return 1; // 88
+	case 0x4: return 2; // 88Pro
+	case 0x8: return 3; // 8820
+	default: return -1;
+	}
+}
+#endif

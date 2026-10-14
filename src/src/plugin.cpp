@@ -15,6 +15,8 @@ constexpr auto NumPlugins = 6;
 // Product family in the plugin names (each build only contains its own family name)
 #if defined(NUKED_SC55_DEVICE_8850)
 #define NUKED_PLUGIN_FAMILY "Nuked SC-8850 P256"
+#elif defined(NUKED_SC55_DEVICE_8820)
+#define NUKED_PLUGIN_FAMILY "Nuked SC-8820 P256"
 #elif defined(NUKED_SC55_DEVICE_88)
 #define NUKED_PLUGIN_FAMILY "Nuked SC-88 P256"
 #elif defined(NUKED_SC55_ENGINE_88PRO)
@@ -135,6 +137,17 @@ static const clap_plugin_descriptor_t plugin_descriptor_sc88 = {
         .support_url  = Url,
         .version      = Version,
         .description = "Roland SC-88 emulation (88emu core) with extended polyphony",
+        .features = Features};
+static const clap_plugin_descriptor_t plugin_descriptor_sc8820 = {
+        .clap_version = CLAP_VERSION_INIT,
+        .id           = "net.nuked_sc55_poly_clap.sc8820",
+        .name         = NUKED_PLUGIN_FAMILY " — Roland SC-8820",
+        .vendor       = Vendor,
+        .url          = Url,
+        .manual_url   = Url,
+        .support_url  = Url,
+        .version      = Version,
+        .description = "Roland SC-8820 emulation (88emu core) with extended polyphony",
         .features = Features};
 #endif
 
@@ -657,6 +670,11 @@ static const clap_plugin_t my_plugin_class_sc88 = [] {
 	c.desc          = &plugin_descriptor_sc88;
 	return c;
 }();
+static const clap_plugin_t my_plugin_class_sc8820 = [] {
+	clap_plugin_t c = my_plugin_class_sc88pro;
+	c.desc          = &plugin_descriptor_sc8820;
+	return c;
+}();
 #endif
 
 
@@ -699,6 +717,7 @@ static const clap_plugin_factory_t plugin_factory = {
 			        case 6: orig = &plugin_descriptor_sc88pro; break;
 			        case 7: orig = &plugin_descriptor_sc8850; break;
 			        case 8: orig = &plugin_descriptor_sc88; break;
+			        case 9: orig = &plugin_descriptor_sc8820; break;
 #endif
 			        default: orig = &plugin_descriptor_sc55mk2_v1_01; break;
 			        }
@@ -734,6 +753,8 @@ static const clap_plugin_factory_t plugin_factory = {
 		        return &plugin_descriptor_sc8850;
 	        } else if (index == 8) {
 		        return &plugin_descriptor_sc88;
+	        } else if (index == 9) {
+		        return &plugin_descriptor_sc8820;
 #endif
 
 	        } else {
@@ -791,6 +812,8 @@ static const clap_plugin_factory_t plugin_factory = {
 		        the_plugin = new NukedSc55(my_plugin_class_sc8850, host, NukedSc55::Model::Sc8850);
 	        } else if (strcmp(plugin_id, plugin_descriptor_sc88.id) == 0) {
 		        the_plugin = new NukedSc55(my_plugin_class_sc88, host, NukedSc55::Model::Sc88);
+	        } else if (strcmp(plugin_id, plugin_descriptor_sc8820.id) == 0) {
+		        the_plugin = new NukedSc55(my_plugin_class_sc8820, host, NukedSc55::Model::Sc8820);
 #endif
 	        } else {
 		        return nullptr;
