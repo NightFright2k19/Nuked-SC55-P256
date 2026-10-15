@@ -6,8 +6,9 @@
 // (NukedSc55::PanelLeds, ORed over ~40 ms because the firmware multiplexes them) select which
 // regions are copied from the lit image. INST MAP and the VOLUME push (PREVIEW) drive unit 0's
 // switches; the plugin adopts the map unit 0 shows and keeps the other units on it. The VOLUME
-// knob turns the plugin GAIN (drag, wheel; double-click = 0 dB); a click without turning is the
-// PREVIEW push, as on the device.
+// knob is labelled GAIN and turns the plugin's output gain (drag, wheel; double-click = 0 dB); a click
+// without turning is the PREVIEW push, as on the device. VOICES / UNITS sit left of INST MAP like
+// on the other panels; the GAIN value is printed under the knob.
 
 extern "C" const unsigned char nk_panel8820_b[] asm("nk_panel8820_b");
 extern "C" const unsigned char nk_panel8820_e[] asm("nk_panel8820_e");
@@ -19,11 +20,13 @@ void ShowSetupMenu(Editor& e); // editor_win32.cpp
 namespace {
 
 // Geometry (panel pixels, see make_sc8820_panel.py)
-constexpr POINT E20_INSTMAP = {228, 112};
+constexpr POINT E20_INSTMAP = {215, 112};
 constexpr int E20_INSTMAP_R = 13;
 constexpr POINT E20_KNOB = {712, 118};
 constexpr int E20_KNOB_R = 24;
-constexpr RECT E20_VOICES = {84, 214, 196, 246}, E20_UNITS = {212, 218, 300, 242}, E20_GAIN = {356, 218, 434, 242};
+constexpr RECT E20_VOICES = {33, 37, 149, 132}, E20_UNITS = {36, 140, 146, 160}; // DrawVoices88 window
+constexpr RECT E20_GAIN = {682, 146, 742, 160};                                     // value under the knob
+constexpr COLORREF E20_INK = RGB(0x30, 0x2e, 0x2c);                                 // front print
 constexpr RECT E20_SETUP = {800, 218, 890, 242};
 constexpr RECT E20_POWER = {309, 70, 338, 99}, E20_USB = {368, 72, 401, 96};
 constexpr double E20_GX = 508.0, E20_GW = 11.4;           // first dot column, column pitch
@@ -114,20 +117,10 @@ void Draw8820(Editor& e, HDC dc)
         DeleteObject(pen);
         char g[16];
         std::snprintf(g, sizeof(g), "%+.1f dB", std::fabs(gain) < 0.05f ? 0.0f : gain);
-        Box88(e, dc, E20_GAIN, g, C88_LED, true);
+        Text(dc, e.f_tiny, E20_INK, E20_GAIN.left, E20_GAIN.top, g, DT_CENTER, E20_GAIN.right - E20_GAIN.left,
+             E20_GAIN.bottom - E20_GAIN.top);
     }
-    {   // VOICES / UNITS
-        NukedSc55& pl = p;
-        char v[32];
-        const int cap = pl.PartialsPerInstance(), units = (pl.max_voices.load() + cap - 1) / cap;
-        std::snprintf(v, sizeof(v), "%03d/%d", pl.ui_voices.load(), units * cap);
-        Text(dc, e.f_value, C88_LED, E20_VOICES.left, E20_VOICES.top + 4, v, DT_CENTER,
-             E20_VOICES.right - E20_VOICES.left, E20_VOICES.bottom - E20_VOICES.top - 8);
-        const int awake = pl.ui_awake.load();
-        if (awake > units) std::snprintf(v, sizeof(v), "UNITS %d->%d", awake, units);
-        else std::snprintf(v, sizeof(v), "UNITS %d/%d", awake, units);
-        Box88(e, dc, E20_UNITS, v, C88_LED, true);
-    }
+    DrawVoices88(e, dc, E20_VOICES, E20_UNITS); // count, bar and UNITS as on the other panels
     Box88(e, dc, E20_SETUP, e.menu_open ? "SETUP  \x85" : "SETUP  >", C88_LED, true);
 }
 

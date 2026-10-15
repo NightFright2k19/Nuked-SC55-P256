@@ -37,12 +37,32 @@ for y in range(X(FRONT), H*S):
 d.line([(0, X(FRONT)), (W*S, X(FRONT))], fill=(20, 20, 20), width=X(2))
 
 INK = (48, 46, 44)
-# --- left: plugin branding (in place of the maker's logo)
-d.text((X(56), X(72)), "Nuked", font=F(24, "-Oblique"), fill=INK)
-d.text((X(56), X(102)), "SC-8820", font=F(21, "-Bold"), fill=INK)
+# --- left: VOICES module like the other panels (count, level bar, UNITS) in a recessed dark bay
+VX0, VX1 = 22, 160
+d.rounded_rectangle((X(VX0-6), X(14), X(VX1+6), X(FRONT-22)), X(5), fill=(150, 140, 120))      # bay edge
+d.rounded_rectangle((X(VX0-4), X(16), X(VX1+4), X(FRONT-24)), X(4), fill=(52, 52, 56))
+def centred_in(box, text, font, fill):
+    x0, y0, x1, y1 = box
+    l, t, r_, b_ = d.textbbox((0, 0), text, font=font)
+    d.text(((X(x0) + X(x1) - (r_ - l))/2 - l, (X(y0) + X(y1) - (b_ - t))/2 - t), text, font=font, fill=fill)
+centred_in((VX0, 18, VX1, 34), "VOICES", F(11, "-Bold"), (225, 225, 225))
+d.rectangle((X(VX0+2), X(37), X(VX1-2), X(132)), fill=(20, 20, 22))                          # display
+VOICE_BOX = (VX0+2, 37, VX1-2, 132)
+VWIN = (33, 37, 149, 132)              # window given to DrawVoices88 by the GUI (text centred, bar from +8)
+if lit:
+    centred_in((VWIN[0], 45, VWIN[2], 79), "031", F(30, "-Bold"), (255, 154, 46))
+    centred_in((VWIN[0], 81, VWIN[2], 95), "of 256", F(9.5, "-Bold"), (154, 158, 166))
+for k in range(20):                                                                            # level bar
+    x = VWIN[0] + 8 + k*5
+    on = lit and k < 3
+    col = (255, 154, 46) if on else (90, 56, 24)
+    if lit and k == 4: col = (255, 88, 48)                                                     # peak
+    d.rectangle((X(x), X(103), X(x+4), X(125)), fill=col)
+d.rectangle((X(36), X(140), X(146), X(160)), fill=(26, 26, 28))                               # UNITS
+if lit: centred_in((36, 140, 146, 160), "UNITS 1/4", F(10.5, "-Bold"), (255, 154, 46))
 # --- INST MAP button
-d.text((X(196), X(76)), "INST MAP", font=F(13, "-Bold"), fill=INK)
-cx, cy, r = 228, 112, 8.5
+d.text((X(184), X(76)), "INST MAP", font=F(12.5, "-Bold"), fill=INK)
+cx, cy, r = 215, 112, 8.5
 d.ellipse((X(cx-r-2), X(cy-r-2), X(cx+r+2), X(cy+r+2)), fill=(150, 140, 120))
 d.ellipse((X(cx-r), X(cy-r), X(cx+r), X(cy+r)), fill=(168, 168, 166))
 d.ellipse((X(cx-r+2), X(cy-r+1.5), X(cx+r-3), X(cy+r-4)), fill=(196, 196, 194))
@@ -109,17 +129,19 @@ def usb_icon(x, y, on):
 power_icon(323, 84, lit or all_on)
 usb_icon(384, 84, lit or all_on)   # shown as connected (always on in the plugin)
 # --- VOLUME / PREVIEW (PUSH) knob and phones jack
-d.text((X(672), X(56)), "VOLUME", font=F(16, "-Bold"), fill=INK)
+d.text((X(686), X(56)), "GAIN", font=F(16, "-Bold"), fill=INK)
 d.text((X(672), X(76)), "PREVIEW (PUSH)", font=F(8.5, "-Bold"), fill=INK)
 kx, ky = 712, 118
 d.ellipse((X(kx-26), X(ky-26), X(kx+26), X(ky+26)), fill=(150, 140, 120))
 d.ellipse((X(kx-22), X(ky-22), X(kx+22), X(ky+22)), fill=(26, 26, 26))
 d.ellipse((X(kx-15), X(ky-15), X(kx+15), X(ky+15)), fill=(40, 40, 40))
 if not base: d.line([(X(kx), X(ky-21)), (X(kx), X(ky-13))], fill=(232, 214, 120), width=X(2.6))   # cream marker (GUI: drawn at the GAIN position)
-for mx in (kx-17, kx+17):                                                      # min / max dots
-    d.ellipse((X(mx-1.6), X(ky+28), X(mx+1.6), X(ky+31.2)), fill=INK)
+for mx in (kx-29, kx+29):                                                      # min / max dots
+    d.ellipse((X(mx-1.6), X(ky+22), X(mx+1.6), X(ky+25.2)), fill=INK)
+GAIN_BOX = (kx-30, ky+28, kx+30, ky+42)                                         # value, drawn by the GUI
+if lit: centred_in(GAIN_BOX, "+0.0 dB", F(10, "-Bold"), INK)
 jx, jy = 792, 112
-d.text((X(jx-6), X(56)), "\u2229", font=F(18, "-Bold"), fill=INK)
+centred_in((jx-12, 54, jx+12, 76), "\u2229", F(18, "-Bold"), INK)
 d.ellipse((X(jx-15), X(jy-15), X(jx+15), X(jy+15)), fill=(150, 140, 120))
 d.ellipse((X(jx-12), X(jy-12), X(jx+12), X(jy+12)), fill=(30, 30, 30))
 d.ellipse((X(jx-5), X(jy-5), X(jx+5), X(jy+5)), fill=(70, 70, 70))
@@ -129,16 +151,8 @@ def centred(box, text, font, fill):
     x0, y0, x1, y1 = box
     l, t, r_, b_ = d.textbbox((0, 0), text, font=font)
     d.text(((X(x0) + X(x1) - (r_ - l))/2 - l, (X(y0) + X(y1) - (b_ - t))/2 - t), text, font=font, fill=fill)
-d.text((X(22), X(FRONT+28)), "VOICES", font=F(11, "-Bold"), fill=(170, 170, 170))
-VB = (84, FRONT+18, 196, FRONT+50); d.rectangle(tuple(X(v) for v in VB), fill=(10, 10, 10))
-if lit: centred(VB, "031/256", F(18, "-Bold"), OR)
-UB = (212, FRONT+22, 300, FRONT+46); d.rectangle(tuple(X(v) for v in UB), fill=(28, 28, 30), outline=(80, 80, 80))
-if lit: centred(UB, "UNITS 1/4", F(11, "-Bold"), OR)
-d.text((X(318), X(FRONT+28)), "GAIN", font=F(11, "-Bold"), fill=(170, 170, 170))
-GB = (356, FRONT+22, 434, FRONT+46); d.rectangle(tuple(X(v) for v in GB), fill=(28, 28, 30), outline=(80, 80, 80))
-if lit: centred(GB, "+0.0 dB", F(11, "-Bold"), OR)
-d.text((X(500), X(FRONT+22)), "Nuked-SC", font=F(22, "-Oblique"), fill=(150, 150, 150))
-d.text((X(608), X(FRONT+20)), "8820", font=F(24, "-BoldOblique"), fill=(200, 200, 200))
+d.text((X(40), X(FRONT+22)), "Nuked-SC", font=F(22, "-Oblique"), fill=(150, 150, 150))
+d.text((X(148), X(FRONT+20)), "8820", font=F(24, "-BoldOblique"), fill=(200, 200, 200))
 SB = (800, FRONT+22, 890, FRONT+46); d.rectangle(tuple(X(v) for v in SB), fill=(16, 16, 16))
 if not base: centred(SB, "SETUP  >", F(11, "-Bold"), OR)
 out = im.resize((W, H), Image.LANCZOS)

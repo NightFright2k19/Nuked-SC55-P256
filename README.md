@@ -5,7 +5,7 @@
 <img width="918" height="280" alt="sc55_mk2" src="https://github.com/user-attachments/assets/2ad02a8b-aef4-44f3-b5ed-8b1a7bf05e6b" />
 <img width="918" height="281" alt="sc_88" src="https://github.com/user-attachments/assets/4c4cf183-b4d8-4177-b115-526d5754561c" />
 <img width="918" height="280" alt="sc_88pro" src="https://github.com/user-attachments/assets/efe4a79e-5ba9-4abf-b199-a00c968ba4c7" />
-<img width="919" height="281" alt="sc8820" src="https://github.com/user-attachments/assets/0d6b2839-ad16-49db-8893-4db31cbef12b" />
+<img width="918" height="280" alt="sc8820" src="docs/images/sc8820_panel.png" />
 <img width="918" height="279" alt="sc_8850" src="https://github.com/user-attachments/assets/853f8c54-9bf6-4ff2-bf91-a5d85f23c303" />
 </p>
 
@@ -59,7 +59,7 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 - **SC-55mk2 with CTF:** the plug-in prefers a `rom2.bin` patched with Capital Tone Fallback (the original plug-in always loads the unpatched one). In the single-file builds, the CTF `rom2.bin` is built in.
 - **SC-88:** the 88emu engine with the firmware of the first SC-88, 32 parts on two MIDI inputs like the SC-88 Pro, the original front panel driven by the firmware, and GAIN. See [SC-88 engine](#sc-88-engine-88emu).
 - **SC-88 Pro:** a second engine based on the 88emu core from the Gearmulator project, with the SC-55 / SC-88 / SC-88 Pro tone map switch of the hardware, gain, mute and preview, and both MIDI inputs (32 parts A01-A16 / B01-B16: port select `F5 01` / `F5 02`, or the second CLAP note port "MIDI IN B"). The SC-55 code is untouched by this (audio compared byte by byte).
-- **SC-8820:** the same 88emu engine with the SC-8820 firmware, 32 parts on two MIDI inputs (A, B), a front panel drawn after the device (lamps from the firmware, INST MAP, VOLUME = GAIN with PREVIEW push). See [SC-8820 engine](#sc-8820-engine-88emu).
+- **SC-8820:** the same 88emu engine with the SC-8820 firmware, 32 parts on two MIDI inputs (A, B), a front panel drawn after the device (lamps from the firmware, INST MAP, GAIN knob with PREVIEW push). See [SC-8820 engine](#sc-8820-engine-88emu).
 - **SC-8850:** the same 88emu engine with the SC-8850 firmware, 64 parts on four MIDI inputs (A-D), the original front panel with graphic LCD driven by the firmware, and GAIN. See [SC-8850 engine](#sc-8850-engine-88emu).
 
 ### Formats and packaging
@@ -292,9 +292,9 @@ The SC-8820 plug-in uses the 88emu core with the SC-8820 firmware (compile-time 
 
 ### SC-8820 panel (918 x 280 px)
 
-- **Graphics:** drawn from scratch by `tools/make_sc8820_panel.py` after photos of the device (no photo or third-party art is used): the champagne metal front, the smoked display window with POWER and USB symbols, the PART A / PART B level indicators (12 x 3 dots each: 8 columns green, 1 yellow, 3 red), the map labels, the INST MAP button and the VOLUME knob. The maker's logos are replaced by the plug-in's own branding. Below the front a strip with VOICES, UNITS, GAIN and SETUP.
+- **Graphics:** drawn from scratch by `tools/make_sc8820_panel.py` after photos of the device (no photo or third-party art is used): the champagne metal front, the smoked display window with POWER and USB symbols, the PART A / PART B level indicators (12 x 3 dots each: 8 columns green, 1 yellow, 3 red), the map labels, the INST MAP button and the knob (labelled GAIN). The maker's logos are replaced by the plug-in's own branding. VOICES (count, bar) and UNITS sit left of INST MAP as on the other panels, the GAIN value under the knob; the strip below holds the name and SETUP.
 - **Lamps:** from unit 0's firmware. It lights the level indicators in 4 blocks of 3 columns per part group and multiplexes them, so the panel combines them over 40 ms. After INST MAP the PART B block above the chosen map lights, as on the device. POWER and USB are always lit (the emulation has no USB host; the firmware would blink USB).
-- **Controls:** INST MAP is the device's button (held while the mouse button is down, at least 120 ms). The VOLUME knob turns GAIN (drag, mouse wheel, double-click = 0 dB; its marker follows GAIN); a click without turning is the PREVIEW push of the device.
+- **Controls:** INST MAP is the device's button (held while the mouse button is down, at least 120 ms). The knob in place of the device's VOLUME turns GAIN (drag, mouse wheel, double-click = 0 dB; its marker follows GAIN); a click without turning is the PREVIEW push of the device.
 - **SETUP:** max polyphony, inst map for all parts (SC-55 / SC-88 / SC-88 Pro / SC-8820, default SC-8820; the same setting as the INST MAP button), Send Reset (GM / GS / GM2), all notes off.
 
 
