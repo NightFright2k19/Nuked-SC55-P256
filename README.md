@@ -5,6 +5,7 @@
 <img width="918" height="280" alt="sc55_mk2" src="https://github.com/user-attachments/assets/2ad02a8b-aef4-44f3-b5ed-8b1a7bf05e6b" />
 <img width="918" height="281" alt="sc_88" src="https://github.com/user-attachments/assets/4c4cf183-b4d8-4177-b115-526d5754561c" />
 <img width="918" height="280" alt="sc_88pro" src="https://github.com/user-attachments/assets/efe4a79e-5ba9-4abf-b199-a00c968ba4c7" />
+<img width="919" height="281" alt="sc8820" src="https://github.com/user-attachments/assets/0d6b2839-ad16-49db-8893-4db31cbef12b" />
 <img width="918" height="279" alt="sc_8850" src="https://github.com/user-attachments/assets/853f8c54-9bf6-4ff2-bf91-a5d85f23c303" />
 </p>
 
@@ -418,7 +419,7 @@ Build-time options (CMake cache variable or compiler define):
 
 The patcher (`patcher.py`, texts in `patcher_i18n.py`) is a small window around the P256 builder. The releases contain it as a single executable per system, built with PyInstaller, with the ROM-less templates inside. It is not an installer: it writes nothing but the `Plugins` folder (no registry entries, nothing to uninstall).
 
-<img width="482" height="418" alt="p256_patcher" src="https://github.com/user-attachments/assets/cc45c97f-e621-4898-be97-19802dafa864" />
+<img width="626" height="546" alt="patcher_preview" src="https://github.com/user-attachments/assets/f6a66463-c1b6-45cc-9834-8ba7465e89fb" />
 
 - **ROM files:** searched in the patcher's folder and all subfolders (by SHA-256, names do not matter). If no complete set is found there, it asks for the folder; **Change…** picks another one at any time. Each model is listed as complete, incomplete (with the missing parts) or not found.
 - **Patch:** builds every complete model into `Plugins/CLAP/<name>.clap` and `Plugins/VST2/<name>.dll` next to the patcher (the folder is created if needed). **Details** shows which file was used for which part.
