@@ -6,9 +6,10 @@
 // (NukedSc55::PanelLeds, ORed over ~40 ms because the firmware multiplexes them) select which
 // regions are copied from the lit image. INST MAP and the VOLUME push (PREVIEW) drive unit 0's
 // switches; the plugin adopts the map unit 0 shows and keeps the other units on it. The VOLUME
-// knob is labelled GAIN and turns the plugin's output gain (drag, wheel; double-click = 0 dB); a click
-// without turning is the PREVIEW push, as on the device. VOICES / UNITS sit left of INST MAP like
-// on the other panels; the GAIN value is printed under the knob.
+// knob is labelled GAIN and turns the plugin's output gain (left-drag, wheel; double-click = 0 dB), always
+// silent. The device's PREVIEW (pushing the knob) is a right click on the knob here, because turning
+// needs the left button (issue #48). VOICES / UNITS sit left of INST MAP like on the other panels; the
+// GAIN value is printed under the knob.
 
 extern "C" const unsigned char nk_panel8820_b[] asm("nk_panel8820_b");
 extern "C" const unsigned char nk_panel8820_e[] asm("nk_panel8820_e");
@@ -31,7 +32,6 @@ constexpr RECT E20_SETUP = {800, 218, 890, 242};
 constexpr RECT E20_POWER = {309, 70, 338, 99}, E20_USB = {368, 72, 401, 96};
 constexpr double E20_GX = 508.0, E20_GW = 11.4;           // first dot column, column pitch
 constexpr int E20_ROW_A = 56, E20_ROW_B = 94;             // first dot row of PART A / PART B
-constexpr int E20_CLICK_PX = 3;                           // a knob click that moved less = PREVIEW push
 constexpr DWORD E20_MIN_HOLD_MS = 120;                    // a short click still reaches the switch scan
 constexpr uint32_t E20_BIT_INSTMAP = 1u, E20_BIT_PREVIEW = 2u;
 constexpr int E20_HIT_INSTMAP = 1, E20_HIT_KNOB = 2, E20_HIT_SETUP = 3;
@@ -145,29 +145,37 @@ bool Mouse8820(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 p.NotifyStateChanged();
                 return true;
             }
-            e.drag_vol  = true; // turning; a click without turning pushes the knob (PREVIEW)
+            e.drag_vol  = true; // turning only (silent); PREVIEW is the right click
             e.drag_x    = x;
             e.drag_y    = y;
             e.drag_v0   = p.gain_db.load();
-            e.held85    = E20_BIT_PREVIEW;
-            e.release85 = false;
-            e.press85   = GetTickCount();
-            send();
             SetCapture(hwnd);
         } else if (h == E20_HIT_SETUP) {
             ShowSetupMenu(e);
         }
         return true;
     }
-    case WM_MOUSEMOVE:
-        if (e.drag_vol && (e.held85 & E20_BIT_PREVIEW)) {
-            const int dx = (short)LOWORD(lp) - e.drag_x, dy = (short)HIWORD(lp) - e.drag_y;
-            if (std::abs(dx) > E20_CLICK_PX || std::abs(dy) > E20_CLICK_PX) { // turning, not pushing
+    case WM_RBUTTONDOWN: { // right click on the knob = push the knob (PREVIEW), held while the button is down
+        const int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
+        if (Hit8820(x, y) == E20_HIT_KNOB && !e.drag_vol && !e.held85) {
+            e.held85    = E20_BIT_PREVIEW;
+            e.release85 = false;
+            e.press85   = GetTickCount();
+            send();
+            SetCapture(hwnd);
+        }
+        return true;
+    }
+    case WM_RBUTTONUP:
+        if (e.held85 == E20_BIT_PREVIEW && !e.release85) { // let go by the timer once held long enough
+            e.release85 = true;
+            if (GetTickCount() - e.press85 >= E20_MIN_HOLD_MS) {
                 e.held85 = 0;
                 send();
             }
+            ReleaseCapture();
         }
-        return false; // GAIN drag: shared code
+        return true;
     case WM_LBUTTONUP:
     case WM_CAPTURECHANGED:
         if (e.held85 && !e.release85) { // let go by the timer once held long enough
