@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Draws the Nuked-SC8820 panel from scratch, modelled on photos of the SC-8820 front (champagne
 # metal front, smoked display window, 12 x 3 level dots per part group: columns 1-8 green, 9 yellow,
-# 10-12 red; red POWER/USB symbols). Nothing is copied from the photos; all shapes and text are
+# 10-12 red with blends in columns 7, 8, 10, 11; red POWER and amber USB symbols). Nothing is copied from the photos; all shapes and text are
 # drawn here, and the maker's logos and product names are replaced by the plugin's own branding.
 # Upper 196 px = the device front; lower strip = plugin additions (VOICES, UNITS, SETUP).
 # usage: make_sc8820_panel.py <out.png|out.bgra> [--lit | --all-on | --base]
@@ -100,11 +100,15 @@ def dot(x, y, col, on):
         d.ellipse((X(x-rr), X(y-rr), X(x+rr), X(y+rr)), fill=col)
     else:
         d.ellipse((X(x-rr), X(y-rr), X(x+rr), X(y+rr)), fill=(92, 92, 94))   # unlit: grey print
+YGN, ORG = (190, 225, 50), (255, 140, 30)                 # yellow-green, orange
+# colour per column (1..12) and row (top..bottom): green, then a blend through yellow and orange to red
+DOT_COL = {c: (GRN, GRN, GRN) for c in range(1, 7)}
+DOT_COL.update({7: (GRN, GRN, YGN), 8: (GRN, YGN, YEL), 9: (YEL, YEL, YEL),
+                10: (RED, ORG, YEL), 11: (RED, RED, ORG), 12: (RED, RED, RED)})
 def meter(y0, segs):                                  # segs: 4 bools
     for c in range(12):
-        col = GRN if c < 8 else (YEL if c == 8 else RED)
         for r in range(3):
-            dot(GX + c*GW, y0 + r*6.2, col, segs[c//3])
+            dot(GX + c*GW, y0 + r*6.2, DOT_COL[c + 1][r], segs[c//3])
 meter(56, [1]*4 if all_on else ([1, 1, 1, 0] if lit else [0]*4))
 meter(94, [1]*4 if all_on else ([0, 0, 1, 0] if lit else [0]*4))
 # POWER symbol and USB symbol (red when lit)
@@ -118,9 +122,10 @@ def power_icon(x, y, on):
     if on: glow(x, y, 9, RED)
     d.arc((X(x-6), X(y-6), X(x+6), X(y+6)), 300, 240, fill=col, width=X(1.6))
     d.line([(X(x), X(y-8)), (X(x), X(y-1))], fill=col, width=X(1.6))
+AMB = (255, 160, 40)                                  # USB lamp: amber on the device (photos)
 def usb_icon(x, y, on):
-    col = RED if on else OFF_ICON
-    if on: glow(x, y, 8, RED)
+    col = AMB if on else OFF_ICON
+    if on: glow(x, y, 8, AMB)
     d.line([(X(x-9), X(y)), (X(x+9), X(y))], fill=col, width=X(1.4))
     d.ellipse((X(x-11), X(y-2), X(x-7), X(y+2)), fill=col)
     d.polygon([(X(x+9), X(y-3)), (X(x+13), X(y)), (X(x+9), X(y+3))], fill=col)
@@ -141,7 +146,11 @@ for mx in (kx-29, kx+29):                                                      #
 GAIN_BOX = (kx-30, ky+28, kx+30, ky+42)                                         # value, drawn by the GUI
 if lit: centred_in(GAIN_BOX, "+0.0 dB", F(10, "-Bold"), INK)
 jx, jy = 792, 112
-centred_in((jx-12, 54, jx+12, 76), "\u2229", F(18, "-Bold"), INK)
+# headphones: headband arc and two ear cups
+d.arc((X(jx-8), X(57), X(jx+8), X(75)), 180, 360, fill=INK, width=X(2.2))
+for sx in (-1, 1):
+    cxp = jx + sx*7.2
+    d.rounded_rectangle((X(cxp-2.6), X(64), X(cxp+2.6), X(74)), X(1.4), fill=INK)
 d.ellipse((X(jx-15), X(jy-15), X(jx+15), X(jy+15)), fill=(150, 140, 120))
 d.ellipse((X(jx-12), X(jy-12), X(jx+12), X(jy+12)), fill=(30, 30, 30))
 d.ellipse((X(jx-5), X(jy-5), X(jx+5), X(jy+5)), fill=(70, 70, 70))
