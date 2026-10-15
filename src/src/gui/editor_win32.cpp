@@ -270,7 +270,8 @@ void ShowSetupMenu(Editor& e)
         const bool checked = (cur + cap - 1) / cap == units;
         AppendMenuW(m, MF_STRING | (checked ? MF_CHECKED : 0), 100 + v, s);
     }
-#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88)
+#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88) && \
+    !defined(NUKED_SC55_DEVICE_8820)
     HMENU pv_menu = CreatePopupMenu(); // "Prevw Note" C-1 .. G9 (Roland numbering, C4 = 60)
     {
         const int pn = p.preview_note.load();
@@ -306,12 +307,15 @@ void ShowSetupMenu(Editor& e)
     }
 #endif
 #ifdef NUKED_SC55_DEVICE_8820
-    {   // active INST MAP (shown only; chosen with the INST MAP button, as on the device)
+    {   // INST MAP (all parts): chosen here or with the INST MAP button, stored in the state
         const int tm = p.tone_map.load();
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Inst map (INST MAP button)", L"Inst-Map (Taste INST MAP)"));
-        const wchar_t* names[4] = {L"   SC-55", L"   SC-88", L"   SC-88 Pro", L"   SC-8820"};
-        for (int i = 0; i < 4; ++i) AppendMenuW(m, MF_STRING | MF_GRAYED | (tm == i ? MF_CHECKED : 0), 0, names[i]);
+        AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Inst map (all parts)", L"Inst-Map (alle Parts)"));
+        AppendMenuW(m, MF_STRING | (tm == 0 ? MF_CHECKED : 0), 200, L"   SC-55 Map");
+        AppendMenuW(m, MF_STRING | (tm == 1 ? MF_CHECKED : 0), 201, L"   SC-88 Map");
+        AppendMenuW(m, MF_STRING | (tm == 2 ? MF_CHECKED : 0), 202, L"   SC-88 Pro Map");
+        AppendMenuW(m, MF_STRING | (tm == 3 ? MF_CHECKED : 0), 203,
+                    T(L"   SC-8820 Map\t(default)", L"   SC-8820 Map\t(Standard)"));
     }
 #endif
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
@@ -357,7 +361,7 @@ void ShowSetupMenu(Editor& e)
         p.preview_note = cmd - 300; // stored in the plugin state
         p.NotifyStateChanged();
 #endif
-    } else if (cmd >= 200 && cmd <= 202) {
+    } else if (cmd >= 200 && cmd <= 200 + NukedSc55::kMaxToneMap) {
         p.tone_map = cmd - 200; // switched like the panel buttons, stored in the state
         p.NotifyStateChanged();
     } else if (cmd >= 100) {
