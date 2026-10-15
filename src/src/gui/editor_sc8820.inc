@@ -196,9 +196,9 @@ bool Mouse8820(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_MOUSEWHEEL: {
         POINT pt{(short)LOWORD(lp), (short)HIWORD(lp)};
         ScreenToClient(hwnd, &pt);
-        if (Hit8820(pt.x, pt.y) == E20_HIT_KNOB) { // one knob position (of 31) per notch
+        if (Hit8820(pt.x, pt.y) == E20_HIT_KNOB) { // 0.1 dB per notch
             const int dir = GET_WHEEL_DELTA_WPARAM(wp) > 0 ? 1 : -1;
-            p.gain_db = GainOfKnobFrame(GainKnobFrame(p.gain_db.load()) + dir);
+            p.gain_db = GainWheelStep(p.gain_db.load(), dir);
             p.NotifyStateChanged();
         }
         return true;

@@ -384,8 +384,8 @@ bool Mouse8850(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (h == E85_HIT_VALUE) {
             p.ui_encoder.fetch_add(dir);
             e.value85 += dir;
-        } else if (h == E85_HIT_GAIN) { // one knob position (of 31, 0.8 dB) per notch
-            p.gain_db = GainOfKnobFrame(GainKnobFrame(p.gain_db.load()) + dir);
+        } else if (h == E85_HIT_GAIN) { // 0.1 dB per notch
+            p.gain_db = GainWheelStep(p.gain_db.load(), dir);
             p.NotifyStateChanged();
         }
         return true;

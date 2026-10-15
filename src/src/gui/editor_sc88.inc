@@ -23,10 +23,14 @@ int GainKnobFrame(float db)
     const float span = NukedSc55::kGainMaxDb - NukedSc55::kGainMinDb;
     return std::clamp(static_cast<int>(std::lround((db - NukedSc55::kGainMinDb) / span * 30.0f)), 0, 30);
 }
-float GainOfKnobFrame(int frame)
+// One mouse wheel notch on the GAIN knob = 0.1 dB (the resolution the state stores); the knob sprite
+// follows in its 31 positions (issue #50)
+float GainWheelStep(float db, int dir)
 {
-    const float span = NukedSc55::kGainMaxDb - NukedSc55::kGainMinDb;
-    return NukedSc55::kGainMinDb + std::clamp(frame, 0, 30) * span / 30.0f;
+    const int tenths = std::clamp(static_cast<int>(std::lround(db * 10.0f)) + dir,
+                                  static_cast<int>(std::lround(NukedSc55::kGainMinDb * 10.0f)),
+                                  static_cast<int>(std::lround(NukedSc55::kGainMaxDb * 10.0f)));
+    return static_cast<float>(tenths) / 10.0f;
 }
 
 constexpr COLORREF C88_LED      = RGB(0xff, 0x9a, 0x2e);

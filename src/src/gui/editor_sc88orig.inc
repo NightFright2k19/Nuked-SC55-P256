@@ -308,8 +308,8 @@ bool Mouse88o(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_MOUSEWHEEL: {
         POINT pt{(short)LOWORD(lp), (short)HIWORD(lp)};
         ScreenToClient(hwnd, &pt);
-        if (Hit88o(pt.x, pt.y) == E88O_HIT_GAIN) { // one knob position (of 31, 0.8 dB) per notch
-            p.gain_db = GainOfKnobFrame(GainKnobFrame(p.gain_db.load()) + (GET_WHEEL_DELTA_WPARAM(wp) > 0 ? 1 : -1));
+        if (Hit88o(pt.x, pt.y) == E88O_HIT_GAIN) { // 0.1 dB per notch
+            p.gain_db = GainWheelStep(p.gain_db.load(), GET_WHEEL_DELTA_WPARAM(wp) > 0 ? 1 : -1);
             p.NotifyStateChanged();
         }
         return true;
