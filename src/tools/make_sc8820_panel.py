@@ -152,9 +152,11 @@ if not pro:
 else:                                  # small, beside their labels
     power_icon(334, 137, lit or all_on)
     usb_icon(390, 137, lit or all_on)
-# --- VOLUME / PREVIEW (PUSH) knob and phones jack
+# --- GAIN knob and phones jack; PREVIEW (the device's push) is a right click in the plug-in (RMB)
 d.text((X(686), X(56)), "GAIN", font=F(16, "-Bold"), fill=INK)
-d.text((X(672), X(76)), "PREVIEW (PUSH)", font=F(8.5, "-Bold"), fill=INK)
+gl, _, gr, _ = d.textbbox((X(686), X(56)), "GAIN", font=F(16, "-Bold"))
+pl, _, pr, _ = d.textbbox((0, 0), "PREVIEW (RMB)", font=F(8.5, "-Bold"))
+d.text(((gl + gr - pl - pr)/2, X(76)), "PREVIEW (RMB)", font=F(8.5, "-Bold"), fill=INK)   # centred below GAIN
 kx, ky = 712, 118
 d.ellipse((X(kx-26), X(ky-26), X(kx+26), X(ky+26)), fill=(150, 140, 120))
 d.ellipse((X(kx-22), X(ky-22), X(kx+22), X(ky+22)), fill=(26, 26, 26))
