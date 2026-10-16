@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstring>
+#include <mutex>
 #include <string>
 
 #include "nuked_sc55.h"
@@ -708,10 +709,9 @@ static const clap_plugin_factory_t plugin_factory = {
 	        index = NUKED_SC55_ONLY_MODEL;
 #ifdef NUKED_SC55_DISPLAY_NAME
 	        {
-		        // Single-model build with a custom display name
-		        static clap_plugin_descriptor_t renamed = {};
-		        static bool init = false;
-		        if (!init) {
+		        // Single-model build with a custom display name. Built once, thread-safe: the
+		        // factory may be asked from several threads at the same time (CLAP requirement).
+		        static const clap_plugin_descriptor_t renamed = [index] {
 			        const clap_plugin_descriptor_t* orig = nullptr;
 			        switch (index) {
 			        case 0: orig = &plugin_descriptor_sc55_v1_00; break;
@@ -727,10 +727,10 @@ static const clap_plugin_factory_t plugin_factory = {
 #endif
 			        default: orig = &plugin_descriptor_sc55mk2_v1_01; break;
 			        }
-			        renamed      = *orig;
-			        renamed.name = NUKED_SC55_DISPLAY_NAME;
-			        init         = true;
-		        }
+			        clap_plugin_descriptor_t d = *orig;
+			        d.name = NUKED_SC55_DISPLAY_NAME;
+			        return d;
+		        }();
 		        return &renamed;
 	        }
 #endif
@@ -833,12 +833,19 @@ static const clap_plugin_factory_t plugin_factory = {
 //////////////////////////////////////////////////////////////////////////////
 
 std::string plugin_path = {};
+std::mutex plugin_path_mutex; // init() runs once per VST2 instance, possibly while another one starts
+
+static void SetPluginPath(const char* _plugin_path)
+{
+	std::lock_guard lock(plugin_path_mutex);
+	plugin_path = std::string(_plugin_path);
+}
 
 extern "C" const clap_plugin_entry_t clap_entry = {
         .clap_version = CLAP_VERSION_INIT,
 
         .init = [](const char* _plugin_path) -> bool {
-	        plugin_path = std::string(_plugin_path);
+	        SetPluginPath(_plugin_path);
 	        return true;
         },
 

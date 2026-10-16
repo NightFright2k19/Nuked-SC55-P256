@@ -134,13 +134,17 @@ constexpr auto PathSeparator = std::string_view(":");
 #endif
 
 extern std::string plugin_path;
+extern std::mutex plugin_path_mutex;
 
 NukedSc55::NukedSc55(const clap_plugin_t _plugin_class,
                      const clap_host_t* _host, const Model _model)
 {
 	log_init();
 
-	path = plugin_path;
+	{
+		std::lock_guard lock(plugin_path_mutex);
+		path = plugin_path;
+	}
 	log("Plugin path: %s", path.string().c_str());
 
 	plugin_class = _plugin_class;
@@ -376,6 +380,7 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 		}
 		emu_ok = true;
 		max_voices = MaxSelectableVoices();
+		KeepPowerOnState(opts);
 
 		const int hw = static_cast<int>(std::thread::hardware_concurrency());
 		const int threads = std::clamp(std::min(num_instances, hw - 1) - 1,
@@ -480,6 +485,7 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 		}
 		emu_ok = true;
 		max_voices = MaxSelectableVoices();
+		KeepPowerOnState(opts);
 
 		// Worker threads: one per instance at most, leave one core free.
 		const int hw = static_cast<int>(std::thread::hardware_concurrency());
@@ -493,6 +499,21 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 	return false;
 }
 
+// The emulator's Reset() only resets the CPUs' registers: RAM, the cycle counters (the main CPU
+// keeps counting, the sub-CPU starts again from 0), UART state and the PCM chip would stay from the
+// previous run. A re-activated plugin then boots its units from that state, and the SC-55mk2
+// firmware could crash shortly after. A copy of the state right after loading the ROMs lets every
+// boot start like a unit that was just switched on.
+void NukedSc55::KeepPowerOnState(const EMU_Options& opts)
+{
+	power_on = std::make_unique<Emulator>();
+	if (!power_on->Init(opts)) {
+		power_on.reset();
+		return;
+	}
+	power_on->CopyStateFrom(*instances[0].emu);
+}
+
 void NukedSc55::Shutdown()
 {
 #ifdef _WIN32
@@ -501,6 +522,7 @@ void NukedSc55::Shutdown()
 		editor = nullptr;
 	}
 #endif
+	std::lock_guard units_lock(units_mx);
 	lcd_ready = false;
 	StopWarmer();
 #ifdef NUKED_SC55_ENGINE_88PRO
@@ -548,11 +570,12 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	if (!emu_ok) {
 		return false;
 	}
+	std::lock_guard units_lock(units_mx); // the GUI does not read units while they are (re)booted
+	lcd_ready = false;
 	StopWarmer(); // no background access while (re)booting
 	disp_pace = get_env_var("NUKED_SC55_NO_DISPPACE") != "1";
 	disp_pending.clear();
 	disp_pending.reserve(kDispMax);
-	lcd_ready = false;
 
 	// Speed up the devices' bootup delay
 	const size_t num_steps = (model == Model::Sc55mk2_v1_01) ? 9'500'000
@@ -567,18 +590,17 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	JoinBootThreads();
 	for (auto& inst : instances) inst.booted->store(false, std::memory_order_relaxed);
 #ifdef NUKED_SC55_EMBED_ROMS
-	const bool background_boot = get_env_var("NUKED_SC55_NO_BGBOOT") != "1";
+	// (only units that sleep may boot in the background: awake ones are rendered right away)
+	const bool background_boot = get_env_var("NUKED_SC55_NO_BGBOOT") != "1" && dynamic_instances;
 #else
 	const bool background_boot = false; // ROM scan from files is not thread-safe
 #endif
 	if (background_boot) {
-		if (!E88BootUnit(0)) return false;
-		instances[0].booted->store(true, std::memory_order_release);
-		for (int i = 1; i < NumInstances(); ++i) {
-			boot_threads.emplace_back([this, i] {
-				E88BootUnit(i);
-				instances[i].booted->store(true, std::memory_order_release);
-			});
+		// The sleeping units start booting at the end of Activate(), once they have been put to
+		// sleep: from then on only their boot thread touches them until `booted` is set (issue #63).
+		for (int i = 0; i < min_active; ++i) { // the units that stay awake: now
+			if (!E88BootUnit(i)) return false;
+			instances[i].booted->store(true, std::memory_order_release);
 		}
 	} else {
 		std::atomic<bool> boot_failed{false};
@@ -596,6 +618,7 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	// effects behave like the effects of a single unit.
 	const auto boot_unit = [&](int i) {
 		auto& inst = instances[i];
+		if (power_on) inst.emu->CopyStateFrom(*power_on); // re-activation: as after power-on (issue #63)
 		inst.emu->SetSampleCallback(MCU_DefaultSampleCallback, nullptr);
 		inst.emu->Reset();
 		inst.emu->GetPCM().enable_oversampling = false;
@@ -608,6 +631,8 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 		inst.read_pos = 0;
 		inst.queue.clear();
 		inst.queue.reserve(1024);
+		inst.uart_wait.clear();
+		inst.uart_wait_pos = 0;
 		inst.buf_l.reserve(1 << 16);
 		inst.buf_r.reserve(1 << 16);
 		inst.emu->SetSampleCallback(NukedSc55::ReceiveSample, &inst);
@@ -646,6 +671,8 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 			inst.read_pos = 0;
 			inst.queue.clear();
 			inst.queue.reserve(1024);
+			inst.uart_wait.clear();
+			inst.uart_wait_pos = 0;
 			inst.buf_l.reserve(1 << 16);
 			inst.buf_r.reserve(1 << 16);
 			inst.dc_l = boot_dc_l; // same state -> same idle offset
@@ -693,7 +720,18 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	dot_page  = 0;
 	DotShow(false);
 #endif
+#ifdef NUKED_SC55_ENGINE_88PRO
+	if (background_boot) {
+		for (int i = min_active; i < NumInstances(); ++i) {
+			boot_threads.emplace_back([this, i] {
+				E88BootUnit(i);
+				instances[i].booted->store(true, std::memory_order_release);
+			});
+		}
+	}
+#endif
 	if (dynamic_instances) StartWarmer();
+	ui_awake_mask = 1; // until the first block: the units of the last activation are gone
 	lcd_ready = true;
 
 #ifdef NUKED_SC55_ENGINE_88PRO
@@ -709,6 +747,12 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 
 	log("render_sample_rate_hz: %g", render_sample_rate_hz);
 
+	if (resampler) { // re-activation: a new resampler for the new rate, no leftovers of the old stream
+		speex_resampler_destroy(resampler);
+		resampler = nullptr;
+	}
+	render_buf[0].clear();
+	render_buf[1].clear();
 	if (requested_sample_rate != render_sample_rate_hz) {
 		do_resample = true;
 
@@ -853,7 +897,9 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 		// SC-8850: the map is a per-part setting (Bank Select LSB, 1 = SC-55, 2 = SC-88, 3 = SC-88 Pro,
 		// 0 = SC-8850): send it for every part with the tracked bank / program
 		if (!instances.empty() && instances[0].applied_map != map) {
-			for (auto& inst : instances) inst.applied_map = map;
+			// (sleeping units get the map with the replay; one may be synced in the background now)
+			for (auto& inst : instances)
+				if (inst.awake) inst.applied_map = map;
 			const uint8_t lsb = static_cast<uint8_t>((map + 1) & 3);
 			for (int part = 0; part < kNumParts; ++part) {
 				const auto& up = ui_parts[part];
@@ -1048,8 +1094,9 @@ int NukedSc55::StateString(char* buf, const size_t size) const
 	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d", max_voices.load(),
 	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)));
 #endif
+	if (n < 0 || static_cast<size_t>(n) >= size) return static_cast<int>(size > 0 ? size - 1 : 0); // (truncated)
 	if (HasSystemMode()) n += std::snprintf(buf + n, size - n, " smode=%d", system_mode.load());
-	return n;
+	return std::clamp(n, 0, static_cast<int>(size > 0 ? size - 1 : 0));
 }
 
 bool NukedSc55::ParseState(const char* buf)
@@ -1501,7 +1548,8 @@ int NukedSc55::UnitToneMap(const int i) const
 
 bool NukedSc55::GetLcd(const int unit, LcdSnapshot& out)
 {
-	if (!lcd_ready.load() || unit < 0 || unit >= NumInstances()) return false;
+	std::unique_lock lock(units_mx, std::try_to_lock);
+	if (!lock.owns_lock() || !lcd_ready.load() || unit < 0 || unit >= NumInstances()) return false;
 #ifdef NUKED_SC55_ENGINE_88PRO
 	int on = 0;
 	if (!instances[unit].ctx ||
@@ -1583,19 +1631,84 @@ void NukedSc55::RenderInstance(Instance& inst, const uint32_t num_frames)
 	if (available() < num_frames) E88RenderFrames(inst, num_frames - available());
 	return;
 #endif
-	auto& mcu = inst.emu->GetMCU();
-
 	for (const auto& ev : inst.queue) {
 		while (available() < ev.frame) {
-			MCU_Step(mcu);
+			StepUnit(inst);
 		}
-		inst.emu->PostMIDI(std::span{midi_bytes.data() + ev.offset, ev.size});
+		PostToUnit(inst, std::span{midi_bytes.data() + ev.offset, ev.size});
 	}
 	inst.queue.clear();
 
 	while (available() < num_frames) {
-		MCU_Step(mcu);
+		StepUnit(inst);
 	}
+}
+
+// The SC-55 core's MIDI receive buffer is a ring of uart_buffer_size bytes that MCU_PostUART
+// overwrites without a check: more than 8 KiB at once (a large SysEx block from the host, or a
+// long replay when a unit wakes up) used to lose everything before the last 8 KiB silently.
+// Bytes that do not fit now wait here and are handed on as the firmware takes bytes in, like
+// MIDI arriving over the cable. With room to spare (the normal case) nothing changes.
+static size_t UartFree(const mcu_t& mcu)
+{
+	const uint32_t used = (mcu.uart_write_ptr + uart_buffer_size - mcu.uart_read_ptr) % uart_buffer_size;
+	return uart_buffer_size - 1 - used;
+}
+
+void NukedSc55::PostToUnit(Instance& inst, std::span<const uint8_t> data)
+{
+	if (inst.uart_wait.empty()) {
+		const size_t n = std::min(UartFree(inst.emu->GetMCU()), data.size());
+		inst.emu->PostMIDI(data.first(n));
+		data = data.subspan(n);
+		if (data.empty()) return;
+		inst.uart_wait_pos = 0;
+	}
+	inst.uart_wait.insert(inst.uart_wait.end(), data.begin(), data.end());
+}
+
+void NukedSc55::FeedUart(Instance& inst)
+{
+	const size_t n = std::min(UartFree(inst.emu->GetMCU()), inst.uart_wait.size() - inst.uart_wait_pos);
+	if (n == 0) return;
+	inst.emu->PostMIDI(std::span{inst.uart_wait.data() + inst.uart_wait_pos, n});
+	inst.uart_wait_pos += n;
+	if (inst.uart_wait_pos == inst.uart_wait.size()) {
+		inst.uart_wait.clear();
+		inst.uart_wait_pos = 0;
+	}
+}
+
+void NukedSc55::StepUnit(Instance& inst)
+{
+	MCU_Step(inst.emu->GetMCU());
+	if (!inst.uart_wait.empty()) FeedUart(inst);
+}
+
+// Steps until the MIDI input is consumed. A unit whose firmware stopped reading the UART must not
+// hold the audio thread forever: after a generous budget (far above any legitimate backlog, which
+// is about 13 million steps for 10 KB) the rest is dropped.
+void NukedSc55::DrainUnit(Instance& inst)
+{
+	constexpr uint64_t max_steps = 100'000'000;
+	for (uint64_t n = 0; !UnitDrained(inst); ++n) {
+		if (n >= max_steps) {
+			auto& mcu = inst.emu->GetMCU();
+			std::fprintf(stderr, "NukedSc55: MIDI input not consumed (%zu waiting, ring %u..%u), dropped\n",
+			             inst.uart_wait.size() - inst.uart_wait_pos, unsigned(mcu.uart_read_ptr), unsigned(mcu.uart_write_ptr));
+			inst.uart_wait.clear();
+			inst.uart_wait_pos = 0;
+			mcu.uart_read_ptr = mcu.uart_write_ptr;
+			return;
+		}
+		StepUnit(inst);
+	}
+}
+
+bool NukedSc55::UnitDrained(const Instance& inst)
+{
+	const auto& mcu = inst.emu->GetMCU();
+	return mcu.uart_read_ptr == mcu.uart_write_ptr && inst.uart_wait.empty();
 }
 
 void NukedSc55::RenderAudio(const uint32_t num_frames)
@@ -1623,7 +1736,7 @@ void NukedSc55::RenderAudio(const uint32_t num_frames)
 	// output offset (unit 0 keeps its idle DC, and the idle level after
 	// playing can differ from the one measured at boot) can't hide silence.
 	for (auto& inst : instances) {
-		if (!inst.awake) continue;
+		if (!inst.awake || num_frames == 0) continue; // (an empty block has no sample to look at)
 		float lo_l = inst.buf_l[inst.read_pos], hi_l = lo_l;
 		float lo_r = inst.buf_r[inst.read_pos], hi_r = lo_r;
 		float peak = 0.0f;
@@ -1692,7 +1805,8 @@ void NukedSc55::UiResetParts()
 		p.rev = 40; p.cho = 0; p.expr = 127; p.key_shift = 0x40;
 	}
 #ifdef NUKED_SC55_DEVICE_8850
-	for (auto& inst : instances) inst.applied_map = 3; // a reset returns the parts to the SC-8850 map
+	for (auto& inst : instances) // a reset returns the parts to the SC-8850 map (sleeping units: with the replay)
+		if (inst.awake) inst.applied_map = 3;
 #endif
 }
 
@@ -2241,7 +2355,8 @@ void NukedSc55::E88Drain(Instance& inst, const size_t bytes, const double extra_
 // Lamps of unit 0's front panel (SC-88 Pro: ALL view; SC-8850, SC-88: all switches)
 uint32_t NukedSc55::PanelLeds() const
 {
-	if (!lcd_ready.load() || instances.empty() || !instances[0].ctx) return 0;
+	std::unique_lock lock(units_mx, std::try_to_lock);
+	if (!lock.owns_lock() || !lcd_ready.load() || instances.empty() || !instances[0].ctx) return 0;
 #ifdef NUKED_SC55_DEVICE_8820
 	return ui_leds8820.load(std::memory_order_relaxed); // multiplexed: ORed over a short window
 #else
@@ -2579,7 +2694,8 @@ constexpr uint32_t kSyncMaxOutstanding = 4;   // more requests at once overflow 
 
 bool NukedSc55::GetLcdDots(uint8_t* dots, const size_t size, bool& on)
 {
-	if (!lcd_ready.load() || instances.empty() || !instances[0].ctx) return false;
+	std::unique_lock lock(units_mx, std::try_to_lock);
+	if (!lock.owns_lock() || !lcd_ready.load() || instances.empty() || !instances[0].ctx) return false;
 	int w = 0, h = 0, o = 0;
 	if (!emu88_get_display_pixels(instances[0].ctx, 0, dots, size, &w, &h, &o)) return false;
 	on = o != 0;
@@ -2940,17 +3056,16 @@ void NukedSc55::ReplayInto(Instance& inst, const std::vector<StateLog::Entry>& e
 	E88Drain(inst, bytes, 0.005);
 	return;
 #endif
-	auto& mcu = inst.emu->GetMCU();
 	const auto step_until_drained = [&](double extra_seconds) {
-		while (mcu.uart_read_ptr != mcu.uart_write_ptr) MCU_Step(mcu);
+		DrainUnit(inst);
 		const auto target = inst.buf_l.size() +
 		                    static_cast<size_t>(render_sample_rate_hz * extra_seconds);
-		while (inst.buf_l.size() < target) MCU_Step(mcu);
+		while (inst.buf_l.size() < target) StepUnit(inst);
 		inst.buf_l.clear();
 		inst.buf_r.clear();
 	};
 	for (const auto& e : entries) {
-		inst.emu->PostMIDI(std::span{e.bytes.data(), e.bytes.size()});
+		PostToUnit(inst, std::span{e.bytes.data(), e.bytes.size()});
 		if (e.is_reset) step_until_drained(0.06);
 	}
 	step_until_drained(0.005);
@@ -3069,7 +3184,7 @@ void NukedSc55::Sleep(const int i)
 	auto& inst     = instances[i];
 	inst.awake     = false;
 	inst.sleep_seq = state_log.Seq();
-	inst.queue.clear();
+	inst.queue.clear(); // (bytes still waiting for its MIDI buffer stay: they are state, fed on waking)
 	inst.buf_l.clear();
 	inst.buf_r.clear();
 	inst.read_pos      = 0;
@@ -3118,16 +3233,12 @@ void NukedSc55::Wake(const int i)
 	// it plays instead of blocking the audio thread.
 	E88StartMapSequence(inst, tone_map.load()); // no-op if already on the map
 #else
-	auto& mcu  = inst.emu->GetMCU();
-
 	const auto step_until_drained = [&](double extra_seconds) {
-		while (mcu.uart_read_ptr != mcu.uart_write_ptr) {
-			MCU_Step(mcu);
-		}
+		DrainUnit(inst);
 		const auto extra = static_cast<size_t>(render_sample_rate_hz * extra_seconds);
 		const auto target = inst.buf_l.size() + extra;
 		while (inst.buf_l.size() < target) {
-			MCU_Step(mcu);
+			StepUnit(inst);
 		}
 		inst.buf_l.clear();
 		inst.buf_r.clear();
@@ -3142,7 +3253,7 @@ void NukedSc55::Wake(const int i)
 
 	// Replay what the instance missed since its last sync (compacted).
 	state_log.ForEachSince(inst.sleep_seq, [&](const StateLog::Entry& e) {
-		inst.emu->PostMIDI(std::span{e.bytes.data(), e.bytes.size()});
+		PostToUnit(inst, std::span{e.bytes.data(), e.bytes.size()});
 		replayed_bytes += static_cast<int>(e.bytes.size());
 		if (e.is_reset) {
 			step_until_drained(0.06); // firmware needs time after GS reset
@@ -3247,91 +3358,45 @@ void NukedSc55::ResampleAndPublishFrames(const uint32_t num_out_frames,
 {
 	log("RenderAndPublishFrames: num_out_frames: %d", num_out_frames);
 
-	const auto input_len  = static_cast<spx_uint32_t>(render_buf[0].size());
-	const auto output_len = num_out_frames;
-
-	log("  input_len: %d", input_len);
-
-	spx_uint32_t in_len  = input_len;
-	spx_uint32_t out_len = output_len;
-
-	speex_resampler_process_float(
-	        resampler, 0, render_buf[0].data(), &in_len, out_left, &out_len);
-
-	in_len  = input_len;
-	out_len = output_len;
-
-	speex_resampler_process_float(
-	        resampler, 1, render_buf[1].data(), &in_len, out_right, &out_len);
-
-	// Speex returns the number actually consumed and written samples in
-	// `in_len` and `out_len`, respectively. There are three outcomes:
-	//
-	// 1) The input buffer hasn't been fully consumed, but the output buffer
-	//    has been completely filled.
-	//
-	// 2) The output buffer hasn't been filled completely, but all input
-	//    samples have been consumed.
-	//
-	// 3) All input samples have been consumed and the output buffer has been
-	//    completely filled.
-	//
-	if (out_len < output_len) {
-		// Case 2: The output buffer hasn't been filled completely; we
-		// need to generate more input samples.
-		//
-		const auto num_out_frames_remaining = output_len - out_len;
-		const auto curr_out_pos             = out_len;
-
-		// "It's the only way to be sure"
-		const auto render_frame_count = static_cast<int>(
-		        std::ceil(static_cast<double>(num_out_frames_remaining) *
-		                  resample_ratio));
-
-		render_buf[0].clear();
-		render_buf[1].clear();
-
-		RenderAudio(render_frame_count);
-
-		in_len  = static_cast<spx_uint32_t>(render_buf[0].size());
-		out_len = num_out_frames_remaining;
-
-		speex_resampler_process_float(resampler,
-		                              0,
-		                              render_buf[0].data(),
-		                              &in_len,
-		                              out_left + curr_out_pos,
-		                              &out_len);
-
-		in_len  = static_cast<spx_uint32_t>(render_buf[1].size());
-		out_len = num_out_frames_remaining;
-
-		speex_resampler_process_float(resampler,
-		                              1,
-		                              render_buf[1].data(),
-		                              &in_len,
-		                              out_right + curr_out_pos,
-		                              &out_len);
-	}
-
-	if (in_len < input_len) {
-		// Case 1: The input buffer hasn't been fully consumed; we have
-		// leftover input samples that we need to keep for the next
-		// Process() call.
-		//
-		if (in_len > 0) {
-			render_buf[0].erase(render_buf[0].begin(),
-			                    render_buf[0].begin() + in_len);
-			render_buf[1].erase(render_buf[1].begin(),
-			                    render_buf[1].begin() + in_len);
+	// Speex returns the number of actually consumed and written samples in `in_len` and
+	// `out_len`. Either the output is full (input may be left over for the next call) or all
+	// input has been consumed (then more is rendered and resampled into the rest of the output).
+	// Consumed input is removed after every pass, so leftovers are always kept; should the output
+	// still not be full after the second pass, the rest is silence rather than whatever the host
+	// buffer held (issue #63).
+	uint32_t written = 0;
+	for (int pass = 0; pass < 2 && written < num_out_frames; ++pass) {
+		if (pass > 0) {
+			// "It's the only way to be sure"
+			const auto more = static_cast<uint32_t>(std::ceil(
+			        static_cast<double>(num_out_frames - written) * resample_ratio));
+			RenderAudio(more);
 		}
+		const auto input_len = static_cast<spx_uint32_t>(render_buf[0].size());
+		log("  input_len: %d", input_len);
 
-	} else {
-		// Case 3: All input samples have been consumed and the output
-		// buffer has been completely filled.
-		//
-		render_buf[0].clear();
-		render_buf[1].clear();
+		spx_uint32_t in_len  = input_len;
+		spx_uint32_t out_len = num_out_frames - written;
+		speex_resampler_process_float(
+		        resampler, 0, render_buf[0].data(), &in_len, out_left + written, &out_len);
+
+		in_len  = input_len;
+		out_len = num_out_frames - written;
+		speex_resampler_process_float(
+		        resampler, 1, render_buf[1].data(), &in_len, out_right + written, &out_len);
+
+		if (in_len >= input_len) {
+			render_buf[0].clear();
+			render_buf[1].clear();
+		} else if (in_len > 0) {
+			render_buf[0].erase(render_buf[0].begin(), render_buf[0].begin() + in_len);
+			render_buf[1].erase(render_buf[1].begin(), render_buf[1].begin() + in_len);
+		}
+		written += out_len;
+	}
+	for (uint32_t i = written; i < num_out_frames; ++i) {
+		out_left[i]  = 0.0f;
+		out_right[i] = 0.0f;
 	}
 }
 
@@ -3371,6 +3436,7 @@ size_t NukedSc55::MidiBacklog(const int i) const
 #else
 	const auto& mcu = inst.emu->GetMCU();
 	size_t n = (mcu.uart_write_ptr + uart_buffer_size - mcu.uart_read_ptr) % uart_buffer_size;
+	n += inst.uart_wait.size() - inst.uart_wait_pos;
 #endif
 	for (const auto& ev : inst.queue) n += ev.size;
 	return n;

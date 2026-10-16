@@ -129,6 +129,10 @@ private:
 		uint32_t seq_left = 0;
 		int seq_map = -1;
 #endif
+		// SC-55: MIDI bytes that did not fit into the emulated receive buffer (8 KiB ring, overwritten
+		// without a check when full), handed on while the firmware takes bytes in (issue #63)
+		std::vector<uint8_t> uart_wait;
+		size_t uart_wait_pos = 0;
 		bool awake = true;               // dynamic instance management
 		uint64_t sleep_seq = 0;          // state-log position the instance is synced to
 		// background sync in progress (heap-allocated: keeps Instance movable)
@@ -141,6 +145,8 @@ private:
 	};
 	std::vector<Instance> instances;
 	bool emu_ok = false;
+	std::unique_ptr<Emulator> power_on; // the units' state right after loading the ROMs (boot starts from it)
+	void KeepPowerOnState(const EMU_Options& opts);
 
 	PolyRouter router;
 	WorkerPool pool;
@@ -232,6 +238,12 @@ private:
 	std::vector<std::filesystem::path> GetRomBasePaths();
 
 	void ProcessEvent(const clap_event_header_t* event, uint32_t render_frame);
+	// SC-55: MIDI into a unit's receive buffer without overrunning it, and MCU steps that keep feeding it
+	static void PostToUnit(Instance& inst, std::span<const uint8_t> data);
+	static void FeedUart(Instance& inst);
+	static void StepUnit(Instance& inst);
+	static void DrainUnit(Instance& inst);
+	static bool UnitDrained(const Instance& inst);
 	void QueueMidi(PolyRouter::Mask mask, const uint8_t* data, size_t size,
 	               uint32_t render_frame, uint8_t port = 0);
 	void MeasureLoad();
@@ -313,6 +325,9 @@ public:
 	bool ParseState(const char* buf);
 	std::atomic<uint64_t> ui_awake_mask{1}; // awake units (bit i = unit i)
 	std::atomic<bool> lcd_ready{false};   // units exist and may be read by the GUI
+	// Held by Activate() while units are (re)created; the GUI's readers only try it and skip a
+	// frame when busy (the VST2 bridge may re-activate from the audio thread, issue #63)
+	mutable std::mutex units_mx;
 
 	// Character-LCD memory of one unit (HD44780 DDRAM/CGRAM), for the panel. GUI thread.
 	struct LcdSnapshot {
