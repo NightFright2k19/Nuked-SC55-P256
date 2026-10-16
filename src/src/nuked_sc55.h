@@ -145,6 +145,8 @@ private:
 	};
 	std::vector<Instance> instances;
 	bool emu_ok = false;
+	std::unique_ptr<Emulator> power_on; // the units' state right after loading the ROMs (boot starts from it)
+	void KeepPowerOnState(const EMU_Options& opts);
 
 	PolyRouter router;
 	WorkerPool pool;
@@ -240,6 +242,7 @@ private:
 	static void PostToUnit(Instance& inst, std::span<const uint8_t> data);
 	static void FeedUart(Instance& inst);
 	static void StepUnit(Instance& inst);
+	static void DrainUnit(Instance& inst);
 	static bool UnitDrained(const Instance& inst);
 	void QueueMidi(PolyRouter::Mask mask, const uint8_t* data, size_t size,
 	               uint32_t render_frame, uint8_t port = 0);

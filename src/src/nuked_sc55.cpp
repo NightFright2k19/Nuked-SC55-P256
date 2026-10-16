@@ -380,6 +380,7 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 		}
 		emu_ok = true;
 		max_voices = MaxSelectableVoices();
+		KeepPowerOnState(opts);
 
 		const int hw = static_cast<int>(std::thread::hardware_concurrency());
 		const int threads = std::clamp(std::min(num_instances, hw - 1) - 1,
@@ -484,6 +485,7 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 		}
 		emu_ok = true;
 		max_voices = MaxSelectableVoices();
+		KeepPowerOnState(opts);
 
 		// Worker threads: one per instance at most, leave one core free.
 		const int hw = static_cast<int>(std::thread::hardware_concurrency());
@@ -495,6 +497,21 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 	log("Init failed, tried all ROM directories");
 	instances.clear();
 	return false;
+}
+
+// The emulator's Reset() only resets the CPUs' registers: RAM, the cycle counters (the main CPU
+// keeps counting, the sub-CPU starts again from 0), UART state and the PCM chip would stay from the
+// previous run. A re-activated plugin then boots its units from that state, and the SC-55mk2
+// firmware could crash shortly after. A copy of the state right after loading the ROMs lets every
+// boot start like a unit that was just switched on.
+void NukedSc55::KeepPowerOnState(const EMU_Options& opts)
+{
+	power_on = std::make_unique<Emulator>();
+	if (!power_on->Init(opts)) {
+		power_on.reset();
+		return;
+	}
+	power_on->CopyStateFrom(*instances[0].emu);
 }
 
 void NukedSc55::Shutdown()
@@ -601,6 +618,7 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	// effects behave like the effects of a single unit.
 	const auto boot_unit = [&](int i) {
 		auto& inst = instances[i];
+		if (power_on) inst.emu->CopyStateFrom(*power_on); // re-activation: as after power-on (issue #63)
 		inst.emu->SetSampleCallback(MCU_DefaultSampleCallback, nullptr);
 		inst.emu->Reset();
 		inst.emu->GetPCM().enable_oversampling = false;
@@ -1665,6 +1683,26 @@ void NukedSc55::StepUnit(Instance& inst)
 {
 	MCU_Step(inst.emu->GetMCU());
 	if (!inst.uart_wait.empty()) FeedUart(inst);
+}
+
+// Steps until the MIDI input is consumed. A unit whose firmware stopped reading the UART must not
+// hold the audio thread forever: after a generous budget (far above any legitimate backlog, which
+// is about 13 million steps for 10 KB) the rest is dropped.
+void NukedSc55::DrainUnit(Instance& inst)
+{
+	constexpr uint64_t max_steps = 100'000'000;
+	for (uint64_t n = 0; !UnitDrained(inst); ++n) {
+		if (n >= max_steps) {
+			auto& mcu = inst.emu->GetMCU();
+			std::fprintf(stderr, "NukedSc55: MIDI input not consumed (%zu waiting, ring %u..%u), dropped\n",
+			             inst.uart_wait.size() - inst.uart_wait_pos, unsigned(mcu.uart_read_ptr), unsigned(mcu.uart_write_ptr));
+			inst.uart_wait.clear();
+			inst.uart_wait_pos = 0;
+			mcu.uart_read_ptr = mcu.uart_write_ptr;
+			return;
+		}
+		StepUnit(inst);
+	}
 }
 
 bool NukedSc55::UnitDrained(const Instance& inst)
@@ -3019,7 +3057,7 @@ void NukedSc55::ReplayInto(Instance& inst, const std::vector<StateLog::Entry>& e
 	return;
 #endif
 	const auto step_until_drained = [&](double extra_seconds) {
-		while (!UnitDrained(inst)) StepUnit(inst);
+		DrainUnit(inst);
 		const auto target = inst.buf_l.size() +
 		                    static_cast<size_t>(render_sample_rate_hz * extra_seconds);
 		while (inst.buf_l.size() < target) StepUnit(inst);
@@ -3196,9 +3234,7 @@ void NukedSc55::Wake(const int i)
 	E88StartMapSequence(inst, tone_map.load()); // no-op if already on the map
 #else
 	const auto step_until_drained = [&](double extra_seconds) {
-		while (!UnitDrained(inst)) {
-			StepUnit(inst);
-		}
+		DrainUnit(inst);
 		const auto extra = static_cast<size_t>(render_sample_rate_hz * extra_seconds);
 		const auto target = inst.buf_l.size() + extra;
 		while (inst.buf_l.size() < target) {
@@ -3326,15 +3362,15 @@ void NukedSc55::ResampleAndPublishFrames(const uint32_t num_out_frames,
 	// `out_len`. Either the output is full (input may be left over for the next call) or all
 	// input has been consumed (then more is rendered and resampled into the rest of the output).
 	// Consumed input is removed after every pass, so leftovers are always kept; should the output
-	// still not be full after a few passes, the rest is silence rather than whatever the host
+	// still not be full after the second pass, the rest is silence rather than whatever the host
 	// buffer held (issue #63).
 	uint32_t written = 0;
-	for (int pass = 0; pass < 4 && written < num_out_frames; ++pass) {
+	for (int pass = 0; pass < 2 && written < num_out_frames; ++pass) {
 		if (pass > 0) {
 			// "It's the only way to be sure"
 			const auto more = static_cast<uint32_t>(std::ceil(
 			        static_cast<double>(num_out_frames - written) * resample_ratio));
-			RenderAudio(std::max<uint32_t>(more, 1));
+			RenderAudio(more);
 		}
 		const auto input_len = static_cast<spx_uint32_t>(render_buf[0].size());
 		log("  input_len: %d", input_len);
