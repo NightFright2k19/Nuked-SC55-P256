@@ -316,17 +316,27 @@ void ShowSetupMenu(Editor& e)
     }
 #endif
 #ifdef NUKED_SC55_DEVICE_8820
-    {   // INST MAP (all parts): chosen here or with the INST MAP button, stored in the state
+    {   // tone map (all parts): chosen here or with the INST MAP button, stored in the state
         const int tm = p.tone_map.load();
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Inst map (all parts)", L"Inst-Map (alle Parts)"));
-        // one-time: GS Reset + MT-32 / CM-64 tones on all parts (not a map of its own, nothing marked)
-        AppendMenuW(m, MF_STRING, 10, L"   MT-32 Map");
+        AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Tone map (all parts)", L"Klang-Map (alle Parts)"));
         AppendMenuW(m, MF_STRING | (tm == 0 ? MF_CHECKED : 0), 200, L"   SC-55 Map");
         AppendMenuW(m, MF_STRING | (tm == 1 ? MF_CHECKED : 0), 201, L"   SC-88 Map");
         AppendMenuW(m, MF_STRING | (tm == 2 ? MF_CHECKED : 0), 202, L"   SC-88 Pro Map");
         AppendMenuW(m, MF_STRING | (tm == 3 ? MF_CHECKED : 0), 203,
                     T(L"   SC-8820 Map\t(default)", L"   SC-8820 Map\t(Standard)"));
+    }
+#endif
+#ifdef NUKED_SC55_DEVICE_8850
+    {   // tone map (all parts), as on the SC-8820; the panel's INST MAP still sets it per part
+        const int tm = p.tone_map.load();
+        AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Tone map (all parts)", L"Klang-Map (alle Parts)"));
+        AppendMenuW(m, MF_STRING | (tm == 0 ? MF_CHECKED : 0), 200, L"   SC-55 Map");
+        AppendMenuW(m, MF_STRING | (tm == 1 ? MF_CHECKED : 0), 201, L"   SC-88 Map");
+        AppendMenuW(m, MF_STRING | (tm == 2 ? MF_CHECKED : 0), 202, L"   SC-88 Pro Map");
+        AppendMenuW(m, MF_STRING | (tm == 3 ? MF_CHECKED : 0), 203,
+                    T(L"   SC-8850 Map\t(default)", L"   SC-8850 Map\t(Standard)"));
     }
 #endif
 #if defined(NUKED_SC55_DEVICE_8820) || defined(NUKED_SC55_DEVICE_8850)
@@ -341,9 +351,7 @@ void ShowSetupMenu(Editor& e)
     // "Send Reset": choosing an entry sends that reset at once (no mark, nothing stored)
     HMENU rt_menu = CreatePopupMenu();
     {
-#ifndef NUKED_SC55_DEVICE_8820 // SC-8820: "MT-32 Map" in the Inst map list
         AppendMenuW(rt_menu, MF_STRING, 10, L"MT-32");
-#endif
         AppendMenuW(rt_menu, MF_STRING, 6, L"GM");
         AppendMenuW(rt_menu, MF_STRING, 2, L"GS");
         if (p.HasGm2()) AppendMenuW(rt_menu, MF_STRING, 7, L"GM2");

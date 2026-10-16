@@ -295,7 +295,7 @@ The SC-8820 plug-in uses the 88emu core with the SC-8820 firmware (compile-time 
 - **Graphics:** drawn from scratch by `tools/make_sc8820_panel.py` after photos of the device (no photo or third-party art is used): the champagne metal front, the smoked display window with the POWER (red) and USB (amber) symbols, the PART A / PART B level indicators (12 x 3 dots each, green through yellow and orange to red, each dot in a fixed colour), the map labels, the INST MAP button and the knob (labelled GAIN). The maker's logos are replaced by the plug-in's own branding. VOICES (count, bar) and UNITS sit left of INST MAP as on the other panels, the GAIN value under the knob; the strip below holds the name and SETUP.
 - **Lamps:** from unit 0's firmware. It lights the level indicators in 4 blocks of 3 columns per part group and multiplexes them, so the panel combines them over 40 ms. After INST MAP the PART B block above the chosen map lights, as on the device. POWER and USB are always lit (the emulation has no USB host; the firmware would blink USB).
 - **Controls:** INST MAP is the device's button (held while the mouse button is down, at least 120 ms). The knob in place of the device's VOLUME turns GAIN (left-button drag, mouse wheel = 0.1 dB per notch, double-click = 0 dB; its marker follows GAIN), always silently. **Deviation from the device:** there pushing the knob plays the PREVIEW note, but here the left button is needed for turning, so PREVIEW is a **right click** on the knob (held while the button is down). It plays the note chosen in the SETUP menu ("Prevw Note", default C4) on part A01 (Issue #51).
-- **SETUP:** max polyphony, inst map for all parts (SC-55 / SC-88 / SC-88 Pro / SC-8820, default SC-8820; the same setting as the INST MAP button; above them the one-time "MT-32 Map", see [MT-32 reset](#mt-32-reset)), Send Reset (GM / GS / GM2), all notes off.
+- **SETUP:** max polyphony, tone map for all parts (SC-55 / SC-88 / SC-88 Pro / SC-8820, default SC-8820; the same setting as the INST MAP button), Send Reset (MT-32 / GM / GS / GM2, see [MT-32 reset](#mt-32-reset)), all notes off.
 
 
 ## SC-8850 engine (88emu)
@@ -355,10 +355,11 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 | Entry | Meaning |
 | --- | --- |
 | Max polyphony | 24 / 48 / 64 / 96 / 128 / 160 / 192 / 224 / 256 (SC-55mk2: 28 / 56 / ...) |
-| Send Reset | submenu MT-32 / GM / GS (SC-8850: MT-32 / GM / GS / GM2, SC-8820: GM / GS / GM2, its MT-32 entry is "MT-32 Map" in the inst map list): clicking an entry sends that reset to all units (nothing is marked or stored) |
+| Send Reset | submenu MT-32 / GM / GS / GM2 (SC-8850, SC-8820), MT-32 / GM / GS (others): clicking an entry sends that reset to all units (nothing is marked or stored) |
 | System Mode (SC-88, SC-88 Pro) | submenu Mode 1 (Single Module) / Mode 2 (Double Module): sends System Mode Set (`F0 41 10 42 12 00 00 7F 0n ..`) to all units and marks it (default Mode 1 = factory setting, stored in the state) |
 | All notes off | stops all sounding notes |
 | Tone map (SC-88 Pro) | SC-55 / SC-88 / SC-88 Pro |
+| Tone map (SC-8850) | SC-55 / SC-88 / SC-88 Pro / SC-8850 (default SC-8850) for all parts: sends Bank Select LSB (CC#32) and the part's bank and program again to every part; stored in the state (`map=0..3`), a GS / GM reset returns to the SC-8850 map. The panel's INST MAP still sets it per part |
 | Prevw Note (SC-88 Pro, SC-8820, SC-8850) | submenu per octave |
 
 After a reset from the menu, the plug-in holds back the host's next MIDI events for 100 ms (System Mode: 200 ms) and then plays them in their original order, so that the firmware has finished the reset (measured with `tools/test/reset26.cpp`: notes sound exactly as after boot from 50-100 ms after GM / GS / GM2 and from 150 ms after a System Mode Set on the SC-88 Pro). Resets that come from the host or a MIDI file are passed on unchanged, as before.
