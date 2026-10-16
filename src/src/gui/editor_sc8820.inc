@@ -37,7 +37,7 @@ constexpr RECT E20_GAIN = {682, 146, 742, 160};                                 
 constexpr COLORREF E20_INK = RGB(0x30, 0x2e, 0x2c);                                 // front print
 #ifdef NUKED_SC55_8820_PRO
 constexpr RECT E20_SETUP = {812, 240, 900, 264};
-constexpr RECT E20_POWER = {322, 42, 347, 66}, E20_USB = {376, 44, 405, 64};
+constexpr RECT E20_POWER = {322, 125, 347, 149}, E20_USB = {376, 127, 405, 147};
 #else
 constexpr RECT E20_SETUP = {800, 218, 890, 242};
 constexpr RECT E20_POWER = {309, 70, 338, 99}, E20_USB = {368, 72, 401, 96};
@@ -90,8 +90,8 @@ RECT Block20(int row, int block) // 3 columns x 3 rows of dots, with their glow
 
 #ifdef NUKED_SC55_8820_PRO
 // ---- Pro: level display, part display, edit buttons (geometry: make_sc8820_panel.py --pro) ------
-constexpr double E20P_EQ_X = 291.5, E20P_EQ_DX = 7.6, E20P_EQ_Y = 126.0, E20P_EQ_DY = 7.0;
-constexpr RECT E20P_EQ = {287, 70, 410, 140};                       // click: select a part
+constexpr double E20P_EQ_X = 291.5, E20P_EQ_DX = 7.6, E20P_EQ_Y = 104.0, E20P_EQ_DY = 7.0;
+constexpr RECT E20P_EQ = {287, 48, 410, 118};                       // click: select a part
 // value fields (label printed in the background, value drawn here)
 enum { F20_PART, F20_PROG, F20_NAME, F20_MSB, F20_LSB, F20_LEVEL, F20_PAN, F20_REV, F20_CHO, F20_N };
 constexpr RECT E20P_FIELD[F20_N] = {
