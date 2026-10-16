@@ -199,6 +199,15 @@ private:
 	};
 	std::vector<HeldEvent> held_events;
 	uint64_t hold_until = 0;
+	// SETUP menu "MT-32": the SysEx messages that follow the GS Reset, sent one after the other
+	struct ScriptStep {
+		uint64_t frame;
+		uint8_t port;
+		std::vector<uint8_t> bytes;
+	};
+	std::vector<ScriptStep> script_steps;
+	void SendMt32Mode();
+	void ReleaseScriptSteps();
 	std::vector<std::pair<const clap_event_header_t*, uint32_t>> block_events;
 	uint32_t panel_button_bits = 0;  // emulated front-panel button held on unit 0
 	int panel_button_blocks    = 0;  // blocks until it is released
