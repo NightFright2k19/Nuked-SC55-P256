@@ -18,6 +18,8 @@
 // Window class name of the editor (one per editor instance)
 #if defined(NUKED_SC55_DEVICE_8850)
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC8850P256Editor_"
+#elif defined(NUKED_SC55_8820_PRO)
+#define NUKED_SC55_WNDCLASS_PREFIX "NukedSC8820ProP256Editor_"
 #elif defined(NUKED_SC55_DEVICE_8820)
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC8820P256Editor_"
 #elif defined(NUKED_SC55_DEVICE_88)
@@ -120,6 +122,16 @@ struct Editor {
     int steps85     = 0;       // detents passed on during this drag
     void* lcd85     = nullptr; // graphic LCD renderer
 #endif
+#ifdef NUKED_SC55_8820_PRO
+    float disp32[32]   = {};   // 16-part level display (both ports)
+    int pro_btn        = 0;    // edit button held (1..8), auto-repeat
+    DWORD pro_btn_t    = 0;
+    int pro_drag       = 0;    // value dragged (field + 1)
+    int pro_drag_y     = 0, pro_drag_v0 = 0, pro_drag_last = 0;
+    int pend_val[32][7]     = {}; // values just sent (PROG, MSB, LSB, LEVEL, PAN, REVERB, CHORUS) ...
+    DWORD pend_until[32][7] = {}; // ... shown and stepped from until the firmware's own values follow
+    HFONT f_pro        = nullptr;
+#endif
     bool menu_open  = false;
     float peak      = 0;     // polyphony peak hold
     int peak_hold   = 0;     // frames
@@ -211,6 +223,14 @@ void Draw(Editor& e, HDC dc)
 
 void DecayBars(Editor& e)
 {
+#ifdef NUKED_SC55_8820_PRO
+    for (int c = 0; c < 32; ++c) { // all 32 parts (both ports) for the Pro's level display
+        const uint8_t hit = e.plugin->ui_parts[c].hit.exchange(0);
+        e.disp32[c]       = std::max(e.disp32[c] - 7.0f, 0.0f);
+        if (hit > e.disp32[c]) e.disp32[c] = hit;
+    }
+    return;
+#endif
     for (int& f : e.flash) if (f > 0) --f;
     for (int c = 0; c < 16; ++c) {
         const uint8_t hit = e.plugin->ui_parts[c].hit.exchange(0);
@@ -541,6 +561,9 @@ void* Create(NukedSc55* plugin, const char* display_name)
     e->f_big   = MakeFont(30, FW_BOLD, "Consolas");
     e->f_btn   = MakeFont(13, FW_BOLD, "Segoe UI");
     e->f_tiny  = MakeFont(10, FW_BOLD, "Arial");
+#ifdef NUKED_SC55_8820_PRO
+    e->f_pro   = MakeFont(17, FW_BOLD, "Arial");
+#endif
     return e;
 }
 
@@ -577,6 +600,9 @@ void Destroy(void* ed)
     Close(e);
     for (HFONT f : {e->f_title, e->f_sub, e->f_small, e->f_label, e->f_value, e->f_big, e->f_btn, e->f_tiny})
         if (f) DeleteObject(f);
+#ifdef NUKED_SC55_8820_PRO
+    if (e->f_pro) DeleteObject(e->f_pro);
+#endif
     if (e->bg_dc) {
         SelectObject(e->bg_dc, e->bg_old);
         DeleteObject(e->bg_bmp);
