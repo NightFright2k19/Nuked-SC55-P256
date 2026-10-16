@@ -848,11 +848,9 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 #ifdef NUKED_SC55_DEVICE_8820
 	// Front panel of unit 0: INST MAP / PREVIEW from the GUI; the map shown is adopted for all units
 	E8820PanelInput();
-#ifdef NUKED_SC55_8820_PRO
-	// Pro: edits from the part display / buttons to all units, part parameters for the display
+	// Pro interface: edits from the part display / buttons to all units, part parameters for the display
 	E8820SendUiMidi();
-	E8820ReadParts();
-#endif
+	if (ui_style.load(std::memory_order_relaxed) == 1) E8820ReadParts();
 #endif
 #ifdef NUKED_SC55_DEVICE_88PRO
 	// Front panel of unit 0: edits of the last block passed on, GUI input
@@ -1078,7 +1076,11 @@ bool NukedSc55::SaveState([[maybe_unused]] const clap_ostream_t* stream)
 // Settings only (CLAP state and VST2 chunk): "NSC55P1 max_voices=<n> ..."
 int NukedSc55::StateString(char* buf, const size_t size) const
 {
-#if defined(NUKED_SC55_DEVICE_8820) || defined(NUKED_SC55_DEVICE_8850)
+#if defined(NUKED_SC55_DEVICE_8820)
+	// INST MAP (all parts) is the one panel setting; synchronised on all units, kept here
+	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d style=%d", max_voices.load(),
+	                      tone_map.load(), static_cast<int>(std::lround(gain_db.load() * 10.0f)), ui_style.load());
+#elif defined(NUKED_SC55_DEVICE_8850)
 	// INST MAP (all parts) is the one panel setting; synchronised on all units, kept here
 	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d", max_voices.load(),
 	                      tone_map.load(), static_cast<int>(std::lround(gain_db.load() * 10.0f)));
@@ -1115,6 +1117,9 @@ bool NukedSc55::ParseState(const char* buf)
 		gain_db = GainFromLegacyVolume(std::atoi(v + 4));
 	}
 	if (const char* m = std::strstr(buf, "pnote="); m) preview_note = std::clamp(std::atoi(m + 6), 0, 127);
+#ifdef NUKED_SC55_DEVICE_8820
+	if (const char* m = std::strstr(buf, "style="); m) ui_style = std::clamp(std::atoi(m + 6), 0, 1); // else Basic
+#endif
 #else
 	if (const char* m = std::strstr(buf, "gain="); m) // older states: no GAIN = 0 dB
 		gain_db = std::clamp(std::atoi(m + 5) / 10.0f, kGainMinDb, kGainMaxDb);
@@ -3497,8 +3502,8 @@ void NukedSc55::E8820PanelInput()
 }
 #endif
 
-#ifdef NUKED_SC55_8820_PRO
-// ---- Nuked-SC8820 Pro: part display (issue #49) ------------------------------------------------
+#ifdef NUKED_SC55_DEVICE_8820
+// ---- SC-8820, Pro interface: part display (issue #49) ------------------------------------------------
 // The SC-8820 has no display, but its firmware keeps every part's parameters and the name of the
 // tone it plays in work RAM (found by comparing RAM dumps before and after Program Change, Bank
 // Select, CC 7/10/91/93, GS "Use for Rhythm Part"): one 0x450-byte record per part, per port in
