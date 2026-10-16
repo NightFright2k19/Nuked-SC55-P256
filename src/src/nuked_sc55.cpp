@@ -804,6 +804,11 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 #ifdef NUKED_SC55_DEVICE_8820
 	// Front panel of unit 0: INST MAP / PREVIEW from the GUI; the map shown is adopted for all units
 	E8820PanelInput();
+#ifdef NUKED_SC55_8820_PRO
+	// Pro: edits from the part display / buttons to all units, part parameters for the display
+	E8820SendUiMidi();
+	E8820ReadParts();
+#endif
 #endif
 #ifdef NUKED_SC55_DEVICE_88PRO
 	// Front panel of unit 0: edits of the last block passed on, GUI input
@@ -3423,6 +3428,94 @@ void NukedSc55::E8820PanelInput()
 	if (shown < 0) return;
 	inst.applied_map = shown;
 	if (shown != tone_map.load()) tone_map.store(shown);
+}
+#endif
+
+#ifdef NUKED_SC55_8820_PRO
+// ---- Nuked-SC8820 Pro: part display (issue #49) ------------------------------------------------
+// The SC-8820 has no display, but its firmware keeps every part's parameters and the name of the
+// tone it plays in work RAM (found by comparing RAM dumps before and after Program Change, Bank
+// Select, CC 7/10/91/93, GS "Use for Rhythm Part"): one 0x450-byte record per part, per port in
+// GS block order (part 10, parts 1-9, parts 11-16), and the drum-set names of the two rhythm maps
+// per port in records of 0x50c bytes. All units hold the same state, unit 0 is read.
+namespace {
+constexpr uint32_t kRam8820Part = 0x010448e4, kRam8820PartSize = 0x450;
+constexpr uint32_t kRam8820DrumName = 0x0104dca0, kRam8820DrumSize = 0x50c;
+// offsets in a part record
+constexpr uint32_t kP20Msb = 0x00, kP20Prog = 0x01, kP20Index = 0x04, kP20Flags = 0x05, kP20Vol = 0x08,
+                   kP20Pan = 0x09, kP20Cho = 0x0e, kP20Rev = 0x0f, kP20Lsb = 0x70, kP20Name = 0xa8;
+constexpr uint8_t kP20Rhythm = 0x10, kP20RhythmMap2 = 0x40; // flags: rhythm part, rhythm map 2 (else 1)
+} // namespace
+
+void NukedSc55::E8820ReadParts()
+{
+	auto& inst = instances[0];
+	if (!inst.ctx || !inst.booted->load()) return;
+	const auto every = static_cast<uint64_t>(render_sample_rate_hz / 30.0); // ~30 times a second
+	if (render_frame_count < parts_read_at + every && parts_read_at != 0) return;
+	parts_read_at = std::max<uint64_t>(render_frame_count, 1);
+	std::array<PartInfo8820, 32> info{};
+	for (int part = 0; part < 32; ++part) {
+		const int ch    = part % 16;
+		const int block = ch == 9 ? 0 : (ch < 9 ? ch + 1 : ch); // GS part block: 0 = part 10
+		const uint32_t rec = kRam8820Part + static_cast<uint32_t>((part / 16) * 16 + block - 1) * kRam8820PartSize;
+		uint8_t r[kP20Name + 12] = {};
+		emu88_peek_work_ram(inst.ctx, rec, r, sizeof(r));
+		auto& pi = info[part];
+		pi.valid  = r[kP20Index] == part;
+		pi.msb    = r[kP20Msb] & 0x7f;
+		pi.prog   = r[kP20Prog] & 0x7f;
+		pi.lsb    = r[kP20Lsb] & 0x7f;
+		pi.vol    = r[kP20Vol] & 0x7f;
+		pi.pan    = r[kP20Pan] & 0x7f;
+		pi.rev    = r[kP20Rev] & 0x7f;
+		pi.cho    = r[kP20Cho] & 0x7f;
+		pi.rhythm = (r[kP20Flags] & kP20Rhythm) != 0;
+		const uint8_t* name = r + kP20Name;
+		uint8_t drum[12];
+		if (pi.rhythm) {
+			const int map = (part / 16) * 2 + ((r[kP20Flags] & kP20RhythmMap2) ? 1 : 0);
+			emu88_peek_work_ram(inst.ctx, kRam8820DrumName + static_cast<uint32_t>(map) * kRam8820DrumSize, drum, 12);
+			name = drum;
+		}
+		for (int i = 0; i < 12; ++i) pi.name[i] = (name[i] >= 0x20 && name[i] < 0x7f) ? static_cast<char>(name[i]) : ' ';
+		int n = 12;
+		while (n > 0 && pi.name[n - 1] == ' ') --n;
+		pi.name[n] = 0;
+	}
+	if (part_info_mx.try_lock()) {
+		part_info8820 = info;
+		part_info_mx.unlock();
+	} else {
+		parts_read_at = 0; // GUI was reading: try again next block
+	}
+}
+
+NukedSc55::PartInfo8820 NukedSc55::PartInfo(const int part)
+{
+	std::lock_guard lock(part_info_mx);
+	return part_info8820[static_cast<size_t>(std::clamp(part, 0, 31))];
+}
+
+void NukedSc55::UiSendShort(const uint8_t s, const uint8_t d1, const uint8_t d2, const int port)
+{
+	const uint32_t w = ui_midi_w.load(std::memory_order_relaxed);
+	if (w - ui_midi_r.load(std::memory_order_acquire) >= ui_midi.size()) return; // full: dropped
+	ui_midi[w % ui_midi.size()].store(static_cast<uint32_t>(port & 0xff) << 24 | uint32_t{d2} << 16 |
+	                                  uint32_t{d1} << 8 | s, std::memory_order_relaxed);
+	ui_midi_w.store(w + 1, std::memory_order_release);
+}
+
+void NukedSc55::E8820SendUiMidi()
+{
+	uint32_t r       = ui_midi_r.load(std::memory_order_relaxed);
+	const uint32_t w = ui_midi_w.load(std::memory_order_acquire);
+	for (; r != w; ++r) {
+		const uint32_t m = ui_midi[r % ui_midi.size()].load(std::memory_order_relaxed);
+		InjectShort(static_cast<uint8_t>(m), static_cast<uint8_t>(m >> 8), static_cast<uint8_t>(m >> 16),
+		            static_cast<uint16_t>(m >> 24));
+	}
+	ui_midi_r.store(r, std::memory_order_release);
 }
 #endif
 

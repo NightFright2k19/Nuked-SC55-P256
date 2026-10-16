@@ -7,14 +7,24 @@
 # usage: make_sc8820_panel.py <out.png|out.bgra> [--lit | --all-on | --base]
 #   --lit     example lamp state (preview)          --all-on  every lamp lit (lamp sprites of the GUI)
 #   --base    GUI background: lamps off, knob without marker, boxes empty (the GUI draws them)
+#   --pro     Nuked-SC8820 Pro: 16-part level display in the window, part display and edit buttons
+#             in the lower strip, orange "Pro" in the name (with --lit: example values for a preview)
 #   .bgra: raw 918x280 BGRA for gen_blob.py, else PNG
 import sys
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 W, H, S = 918, 280, 3            # final size, supersampling factor
 FRONT = 196                      # height of the device front
+# Pro: 16-part level display (first column x, column pitch, bottom row y, row pitch)
+EQ_X, EQ_DX, EQ_Y, EQ_DY = 291.5, 7.6, 126.0, 7.0
+# Pro: lower-strip part display (x of each field; value examples for --lit) and edit buttons (centre x, label y)
+FIELDS_1 = [(270, "PART", ("A01",)), (314, "PROG", ("001",)), (358, "INSTRUMENT", ("Piano 1",))]
+FIELDS_2 = [(270, "MSB", ("000",)), (314, "LSB", ("000",)), (358, "LEVEL", ("100",)), (414, "PAN", ("0",)),
+            (470, "REVERB", ("40",)), (526, "CHORUS", ("0",))]
+PILLS = [(640, 202, "PART"), (736, 202, "PROGRAM"), (640, 238, "BANK MSB"), (736, 238, "BANK LSB")]
 lit = '--lit' in sys.argv
 all_on = '--all-on' in sys.argv
 base = '--base' in sys.argv
+pro = '--pro' in sys.argv
 im = Image.new('RGB', (W*S, H*S)); d = ImageDraw.Draw(im)
 DJ = "/usr/share/fonts/truetype/dejavu/DejaVuSans"
 def F(sz, st=""): return ImageFont.truetype(DJ + st + ".ttf", int(sz*S))
@@ -72,12 +82,17 @@ d.rectangle((X(wx0-4), X(wy0-4), X(wx1+4), X(wy1+6)), fill=(150, 140, 120))
 d.rectangle((X(wx0), X(wy0), X(wx1), X(wy1)), fill=(24, 25, 27))
 d.rectangle((X(wx0), X(wy0), X(wx1), X(wy0+44)), fill=(30, 31, 34))      # glass reflection band
 PR = (200, 202, 204)                                                       # window print
-d.text((X(296), X(52)), "POWER", font=F(14, "-Bold"), fill=PR)
-d.text((X(368), X(52)), "USB", font=F(14, "-Bold"), fill=PR)
+if not pro:
+    d.text((X(296), X(52)), "POWER", font=F(14, "-Bold"), fill=PR)
+    d.text((X(368), X(52)), "USB", font=F(14, "-Bold"), fill=PR)
+else:
+    d.text((X(284), X(49)), "POWER", font=F(9, "-Bold"), fill=PR)
+    d.text((X(354), X(49)), "USB", font=F(9, "-Bold"), fill=PR)
 d.text((X(428), X(52)), "PART A", font=F(14, "-Bold"), fill=PR)
 d.text((X(428), X(90)), "PART B", font=F(14, "-Bold"), fill=PR)
-d.text((X(290), X(114)), "Nuked", font=F(17, "-Oblique"), fill=PR)
-d.text((X(348), X(113)), "P256", font=F(18, "-BoldOblique"), fill=PR)
+if not pro:
+    d.text((X(290), X(114)), "Nuked", font=F(17, "-Oblique"), fill=PR)
+    d.text((X(348), X(113)), "P256", font=F(18, "-BoldOblique"), fill=PR)
 # map labels under PART B, one per 3-column segment
 GX, GW = 508, 11.4                                    # first dot column, column pitch
 labels = ["55", "88", "88Pro", "8820"]
@@ -131,8 +146,12 @@ def usb_icon(x, y, on):
     d.polygon([(X(x+9), X(y-3)), (X(x+13), X(y)), (X(x+9), X(y+3))], fill=col)
     d.line([(X(x-3), X(y)), (X(x+1), X(y-4)), (X(x+5), X(y-4))], fill=col, width=X(1.2))
     d.line([(X(x-1), X(y)), (X(x+3), X(y+4)), (X(x+6), X(y+4))], fill=col, width=X(1.2))
-power_icon(323, 84, lit or all_on)
-usb_icon(384, 84, lit or all_on)   # shown as connected (always on in the plugin)
+if not pro:
+    power_icon(323, 84, lit or all_on)
+    usb_icon(384, 84, lit or all_on)   # shown as connected (always on in the plugin)
+else:                                  # small, beside their labels
+    power_icon(334, 54, lit or all_on)
+    usb_icon(390, 54, lit or all_on)
 # --- VOLUME / PREVIEW (PUSH) knob and phones jack
 d.text((X(686), X(56)), "GAIN", font=F(16, "-Bold"), fill=INK)
 d.text((X(672), X(76)), "PREVIEW (PUSH)", font=F(8.5, "-Bold"), fill=INK)
@@ -160,10 +179,60 @@ def centred(box, text, font, fill):
     x0, y0, x1, y1 = box
     l, t, r_, b_ = d.textbbox((0, 0), text, font=font)
     d.text(((X(x0) + X(x1) - (r_ - l))/2 - l, (X(y0) + X(y1) - (b_ - t))/2 - t), text, font=font, fill=fill)
-d.text((X(40), X(FRONT+22)), "Nuked-SC", font=F(22, "-Oblique"), fill=(150, 150, 150))
-d.text((X(148), X(FRONT+20)), "8820", font=F(24, "-BoldOblique"), fill=(200, 200, 200))
-SB = (800, FRONT+22, 890, FRONT+46); d.rectangle(tuple(X(v) for v in SB), fill=(16, 16, 16))
+if not pro:
+    d.text((X(40), X(FRONT+22)), "Nuked-SC", font=F(22, "-Oblique"), fill=(150, 150, 150))
+    d.text((X(148), X(FRONT+20)), "8820", font=F(24, "-BoldOblique"), fill=(200, 200, 200))
+    SB = (800, FRONT+22, 890, FRONT+46)
+else:
+    d.text((X(22), X(FRONT+24)), "Nuked-SC", font=F(20, "-Oblique"), fill=(150, 150, 150))
+    d.text((X(119), X(FRONT+22)), "8820", font=F(22, "-BoldOblique"), fill=(200, 200, 200))
+    d.text((X(187), X(FRONT+22)), "Pro", font=F(22, "-BoldOblique"), fill=OR)
+    SB = (812, FRONT+44, 900, FRONT+68)
+d.rectangle(tuple(X(v) for v in SB), fill=(16, 16, 16))
 if not base: centred(SB, "SETUP  >", F(11, "-Bold"), OR)
+
+if pro:
+    # --- 16-part level display (left of the window): 16 columns x 8 dots, the port of the selected part
+    for c in range(16):
+        for r in range(8):
+            on = False
+            if lit:
+                lv = [7, 5, 6, 3, 0, 4, 2, 0, 5, 8, 1, 0, 3, 0, 0, 2][c]
+                on = r < lv
+            if all_on: on = True
+            col = [GRN, GRN, GRN, GRN, GRN, YGN, YEL, RED][r]
+            dot(EQ_X + c*EQ_DX, EQ_Y - r*EQ_DY, col, on)
+    for c in (0, 4, 9, 15):                                          # part numbers 1, 5, 10, 16
+        t = str(c + 1); w = d.textlength(t, font=F(7.5, "-Bold"))
+        d.text((X(EQ_X + c*EQ_DX) - w/2, X(EQ_Y + 6)), t, font=F(7.5, "-Bold"), fill=PR)
+    if lit:   # port letter and the selected part's column marker (drawn by the GUI)
+        d.text((X(EQ_X - 13), X(EQ_Y + 5)), "A", font=F(8, "-Bold"), fill=OR)
+        d.rectangle((X(EQ_X + 0*EQ_DX - 2.5), X(EQ_Y + 16), X(EQ_X + 0*EQ_DX + 2.5), X(EQ_Y + 17.5)), fill=OR)
+
+    # --- lower strip: part display and the edit buttons
+    LCD = (262, FRONT+10, 584, FRONT+76)
+    d.rounded_rectangle(tuple(X(v) for v in (LCD[0]-3, LCD[1]-3, LCD[2]+3, LCD[3]+3)), X(4), fill=(70, 70, 74))
+    d.rectangle(tuple(X(v) for v in LCD), fill=(14, 14, 15))
+    LB = (150, 152, 158)                                             # label grey
+    def field(x, y, label, value, w):
+        d.text((X(x), X(y)), label, font=F(7.5, "-Bold"), fill=LB)
+        if lit: d.text((X(x), X(y + 9)), value, font=F(14, "-Bold"), fill=OR)
+    r1, r2 = LCD[1] + 4, LCD[1] + 36
+    for x, lab, val in FIELDS_1: field(x, r1, lab, val[0] if lit else "", 0)
+    for x, lab, val in FIELDS_2: field(x, r2, lab, val[0] if lit else "", 0)
+    # edit buttons: label, then a dark pill with two light round buttons (left / right)
+    def pill(cx, y, label):
+        w = d.textlength(label, font=F(8.5, "-Bold"))
+        d.text((X(cx) - w/2, X(y)), label, font=F(8.5, "-Bold"), fill=(205, 205, 205))
+        py = y + 18
+        d.rounded_rectangle((X(cx-40), X(py-10), X(cx+40), X(py+10)), X(10), fill=(22, 22, 24))
+        for sx in (-1, 1):
+            bx = cx + sx*19
+            d.rounded_rectangle((X(bx-16), X(py-7), X(bx+16), X(py+7)), X(4), fill=(196, 196, 194))
+            d.rounded_rectangle((X(bx-16), X(py-7), X(bx+16), X(py+4)), X(4), fill=(214, 214, 212))
+            tri = [(bx-3, py-4), (bx-3, py+4), (bx+4, py)] if sx > 0 else [(bx+3, py-4), (bx+3, py+4), (bx-4, py)]
+            d.polygon([(X(a), X(b)) for a, b in tri], fill=(40, 40, 40))
+    for (cx, y, lab) in PILLS: pill(cx, y, lab)
 out = im.resize((W, H), Image.LANCZOS)
 if sys.argv[1].endswith('.bgra'):
     b, g, rr = out.split()[2], out.split()[1], out.split()[0]

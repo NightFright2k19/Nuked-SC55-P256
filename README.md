@@ -6,6 +6,7 @@
 <img width="918" height="281" alt="sc_88" src="https://github.com/user-attachments/assets/4c4cf183-b4d8-4177-b115-526d5754561c" />
 <img width="918" height="280" alt="sc_88pro" src="https://github.com/user-attachments/assets/efe4a79e-5ba9-4abf-b199-a00c968ba4c7" />
 <img width="918" height="280" alt="sc8820" src="docs/images/sc8820_panel.png" />
+<img width="918" height="280" alt="sc8820pro" src="docs/images/sc8820pro_panel.png" />
 <img width="918" height="279" alt="sc_8850" src="https://github.com/user-attachments/assets/853f8c54-9bf6-4ff2-bf91-a5d85f23c303" />
 </p>
 
@@ -25,6 +26,7 @@ Single-file **CLAP** and **VST2** plug-ins (Windows x64) for the Roland **SC-55 
 - [SC-88 Pro engine (88emu)](#sc-88-pro-engine-88emu)
 - [SC-88 engine (88emu)](#sc-88-engine-88emu)
 - [SC-8820 engine (88emu)](#sc-8820-engine-88emu)
+  - [SC-8820 Pro](#sc-8820-pro)
 - [SC-8850 engine (88emu)](#sc-8850-engine-88emu)
 - [Panels and controls](#panels-and-controls)
 - [Settings and plug-in state](#settings-and-plug-in-state)
@@ -60,6 +62,7 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 - **SC-88:** the 88emu engine with the firmware of the first SC-88, 32 parts on two MIDI inputs like the SC-88 Pro, the original front panel driven by the firmware, and GAIN. See [SC-88 engine](#sc-88-engine-88emu).
 - **SC-88 Pro:** a second engine based on the 88emu core from the Gearmulator project, with the SC-55 / SC-88 / SC-88 Pro tone map switch of the hardware, gain, mute and preview, and both MIDI inputs (32 parts A01-A16 / B01-B16: port select `F5 01` / `F5 02`, or the second CLAP note port "MIDI IN B"). The SC-55 code is untouched by this (audio compared byte by byte).
 - **SC-8820:** the same 88emu engine with the SC-8820 firmware, 32 parts on two MIDI inputs (A, B), a front panel drawn after the device (lamps from the firmware, INST MAP, GAIN knob, PREVIEW on a right click). See [SC-8820 engine](#sc-8820-engine-88emu).
+- **SC-8820 Pro:** a second plug-in from the same SC-8820 ROMs with an extended panel: a 16-part level display, a part display (program, instrument, bank MSB / LSB, level, pan, reverb, chorus) and buttons to change them. It is a customized variant with more features and less faithful to the device; the sound engine is identical. See [SC-8820 Pro](#sc-8820-pro).
 - **SC-8850:** the same 88emu engine with the SC-8850 firmware, 64 parts on four MIDI inputs (A-D), the original front panel with graphic LCD driven by the firmware, and GAIN. See [SC-8850 engine](#sc-8850-engine-88emu).
 
 ### Formats and packaging
@@ -100,7 +103,7 @@ There are two ways to get the plug-ins. The first needs nothing but your ROM fil
 3. Start it, check the list of found models and click **Patch**.
 4. Copy the results from `Plugins/CLAP/*.clap` and/or `Plugins/VST2/*.dll` to your plug-in folders (see [Using the plug-ins](#using-the-plug-ins)).
 
-Everything for which a complete ROM set is found is built (SC-55 v1.21, SC-55mk2 v1.01, SC-88, SC-88 Pro, SC-8820, SC-8850). More in [The patcher](#the-patcher).
+Everything for which a complete ROM set is found is built (SC-55 v1.21, SC-55mk2 v1.01, SC-88, SC-88 Pro, SC-8820 and SC-8820 Pro, SC-8850). More in [The patcher](#the-patcher).
 
 ### Option B: build from source
 
@@ -166,14 +169,15 @@ For source builds with **external** ROMs, the layout of the original plug-in app
 | Nuked-SC88 | `Nuked-SC88` | 88emu | `net.nuked_sc55_poly_clap.sc88` | `S888` (0x53383838) | 256 |
 | Nuked-SC88 Pro | `Nuked-SC88_Pro` | 88emu | `net.nuked_sc55_poly_clap.sc88pro` | `S8PP` (0x53385050) | 256 |
 | Nuked-SC8820 | `Nuked-SC8820` | 88emu | `net.nuked_sc55_poly_clap.sc8820` | `S820` (0x53383230) | 256 |
+| Nuked-SC8820 Pro | `Nuked-SC8820_Pro` | 88emu | `net.nuked_sc55_poly_clap.sc8820pro` | `S82P` (0x53383250) | 256 |
 | Nuked-SC8850 | `Nuked-SC8850` | 88emu | `net.nuked_sc55_poly_clap.sc8850` | `S885` (0x53383835) | 256 |
 
 - The file names contain no spaces or dots (some hosts and drivers dislike them); the display names in the host stay "Nuked-SC55 v1.21", "Nuked-SC55 MkII" and "Nuked-SC88 Pro".
 - Both formats are the **same file** with two entry points (`clap_entry` and `VSTPluginMain`). The builder writes it twice, once as `.clap` and once as `.dll`.
-- Category: instrument/synth; flags: editor, replacing, program chunks. VST2 vendor `Nuked SC-55 P256` (SC-88 and SC-88 Pro: `Nuked SC-88 P256`, SC-8820: `Nuked SC-8820 P256`, SC-8850: `Nuked SC-8850 P256`).
+- Category: instrument/synth; flags: editor, replacing, program chunks. VST2 vendor `Nuked SC-55 P256` (SC-88 and SC-88 Pro: `Nuked SC-88 P256`, SC-8820 and SC-8820 Pro: `Nuked SC-8820 P256`, SC-8850: `Nuked SC-8850 P256`).
 - The IDs of the plug-ins never changed since the first version, so projects stay compatible. Hosts may show a new vendor after a rescan.
 - Windows version info: product name, description and internal name are the display name; file and product version are the build date (`2026.10.07` is stored as `2026,10,7,0` numerically, which Windows shows as `2026.10.7.0`).
-- A DLL with ROMs is large: about 14 MB for the SC-88 (8.5 MB ROMs), about 27 MB for the SC-88 Pro (21 MB ROMs, 1 MB panel graphics), about 33 MB for the SC-8820 (26 MB ROMs, 2 MB panel graphics), about 42 MB for the SC-8850 (35 MB ROMs).
+- A DLL with ROMs is large: about 14 MB for the SC-88 (8.5 MB ROMs), about 27 MB for the SC-88 Pro (21 MB ROMs, 1 MB panel graphics), about 33 MB for the SC-8820 and the SC-8820 Pro (26 MB ROMs, 2 MB panel graphics), about 42 MB for the SC-8850 (35 MB ROMs).
 
 ---
 
@@ -298,6 +302,23 @@ The SC-8820 plug-in uses the 88emu core with the SC-8820 firmware (compile-time 
 - **Controls:** INST MAP is the device's button (held while the mouse button is down, at least 120 ms). The knob in place of the device's VOLUME turns GAIN (left-button drag, mouse wheel = 0.1 dB per notch, double-click = 0 dB; its marker follows GAIN), always silently. **Deviation from the device:** there pushing the knob plays the PREVIEW note, but here the left button is needed for turning, so PREVIEW is a **right click** on the knob (held while the button is down). It plays the note chosen in the SETUP menu ("Prevw Note", default C4) on part A01 (Issue #51).
 - **SETUP:** max polyphony, tone map for all parts (SC-55 / SC-88 / SC-88 Pro / SC-8820, default SC-8820; the same setting as the INST MAP button), Send Reset (MT-32 / GM / GS / GM2, see [MT-32 reset](#mt-32-reset)), all notes off.
 
+### SC-8820 Pro
+
+`Nuked-SC8820_Pro` is built from the same ROMs as `Nuked-SC8820` (compile-time `NUKED_SC55_8820_PRO`). The device has no display and almost no controls; this variant adds them, inspired by the part view of Sound Canvas VA. It is **customized and less faithful to the original**: everything the panel shows or changes goes through normal MIDI messages, the firmware and the sound are the same as in `Nuked-SC8820`.
+
+| | Nuked-SC8820 | Nuked-SC8820 Pro |
+| --- | --- | --- |
+| Panel | as on the device | device front plus a part display and edit buttons in the lower strip |
+| Display window | POWER, USB, PART A / B lamps, INST MAP | the same, plus a 16-part level display (POWER and USB smaller) |
+| Part settings | MIDI only | shown and editable per part (A01-B16) |
+| Name | `Nuked-SC8820` | `Nuked-SC8820` with an orange "Pro" |
+| INST MAP, GAIN, PREVIEW (right click), SETUP | identical | identical |
+
+- **16-part level display:** 16 columns x 8 dots in the style of the device's lamps, for the 16 parts of the port (A or B) the selected part belongs to. The levels come from the notes (velocity x volume x expression, like the SC-55 / SC-88 bar display). Clicking a column selects that part; the marker under the columns shows the selected part.
+- **Part display:** PART, PROG (001-128), INSTRUMENT (the tone name, or the drum set name on a rhythm part), MSB and LSB (bank select; LSB 0 = the INST MAP map, 1-4 = SC-55, SC-88, SC-88Pro, SC-8820), LEVEL, PAN (L63-0-R63, RND), REVERB and CHORUS. The values are read about 30 times a second from unit 0's work RAM, so they also follow SysEx, resets and the host's own messages.
+- **Edit buttons:** PART, PROGRAM, BANK MSB and BANK LSB (held = repeat). The mouse wheel changes the value under the pointer (also PART and INSTRUMENT); LEVEL, PAN, REVERB and CHORUS also follow a vertical drag. A change of program, MSB or LSB sends CC#0, CC#32 and the program change of the part; the others send CC#7, CC#10, CC#91 and CC#93. They go to all units like the host's messages (sleeping units get them when they wake).
+- **State:** the same as `Nuked-SC8820`; the selected part is not stored.
+
 
 ## SC-8850 engine (88emu)
 
@@ -382,7 +403,7 @@ The DLL **never writes files**. The only state is the plug-in state, saved by th
 NSC55P1 max_voices=<n> gain=<-120..120>                                 SC-55 plug-ins (gain in 0.1 dB)
 NSC55P1 max_voices=<n> map=<0..1> gain=<-120..120> smode=<0..1>          SC-88 (map: 0 SC-55, 1 SC-88)
 NSC55P1 max_voices=<n> map=<0..2> gain=<-120..120> pnote=<0..127> smode=<0..1>    SC-88 Pro
-NSC55P1 max_voices=<n> map=<0..3> gain=<-120..120>                       SC-8820 (map: INST MAP, 0 SC-55 ... 3 SC-8820)
+NSC55P1 max_voices=<n> map=<0..3> gain=<-120..120>                       SC-8820, SC-8820 Pro (map: INST MAP, 0 SC-55 ... 3 SC-8820)
 NSC55P1 max_voices=<n> gain=<-120..120>                                 SC-8850
 ```
 
@@ -453,6 +474,7 @@ Nuked SC-55 / SC-88 / SC-8820 / SC-8850 P256 - Plugin Builder
 [--] SC-88: no ROMs found
 [--] SC-88 Pro: no ROMs found
 [--] SC-8820: no ROMs found
+[--] SC-8820 Pro: no ROMs found
 [--] SC-8850: no ROMs found
 
 2 plugin(s) created.
@@ -612,6 +634,7 @@ These are limits of the approach, or things that are not done yet.
 
 - **CPU ROM:** the file `7f3be975fc9ada3d` is the original dump R02015367. The earlier reconstruction (MD5 `b03dc0c5…`) still boots as in 88emu; rare firmware paths may behave differently from the device with it.
 - **Level indicators:** the emulation gives the firmware's lamps in four blocks per part group (3 columns each); finer steps that the device may show are not available.
+- **SC-8820 Pro part display:** the work RAM addresses it reads belong to the accepted program ROM (2000-11-28). Some tone names end in a marker character of the firmware (for example `Violin    :`).
 
 ### SC-8850
 
