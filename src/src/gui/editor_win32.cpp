@@ -20,8 +20,6 @@
 // Window class name of the editor (one per editor instance)
 #if defined(NUKED_SC55_DEVICE_8850)
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC8850P256Editor_"
-#elif defined(NUKED_SC55_8820_PRO)
-#define NUKED_SC55_WNDCLASS_PREFIX "NukedSC8820ProP256Editor_"
 #elif defined(NUKED_SC55_DEVICE_8820)
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC8820P256Editor_"
 #elif defined(NUKED_SC55_DEVICE_88)
@@ -123,8 +121,9 @@ struct Editor {
     int steps85     = 0;       // detents passed on during this drag
     void* lcd85     = nullptr; // graphic LCD renderer
 #endif
-#ifdef NUKED_SC55_8820_PRO
-    float disp32[32]   = {};   // 16-part level display (both ports)
+#ifdef NUKED_SC55_DEVICE_8820
+    int bg_style       = -1;   // interface style the background was built for (0 Basic, 1 Pro)
+    float disp32[32]   = {};   // Pro: 16-part level display (both ports)
     int pro_btn        = 0;    // edit button held (1..8), auto-repeat
     DWORD pro_btn_t    = 0;
     int pro_drag       = 0;    // value dragged (field + 1)
@@ -229,13 +228,15 @@ void Draw(Editor& e, HDC dc)
 
 void DecayBars(Editor& e)
 {
-#ifdef NUKED_SC55_8820_PRO
-    for (int c = 0; c < 32; ++c) { // all 32 parts (both ports) for the Pro's level display
-        const uint8_t hit = e.plugin->ui_parts[c].hit.exchange(0);
-        e.disp32[c]       = std::max(e.disp32[c] - 7.0f, 0.0f);
-        if (hit > e.disp32[c]) e.disp32[c] = hit;
+#ifdef NUKED_SC55_DEVICE_8820
+    if (e.plugin->ui_style.load() == 1) {
+        for (int c = 0; c < 32; ++c) { // all 32 parts (both ports) for the Pro's level display
+            const uint8_t hit = e.plugin->ui_parts[c].hit.exchange(0);
+            e.disp32[c]       = std::max(e.disp32[c] - 7.0f, 0.0f);
+            if (hit > e.disp32[c]) e.disp32[c] = hit;
+        }
+        return;
     }
-    return;
 #endif
     for (int& f : e.flash) if (f > 0) --f;
     for (int c = 0; c < 16; ++c) {
@@ -245,12 +246,12 @@ void DecayBars(Editor& e)
     }
 }
 
-int HitButton(int x, int y)
+int HitButton([[maybe_unused]] const Editor& e, int x, int y)
 {
 #if defined(NUKED_SC55_DEVICE_8850)
     return Hit8850(x, y);
 #elif defined(NUKED_SC55_DEVICE_8820)
-    return Hit8820(x, y);
+    return Hit8820(e, x, y);
 #elif defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     return Hit88o(x, y);
 #else
@@ -401,6 +402,16 @@ void ShowSetupMenu(Editor& e)
         AppendMenuW(m, MF_POPUP, (UINT_PTR)sm_menu, T(L"System Mode", L"System-Modus"));
     }
     AppendMenuW(m, MF_STRING, 1, T(L"All notes off", L"Alle Noten aus"));
+#ifdef NUKED_SC55_DEVICE_8820
+    {   // interface style (issue #67): the device's panel or the Pro panel, stored in the state
+        const int st = p.ui_style.load();
+        AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Interface Style", L"Oberfl\u00e4chen-Stil"));
+        AppendMenuW(m, MF_STRING | (st == 0 ? MF_CHECKED : 0), 20,
+                    T(L"   Basic\t(default)", L"   Basic\t(Standard)"));
+        AppendMenuW(m, MF_STRING | (st == 1 ? MF_CHECKED : 0), 21, L"   Pro");
+    }
+#endif
 
     RECT r;
     GetWindowRect(e.hwnd, &r);
@@ -411,7 +422,7 @@ void ShowSetupMenu(Editor& e)
                                    r.left + E85_SETUP.right, r.top + E85_SETUP.top - 2, 0, e.hwnd, nullptr);
 #elif defined(NUKED_SC55_DEVICE_8820)
     const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTALIGN | TPM_BOTTOMALIGN,
-                                   r.left + E20_SETUP.right, r.top + E20_SETUP.top - 2, 0, e.hwnd, nullptr);
+                                   r.left + Setup20(e).right, r.top + Setup20(e).top - 2, 0, e.hwnd, nullptr);
 #elif defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_BOTTOMALIGN,
                                    r.left + E88O_SETUP.left, r.top + E88O_SETUP.top - 2, 0, e.hwnd, nullptr);
@@ -435,6 +446,11 @@ void ShowSetupMenu(Editor& e)
         p.NotifyStateChanged();
     } else if (cmd == 1 || cmd == 2 || cmd == 6 || cmd == 7 || cmd == 10) { // all notes off, resets, MT-32
         p.ui_command = cmd;
+#ifdef NUKED_SC55_DEVICE_8820
+    } else if (cmd == 20 || cmd == 21) { // interface style, stored in the state
+        p.ui_style = cmd - 20;
+        p.NotifyStateChanged();
+#endif
     } else if (cmd == 8 || cmd == 9) { // system mode, stored in the state
         p.system_mode = cmd - 8;
         p.ui_command  = cmd;
@@ -509,7 +525,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         }
         if (e) {
-            const int b = HitButton((short)LOWORD(lp), (short)HIWORD(lp));
+            const int b = HitButton(*e, (short)LOWORD(lp), (short)HIWORD(lp));
             if (b != e->hover_btn) {
                 e->hover_btn = b;
                 TRACKMOUSEEVENT t{sizeof(t), TME_LEAVE, hwnd, 0};
@@ -569,7 +585,7 @@ void* Create(NukedSc55* plugin, const char* display_name)
     e->f_big   = MakeFont(30, FW_BOLD, "Consolas");
     e->f_btn   = MakeFont(13, FW_BOLD, "Segoe UI");
     e->f_tiny  = MakeFont(10, FW_BOLD, "Arial");
-#ifdef NUKED_SC55_8820_PRO
+#ifdef NUKED_SC55_DEVICE_8820
     e->f_pro   = MakeFont(17, FW_BOLD, "Arial");
 #endif
     return e;
@@ -608,7 +624,7 @@ void Destroy(void* ed)
     Close(e);
     for (HFONT f : {e->f_title, e->f_sub, e->f_small, e->f_label, e->f_value, e->f_big, e->f_btn, e->f_tiny})
         if (f) DeleteObject(f);
-#ifdef NUKED_SC55_8820_PRO
+#ifdef NUKED_SC55_DEVICE_8820
     if (e->f_pro) DeleteObject(e->f_pro);
 #endif
     if (e->bg_dc) {

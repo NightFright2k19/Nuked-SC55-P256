@@ -12,7 +12,7 @@ filenames do not matter - identification is based on the contents via SHA-256).
   SC-55mk2 v1.01     -> output/.../Nuked-SC55_MkII.*   (always with CTF, see below)
   SC-88              -> output/.../Nuked-SC88.*
   SC-88 Pro          -> output/.../Nuked-SC88_Pro.*
-  SC-8820            -> output/.../Nuked-SC8820.*  and  Nuked-SC8820_Pro.* (extended panel)
+  SC-8820            -> output/.../Nuked-SC8820.*  (interface Basic / Pro in the SETUP menu)
   SC-8850            -> output/.../Nuked-SC8850.*
 
 Everything for which a complete ROM set is found will be built.
@@ -83,7 +83,6 @@ MODELS = [
     ("88", "Nuked-SC88", "SC-88", [(0, "control"), (1, "wave0"), (2, "wave1"), (3, "wave2"), (4, "wave3")]),
     ("88pro", "Nuked-SC88_Pro", "SC-88 Pro", [(0, "control"), (1, "wave0"), (2, "wave1"), (3, "wave2")]),
     ("8820", "Nuked-SC8820", "SC-8820", [(0, "internal"), (1, "program"), (2, "wave0"), (3, "wave1")]),
-    ("8820", "Nuked-SC8820_Pro", "SC-8820 Pro", [(0, "internal"), (1, "program"), (2, "wave0"), (3, "wave1")]),
     ("8850", "Nuked-SC8850", "SC-8850", [(0, "internal"), (1, "program"), (2, "data"), (3, "wave")]),
 ]
 

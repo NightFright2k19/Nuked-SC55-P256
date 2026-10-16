@@ -11,8 +11,8 @@
 // needs the left button (issue #48). VOICES / UNITS sit left of INST MAP like on the other panels; the
 // GAIN value is printed under the knob.
 //
-// Nuked-SC8820 Pro (NUKED_SC55_8820_PRO, issue #49): the same panel drawn with make_sc8820_panel.py
-// --pro: a 16-part level display in the window (the port of the selected part, click = select a
+// Pro interface (issue #49; SETUP menu "Interface Style", issue #67, NukedSc55::ui_style = 1): the same
+// panel drawn with make_sc8820_panel.py --pro: a 16-part level display in the window (the port of the selected part, click = select a
 // part), and in the lower strip a part display (part, program, instrument or drum set, bank MSB /
 // LSB, level, pan, reverb, chorus; read from unit 0's work RAM by NukedSc55::PartInfo) with edit
 // buttons for PART, PROGRAM, BANK MSB and BANK LSB. The values also follow the mouse wheel, and
@@ -22,6 +22,10 @@ extern "C" const unsigned char nk_panel8820_b[] asm("nk_panel8820_b");
 extern "C" const unsigned char nk_panel8820_e[] asm("nk_panel8820_e");
 extern "C" const unsigned char nk_lit8820_b[] asm("nk_lit8820_b");
 extern "C" const unsigned char nk_lit8820_e[] asm("nk_lit8820_e");
+extern "C" const unsigned char nk_panel8820p_b[] asm("nk_panel8820p_b"); // Pro interface
+extern "C" const unsigned char nk_panel8820p_e[] asm("nk_panel8820p_e");
+extern "C" const unsigned char nk_lit8820p_b[] asm("nk_lit8820p_b");
+extern "C" const unsigned char nk_lit8820p_e[] asm("nk_lit8820p_e");
 
 void ShowSetupMenu(Editor& e); // editor_win32.cpp
 
@@ -35,20 +39,20 @@ constexpr int E20_KNOB_R = 24;
 constexpr RECT E20_VOICES = {33, 37, 149, 132}, E20_UNITS = {36, 140, 146, 160}; // DrawVoices88 window
 constexpr RECT E20_GAIN = {682, 146, 742, 160};                                     // value under the knob
 constexpr COLORREF E20_INK = RGB(0x30, 0x2e, 0x2c);                                 // front print
-#ifdef NUKED_SC55_8820_PRO
-constexpr RECT E20_SETUP = {812, 240, 900, 264};
-constexpr RECT E20_POWER = {322, 125, 347, 149}, E20_USB = {376, 127, 405, 147};
-#else
-constexpr RECT E20_SETUP = {800, 218, 890, 242};
-constexpr RECT E20_POWER = {309, 70, 338, 99}, E20_USB = {368, 72, 401, 96};
-#endif
+// [0] Basic, [1] Pro interface
+constexpr RECT E20_SETUP[2] = {{800, 218, 890, 242}, {812, 240, 900, 264}};
+constexpr RECT E20_POWER[2] = {{309, 70, 338, 99}, {322, 125, 347, 149}};
+constexpr RECT E20_USB[2]   = {{368, 72, 401, 96}, {376, 127, 405, 147}};
 constexpr double E20_GX = 508.0, E20_GW = 11.4;           // first dot column, column pitch
 constexpr int E20_ROW_A = 56, E20_ROW_B = 94;             // first dot row of PART A / PART B
 constexpr DWORD E20_MIN_HOLD_MS = 120;                    // a short click still reaches the switch scan
 constexpr uint32_t E20_BIT_INSTMAP = 1u, E20_BIT_PREVIEW = 2u;
 constexpr int E20_HIT_INSTMAP = 1, E20_HIT_KNOB = 2, E20_HIT_SETUP = 3;
 
-HDC g_lit20_dc = nullptr;
+HDC g_lit20_dc[2] = {};
+
+int Style20(const Editor& e) { return e.plugin->ui_style.load() == 1 ? 1 : 0; }
+const RECT& Setup20(const Editor& e) { return E20_SETUP[Style20(e)]; }
 
 HDC Dib20(const unsigned char* b, const unsigned char* e, HBITMAP* bmp_out, HGDIOBJ* old_out)
 {
@@ -72,13 +76,25 @@ HDC Dib20(const unsigned char* b, const unsigned char* e, HBITMAP* bmp_out, HGDI
     return dc;
 }
 
-void BuildBackground8820(Editor& e)
+void BuildBackground8820(Editor& e, int style)
 {
-    e.bg_dc = Dib20(nk_panel8820_b, nk_panel8820_e, &e.bg_bmp, &e.bg_old);
-    if (!g_lit20_dc) g_lit20_dc = Dib20(nk_lit8820_b, nk_lit8820_e, nullptr, nullptr); // kept for the process
+    if (e.bg_dc) { // style switched: the other panel
+        SelectObject(e.bg_dc, e.bg_old);
+        DeleteObject(e.bg_bmp);
+        DeleteDC(e.bg_dc);
+    }
+    e.bg_dc    = style ? Dib20(nk_panel8820p_b, nk_panel8820p_e, &e.bg_bmp, &e.bg_old)
+                       : Dib20(nk_panel8820_b, nk_panel8820_e, &e.bg_bmp, &e.bg_old);
+    e.bg_style = style;
+    if (!g_lit20_dc[style]) // kept for the process
+        g_lit20_dc[style] = style ? Dib20(nk_lit8820p_b, nk_lit8820p_e, nullptr, nullptr)
+                                  : Dib20(nk_lit8820_b, nk_lit8820_e, nullptr, nullptr);
 }
 
-void Lit20(HDC dc, const RECT& r) { BitBlt(dc, r.left, r.top, r.right - r.left, r.bottom - r.top, g_lit20_dc, r.left, r.top, SRCCOPY); }
+void Lit20(const Editor& e, HDC dc, const RECT& r)
+{
+    BitBlt(dc, r.left, r.top, r.right - r.left, r.bottom - r.top, g_lit20_dc[e.bg_style], r.left, r.top, SRCCOPY);
+}
 
 RECT Block20(int row, int block) // 3 columns x 3 rows of dots, with their glow
 {
@@ -87,8 +103,6 @@ RECT Block20(int row, int block) // 3 columns x 3 rows of dots, with their glow
     return {x0, row - 7, x1, row + 20};
 }
 
-
-#ifdef NUKED_SC55_8820_PRO
 // ---- Pro: level display, part display, edit buttons (geometry: make_sc8820_panel.py --pro) ------
 constexpr double E20P_EQ_X = 291.5, E20P_EQ_DX = 7.6, E20P_EQ_Y = 104.0, E20P_EQ_DY = 7.0;
 constexpr RECT E20P_EQ = {287, 48, 410, 118};                       // click: select a part
@@ -208,7 +222,7 @@ void DrawPro20(Editor& e, HDC dc)
         const int n    = lv <= 0.0f ? 0 : std::clamp(static_cast<int>(std::ceil(lv * 8.0f / 127.0f)), 1, 8);
         for (int r = 0; r < n; ++r) {
             const double x = E20P_EQ_X + c * E20P_EQ_DX, y = E20P_EQ_Y - r * E20P_EQ_DY;
-            Lit20(dc, {static_cast<int>(x - 3.8), static_cast<int>(y - 3.5), static_cast<int>(x + 3.8) + 1,
+            Lit20(e, dc, {static_cast<int>(x - 3.8), static_cast<int>(y - 3.5), static_cast<int>(x + 3.8) + 1,
                        static_cast<int>(y + 3.5) + 1});
         }
     }
@@ -328,33 +342,31 @@ bool MousePro20(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     }
     return false;
 }
-#endif
 
-int Hit8820(int x, int y)
+int Hit8820(const Editor& e, int x, int y)
 {
     if (InCircle(E20_INSTMAP, E20_INSTMAP_R, x, y)) return E20_HIT_INSTMAP;
     if (InCircle(E20_KNOB, E20_KNOB_R, x, y)) return E20_HIT_KNOB;
-    if (InRect(E20_SETUP, x, y)) return E20_HIT_SETUP;
-#ifdef NUKED_SC55_8820_PRO
-    if (const int b = Pill20(x, y)) return E20_HIT_PRO + b;
-#endif
+    if (InRect(Setup20(e), x, y)) return E20_HIT_SETUP;
+    if (Style20(e) == 1)
+        if (const int b = Pill20(x, y)) return E20_HIT_PRO + b;
     return 0;
 }
 
 void Draw8820(Editor& e, HDC dc)
 {
     NukedSc55& p = *e.plugin;
-    if (!e.bg_dc) BuildBackground8820(e);
+    if (!e.bg_dc || e.bg_style != Style20(e)) BuildBackground8820(e, Style20(e));
     BitBlt(dc, 0, 0, Width, Height, e.bg_dc, 0, 0, SRCCOPY);
 
     // lamps: bits 0-3 PART A, 4-7 PART B (level, or the map after INST MAP), POWER; USB shown as
     // connected (the emulation has no USB host, the firmware would blink it)
     const uint32_t leds = p.PanelLeds();
-    Lit20(dc, E20_POWER);
-    Lit20(dc, E20_USB);
+    Lit20(e, dc, E20_POWER[e.bg_style]);
+    Lit20(e, dc, E20_USB[e.bg_style]);
     for (int k = 0; k < 4; ++k) {
-        if ((leds >> k) & 1u) Lit20(dc, Block20(E20_ROW_A, k));
-        if ((leds >> (4 + k)) & 1u) Lit20(dc, Block20(E20_ROW_B, k));
+        if ((leds >> k) & 1u) Lit20(e, dc, Block20(E20_ROW_A, k));
+        if ((leds >> (4 + k)) & 1u) Lit20(e, dc, Block20(E20_ROW_B, k));
     }
     if (e.held85 & E20_BIT_INSTMAP) { // pressed: the cap moves in a little
         HBRUSH b = CreateSolidBrush(RGB(0xa8, 0xa8, 0xa6));
@@ -379,24 +391,20 @@ void Draw8820(Editor& e, HDC dc)
              E20_GAIN.bottom - E20_GAIN.top);
     }
     DrawVoices88(e, dc, E20_VOICES, E20_UNITS); // count, bar and UNITS as on the other panels
-#ifdef NUKED_SC55_8820_PRO
-    DrawPro20(e, dc);
-#endif
-    Box88(e, dc, E20_SETUP, e.menu_open ? "SETUP  \x85" : "SETUP  >", C88_LED, true);
+    if (e.bg_style == 1) DrawPro20(e, dc);
+    Box88(e, dc, E20_SETUP[e.bg_style], e.menu_open ? "SETUP  \x85" : "SETUP  >", C88_LED, true);
 }
 
 bool Mouse8820(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     NukedSc55& p = *e.plugin;
-#ifdef NUKED_SC55_8820_PRO
-    if (MousePro20(e, hwnd, msg, wp, lp)) return true;
-#endif
+    if (Style20(e) == 1 && MousePro20(e, hwnd, msg, wp, lp)) return true;
     const auto send = [&] { p.ui_panel_buttons = e.held85; };
     switch (msg) {
     case WM_LBUTTONDOWN:
     case WM_LBUTTONDBLCLK: {
         const int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
-        const int h = Hit8820(x, y);
+        const int h = Hit8820(e, x, y);
         if (h == E20_HIT_INSTMAP) {
             e.held85    = E20_BIT_INSTMAP;
             e.release85 = false;
@@ -421,7 +429,7 @@ bool Mouse8820(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     }
     case WM_RBUTTONDOWN: { // right click on the knob = push the knob (PREVIEW), held while the button is down
         const int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
-        if (Hit8820(x, y) == E20_HIT_KNOB && !e.drag_vol && !e.held85) {
+        if (Hit8820(e, x, y) == E20_HIT_KNOB && !e.drag_vol && !e.held85) {
             p.ui_preview_part = -1; // Setup menu's "Prevw Note" on the part the firmware plays preview on
             p.ui_preview      = 1;
             e.preview_down    = true;
@@ -456,7 +464,7 @@ bool Mouse8820(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_MOUSEWHEEL: {
         POINT pt{(short)LOWORD(lp), (short)HIWORD(lp)};
         ScreenToClient(hwnd, &pt);
-        if (Hit8820(pt.x, pt.y) == E20_HIT_KNOB) { // 0.1 dB per notch
+        if (Hit8820(e, pt.x, pt.y) == E20_HIT_KNOB) { // 0.1 dB per notch
             const int dir = GET_WHEEL_DELTA_WPARAM(wp) > 0 ? 1 : -1;
             p.gain_db = GainWheelStep(p.gain_db.load(), dir);
             p.NotifyStateChanged();

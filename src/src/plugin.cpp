@@ -139,16 +139,11 @@ static const clap_plugin_descriptor_t plugin_descriptor_sc88 = {
         .version      = Version,
         .description = "Roland SC-88 emulation (88emu core) with extended polyphony",
         .features = Features};
-// Nuked-SC8820 Pro (issue #49): same engine, extended panel, its own ID
+// SC-8820: one plugin, the Basic / Pro interface is a SETUP menu setting (issue #67)
 static const clap_plugin_descriptor_t plugin_descriptor_sc8820 = {
         .clap_version = CLAP_VERSION_INIT,
-#ifdef NUKED_SC55_8820_PRO
-        .id           = "net.nuked_sc55_poly_clap.sc8820pro",
-        .name         = NUKED_PLUGIN_FAMILY " — Roland SC-8820 Pro",
-#else
         .id           = "net.nuked_sc55_poly_clap.sc8820",
         .name         = NUKED_PLUGIN_FAMILY " — Roland SC-8820",
-#endif
         .vendor       = Vendor,
         .url          = Url,
         .manual_url   = Url,

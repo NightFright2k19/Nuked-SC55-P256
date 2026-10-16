@@ -365,9 +365,11 @@ public:
 	std::atomic<uint32_t> ui_leds8820{0}; // unit 0's lamps, ORed over ~40 ms (GUI, via PanelLeds)
 	uint64_t gui_map_until = 0; // render frame up to which a map shown on unit 0 is the user's choice
 	static int E8820ShownMap(uint32_t leds);
-#ifdef NUKED_SC55_8820_PRO
-	// Nuked-SC8820 Pro (issue #49): part parameters read from unit 0's work RAM (the firmware's own
-	// state, so also after SysEx and resets) for the part display, and the GUI's edits sent as MIDI
+	// Interface style (SETUP menu, issue #67): 0 = Basic (the device's panel), 1 = Pro (issue #49:
+	// level display, part display and edit buttons); stored in the state
+	std::atomic<int> ui_style{0};
+	// Pro: part parameters read from unit 0's work RAM (the firmware's own state, so also after
+	// SysEx and resets) for the part display, and the GUI's edits sent as MIDI
 	struct PartInfo8820 {
 		uint8_t msb = 0, prog = 0, lsb = 0, vol = 100, pan = 64, rev = 40, cho = 0;
 		bool rhythm = false, valid = false;
@@ -384,7 +386,6 @@ private:
 	std::array<std::atomic<uint32_t>, 256> ui_midi{}; // GUI -> audio: port << 24 | d2 << 16 | d1 << 8 | s
 	std::atomic<uint32_t> ui_midi_w{0}, ui_midi_r{0};
 public:
-#endif
 #elif defined(NUKED_SC55_DEVICE_8850)
 	// SC-8850: 0 SC-55, 1 SC-88, 2 SC-88 Pro, 3 SC-8850 (boots with the SC-8850 map)
 	static constexpr int kMaxToneMap = 3, kMapRounds = 2;

@@ -7,7 +7,7 @@
 # usage: make_sc8820_panel.py <out.png|out.bgra> [--lit | --all-on | --base]
 #   --lit     example lamp state (preview)          --all-on  every lamp lit (lamp sprites of the GUI)
 #   --base    GUI background: lamps off, knob without marker, boxes empty (the GUI draws them)
-#   --pro     Nuked-SC8820 Pro: 16-part level display in the window, part display and edit buttons
+#   --pro     Pro interface (SETUP "Interface Style"): 16-part level display in the window, part display and edit buttons
 #             in the lower strip, orange "Pro" in the name (with --lit: example values for a preview)
 #   .bgra: raw 918x280 BGRA for gen_blob.py, else PNG
 import sys
