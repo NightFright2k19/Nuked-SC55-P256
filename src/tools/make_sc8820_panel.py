@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 W, H, S = 918, 280, 3            # final size, supersampling factor
 FRONT = 196                      # height of the device front
 # Pro: 16-part level display (first column x, column pitch, bottom row y, row pitch)
-EQ_X, EQ_DX, EQ_Y, EQ_DY = 291.5, 7.6, 126.0, 7.0
+EQ_X, EQ_DX, EQ_Y, EQ_DY = 291.5, 7.6, 104.0, 7.0
 # Pro: lower-strip part display (x of each field; value examples for --lit) and edit buttons (centre x, label y)
 FIELDS_1 = [(270, "PART", ("A01",)), (314, "PROG", ("001",)), (358, "INSTRUMENT", ("Piano 1",))]
 FIELDS_2 = [(270, "MSB", ("000",)), (314, "LSB", ("000",)), (358, "LEVEL", ("100",)), (414, "PAN", ("0",)),
@@ -86,8 +86,8 @@ if not pro:
     d.text((X(296), X(52)), "POWER", font=F(14, "-Bold"), fill=PR)
     d.text((X(368), X(52)), "USB", font=F(14, "-Bold"), fill=PR)
 else:
-    d.text((X(284), X(49)), "POWER", font=F(9, "-Bold"), fill=PR)
-    d.text((X(354), X(49)), "USB", font=F(9, "-Bold"), fill=PR)
+    d.text((X(284), X(132)), "POWER", font=F(9, "-Bold"), fill=PR)
+    d.text((X(354), X(132)), "USB", font=F(9, "-Bold"), fill=PR)
 d.text((X(428), X(52)), "PART A", font=F(14, "-Bold"), fill=PR)
 d.text((X(428), X(90)), "PART B", font=F(14, "-Bold"), fill=PR)
 if not pro:
@@ -150,8 +150,8 @@ if not pro:
     power_icon(323, 84, lit or all_on)
     usb_icon(384, 84, lit or all_on)   # shown as connected (always on in the plugin)
 else:                                  # small, beside their labels
-    power_icon(334, 54, lit or all_on)
-    usb_icon(390, 54, lit or all_on)
+    power_icon(334, 137, lit or all_on)
+    usb_icon(390, 137, lit or all_on)
 # --- VOLUME / PREVIEW (PUSH) knob and phones jack
 d.text((X(686), X(56)), "GAIN", font=F(16, "-Bold"), fill=INK)
 d.text((X(672), X(76)), "PREVIEW (PUSH)", font=F(8.5, "-Bold"), fill=INK)

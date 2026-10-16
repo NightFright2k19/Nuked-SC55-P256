@@ -309,7 +309,7 @@ The SC-8820 plug-in uses the 88emu core with the SC-8820 firmware (compile-time 
 | | Nuked-SC8820 | Nuked-SC8820 Pro |
 | --- | --- | --- |
 | Panel | as on the device | device front plus a part display and edit buttons in the lower strip |
-| Display window | POWER, USB, PART A / B lamps, INST MAP | the same, plus a 16-part level display (POWER and USB smaller) |
+| Display window | POWER, USB, PART A / B lamps, INST MAP | the same, plus a 16-part level display (POWER and USB smaller, at the bottom of the window) |
 | Part settings | MIDI only | shown and editable per part (A01-B16) |
 | Name | `Nuked-SC8820` | `Nuked-SC8820` with an orange "Pro" |
 | INST MAP, GAIN, PREVIEW (right click), SETUP | identical | identical |
