@@ -355,6 +355,11 @@ public:
 	static constexpr int kMaxToneMap = 3, kMapRounds = 2;
 	std::atomic<int> tone_map{3};
 	int last_tone_map = 3;
+#elif defined(NUKED_SC55_DEVICE_88)
+	// SC-88: 0 SC-55, 1 SC-88 (boots with the SC-88 map); SETUP menu, all parts (Issue #59)
+	static constexpr int kMaxToneMap = 1, kMapRounds = 2;
+	std::atomic<int> tone_map{1};
+	int last_tone_map = 1;
 #else
 	static constexpr int kMaxToneMap = 2, kMapRounds = 2;
 	std::atomic<int> tone_map{2};

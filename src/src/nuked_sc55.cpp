@@ -35,6 +35,11 @@ constexpr bool kHas8850Map = true;  // tone map for all parts from the SETUP men
 #else
 constexpr bool kHas8850Map = false;
 #endif
+#ifdef NUKED_SC55_DEVICE_88
+constexpr bool kHas88Map = true;    // tone map for all parts from the SETUP menu (ALL + INST MAP, Issue #59)
+#else
+constexpr bool kHas88Map = false;
+#endif
 
 #ifdef NUKED_SC55_DEVICE_8850
 constexpr uint32_t kRam8850CurPart = 0x01060349; // part shown on the panel, 0..63 = A01..D16
@@ -1027,9 +1032,9 @@ int NukedSc55::StateString(char* buf, const size_t size) const
 	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d", max_voices.load(),
 	                      tone_map.load(), static_cast<int>(std::lround(gain_db.load() * 10.0f)));
 #elif defined(NUKED_SC55_DEVICE_88)
-	// the panel's own settings (tone maps, preview note, ...) live in the firmware
-	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d", max_voices.load(),
-	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)));
+	// the tone map for all parts (SETUP menu) is kept here; the panel's own settings live in the firmware
+	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d", max_voices.load(),
+	                      tone_map.load(), static_cast<int>(std::lround(gain_db.load() * 10.0f)));
 #elif defined(NUKED_SC55_ENGINE_88PRO)
 	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d pnote=%d",
 	                      max_voices.load(), tone_map.load(),
@@ -1048,7 +1053,7 @@ bool NukedSc55::ParseState(const char* buf)
 	if (std::sscanf(buf, "NSC55P1 max_voices=%d", &v) != 1) return false;
 	SetMaxVoices(v);
 #ifdef NUKED_SC55_ENGINE_88PRO
-	if (const char* m = std::strstr(buf, "map="); (HasToneMap() || kHas8850Map) && m && m[4] >= '0' &&
+	if (const char* m = std::strstr(buf, "map="); (HasToneMap() || kHas8850Map || kHas88Map) && m && m[4] >= '0' &&
 	                                                    m[4] <= (kMaxToneMap + '0')) {
 		tone_map = m[4] - '0';
 	}
@@ -2032,6 +2037,8 @@ bool NukedSc55::E88BootUnit(const int i)
 		inst.seq_len     = 0;
 #if defined(NUKED_SC55_DEVICE_8820) || defined(NUKED_SC55_DEVICE_8850)
 		inst.applied_map = 3; // boots with its own map (SC-8820 / SC-8850)
+#elif defined(NUKED_SC55_DEVICE_88)
+		inst.applied_map = 1; // boots with the SC-88 map
 #else
 		inst.applied_map = 2; // boots with the SC-88 Pro map
 #endif
@@ -2091,11 +2098,17 @@ void NukedSc55::InjectShort(const uint8_t s, const uint8_t d1, const uint8_t d2,
 // LEDs do not reliably show the map, so the state of every unit is tracked
 // (boot = SC-88 Pro); nothing else presses these buttons and GS resets keep
 // the map. ALL (latching, LED 0) makes the press apply to all parts.
+// SC-88: its only map key INST MAP (same switch bit as SC-55 MAP) toggles SC-55 <-> SC-88.
 static uint32_t E88MapKey(const int from, const int to)
 {
+#ifdef NUKED_SC55_DEVICE_88
+	(void)from; (void)to;
+	return Btn55Map;
+#else
 	if (to == 0) return Btn55Map;
 	if (to == 1) return Btn88Map;
 	return from == 0 ? Btn55Map : Btn88Map; // back to SC-88 Pro
+#endif
 }
 
 // Render frames into the unit's buffer; advances a pending panel sequence
@@ -2155,7 +2168,7 @@ void NukedSc55::E88RenderFrames(Instance& inst, size_t frames)
 // Start a (non-blocking) panel sequence towards `map`.
 void NukedSc55::E88StartMapSequence(Instance& inst, const int map)
 {
-	if (!HasToneMap()) { // SC-8850: tone maps are part settings of its own panel
+	if (!HasToneMap() && !kHas88Map) { // SC-8850: tone maps are part settings of its own panel
 		inst.applied_map = map;
 		return;
 	}
@@ -2401,6 +2414,10 @@ void NukedSc55::E88PanelInput()
 	// EQ is applied as the EQ switch of all 32 parts instead; the others stay on unit 0's panel.
 	const uint32_t pressed = buttons & ~gui_buttons;
 	gui_buttons            = buttons;
+	if (inst.seq_len > 0) { // a panel sequence of the plugin (tone map) has the switches
+		applied_buttons = ~0u;
+		return;
+	}
 	if (emu88_get_panel_leds(inst.ctx) & 1u) {
 		if (pressed & kBtn88Eq) {
 			all_eq_on = !all_eq_on;
@@ -2482,13 +2499,11 @@ void NukedSc55::E88EditPump()
 	int pos   = edit_cursor - static_cast<int>(kRam88EditLog);
 	int avail = (w - edit_cursor + kRam88EditSize) % kRam88EditSize;
 	const auto at = [&](int k) { return ring[(pos + k) % kRam88EditSize]; };
-#ifdef NUKED_SC55_DEVICE_88PRO
 	// A tone map sequence logs the map / tone of the parts it changes; every unit runs its own
 	if (inst.seq_len > 0 && inst.seq_map != inst.applied_map) {
 		edit_cursor = w;
 		return;
 	}
-#endif
 	while (avail >= 4) {
 		const uint8_t b0 = at(0), b1 = at(1), b2 = at(2), b3 = at(3);
 		const bool multi = (b0 & 0x40) != 0;

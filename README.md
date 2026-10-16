@@ -243,7 +243,8 @@ The SC-88 plug-in uses the same 88emu core with the firmware of the first SC-88 
 - **Two MIDI inputs, 32 parts (A01-B16):** CLAP note ports "MIDI IN A" and "MIDI IN B"; on VST2 the port select messages `F5 01` / `F5 02`.
 - **GAIN:** -12 ... +12 dB, 0 dB in the middle (default). At 0 dB the output is raised by 5 dB like the SC-88 Pro; the measured level then matches the SC-88 Pro within 0.1 dB (RMS of E1M1, Animus and grabbag).
 - **Front panel = the device's own panel:** all switches go to unit 0, so the firmware's LCD, LEDs and functions work as on the hardware (part and instrument selection, level / pan / reverb / chorus / key shift / MIDI channel, the SELECT rows vibrato / TVF / envelope, USER INST EDIT, ALL mode, PREVIEW). The SC-88 firmware writes every panel edit into a small log in its work RAM; the plug-in reads that log and sends each edit as a GS DT1 message to the other units and into the state log, so all units (including those that wake later) play the same sounds. Checked by comparing the parameter memory of the units.
-- **ALL mode:** ALL + MUTE mutes all units (taken from the firmware's panel flag); ALL + EQ switches the EQ of all 32 parts on all units. ALL + INST MAP and ALL + MIDI CH have no GS equivalent and are disabled.
+- **ALL mode:** ALL + MUTE mutes all units (taken from the firmware's panel flag); ALL + EQ switches the EQ of all 32 parts on all units. ALL + INST MAP and ALL + MIDI CH have no GS equivalent and are disabled on the panel; the tone map for all parts is chosen in the SETUP menu instead.
+- **Tone map (SETUP menu, all parts):** SC-55 / SC-88 (default SC-88, see the SC-88 manual p.1-4). The plug-in runs ALL + INST MAP (+ ALL) on every unit, like the SC-88 Pro's map keys, tracks the map of each unit (boot state = SC-88) and stores it in the plug-in state (`map=0..1`). Units that sleep follow in the background or when they wake. The map survives GS resets like on the device. While the SC-55 map is set for all parts, the firmware also plays the SC-55 sounds for parts that select bank LSB 2; the panel's INST MAP still switches single parts. Checked by `tools/test/map88o.cpp` (sound of parts 1-4 and B01 against SC-55 / SC-88 references, all units after waking compared by parameter memory).
 - **Panel functions without a GS parameter:** when ALL confirms Initialize GM (SELECT + PART >), Set Mode 1 / Mode 2 (SELECT + KEY SHIFT) or Initialize CM-64 (SELECT + INST <) on unit 0, the plug-in sends GM On or System Mode Set to the other units (the SETUP menu mark follows), or runs the same panel steps on them; units that wake later get it from the state log. MASTER TUNE from the menu is passed on as GS DT1.
 - **Patches:** `88emu-nuked-poly.patch` also adds `emu88_set_sc88_rom_images` (ROM set from memory; the raw dumps are normalised inside 88emu), the SC-88 voice counter and work RAM access.
 - **Builds:** `tools/winbuild/build88o.sh` (single file / template, ROM slots 0 = control, 1-4 = wave ROMs 0-3).
@@ -253,7 +254,7 @@ The SC-88 plug-in uses the same 88emu core with the firmware of the first SC-88 
 - **Graphics:** the 88emu SC-88 panel art (GPLv3, The Usual Suspects) by `tools/make_sc88orig_panel.py`. Only the branding ("Nuked SC-88"), the playlist header (VOICES) and the VOLUME label (GAIN) are replaced; everything else is unchanged. Switches, rockers, LEDs, PREVIEW and the GAIN knob are rendered from the player's own vector graphics at the positions of its skin (`tools/make_sc88orig_sprites.py`, with the pressed tint).
 - **LCD:** the firmware's character LCD on the panel's glass, rendered like on the SC-88 Pro.
 - **Controls:** every switch is held while the mouse button is down (at least 80 ms), so holding a rocker repeats like on the device. A right click holds a switch until the next left-click switch is let go, for the key combinations of the manual (SELECT + ..., USER INST + ..., ALL + ...). GAIN: drag, wheel (0.1 dB per notch), double-click = 0 dB.
-- **VOICES / UNITS** as on the other 88emu panels. **SETUP** (bottom, between the logo and the EFX lamp; same place on the SC-88 Pro): max polyphony 64 / 128 / 192 / 256, Send Reset (MT-32 / GM / GS), System Mode (Mode 1 / Mode 2), all notes off.
+- **VOICES / UNITS** as on the other 88emu panels. **SETUP** (bottom, between the logo and the EFX lamp; same place on the SC-88 Pro): max polyphony 64 / 128 / 192 / 256, tone map (SC-55 / SC-88), Send Reset (MT-32 / GM / GS), System Mode (Mode 1 / Mode 2), all notes off.
 
 
 ## SC-88 Pro engine (88emu)
@@ -358,6 +359,7 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 | Send Reset | submenu MT-32 / GM / GS / GM2 (SC-8850, SC-8820), MT-32 / GM / GS (others): clicking an entry sends that reset to all units (nothing is marked or stored) |
 | System Mode (SC-88, SC-88 Pro) | submenu Mode 1 (Single Module) / Mode 2 (Double Module): sends System Mode Set (`F0 41 10 42 12 00 00 7F 0n ..`) to all units and marks it (default Mode 1 = factory setting, stored in the state) |
 | All notes off | stops all sounding notes |
+| Tone map (SC-88) | SC-55 / SC-88 (default SC-88) for all parts: ALL + INST MAP on every unit; stored in the state (`map=0..1`), kept over GS resets |
 | Tone map (SC-88 Pro) | SC-55 / SC-88 / SC-88 Pro |
 | Tone map (SC-8850) | SC-55 / SC-88 / SC-88 Pro / SC-8850 (default SC-8850) for all parts: sends Bank Select LSB (CC#32) and the part's bank and program again to every part; stored in the state (`map=0..3`), a GS / GM reset returns to the SC-8850 map. The panel's INST MAP still sets it per part |
 | Prevw Note (SC-88 Pro, SC-8820, SC-8850) | submenu per octave |
@@ -378,7 +380,7 @@ The DLL **never writes files**. The only state is the plug-in state, saved by th
 
 ```
 NSC55P1 max_voices=<n> gain=<-120..120>                                 SC-55 plug-ins (gain in 0.1 dB)
-NSC55P1 max_voices=<n> gain=<-120..120> smode=<0..1>                    SC-88
+NSC55P1 max_voices=<n> map=<0..1> gain=<-120..120> smode=<0..1>          SC-88 (map: 0 SC-55, 1 SC-88)
 NSC55P1 max_voices=<n> map=<0..2> gain=<-120..120> pnote=<0..127> smode=<0..1>    SC-88 Pro
 NSC55P1 max_voices=<n> map=<0..3> gain=<-120..120>                       SC-8820 (map: INST MAP, 0 SC-55 ... 3 SC-8820)
 NSC55P1 max_voices=<n> gain=<-120..120>                                 SC-8850
