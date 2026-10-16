@@ -232,6 +232,35 @@ int HitButton(int x, int y)
 #endif
 }
 
+#ifdef NUKED_SC55_ENGINE_88PRO
+// "Prevw Note" submenu C-1 .. G9 (Roland numbering, C4 = 60) and the text of its Setup menu entry
+HMENU BuildPreviewMenu(NukedSc55& p, wchar_t* label, size_t label_len)
+{
+    HMENU pv_menu = CreatePopupMenu();
+    {
+        const int pn = p.preview_note.load();
+        for (int oct = 0; oct <= 10; ++oct) {
+            HMENU sub = CreatePopupMenu();
+            for (int k = 0; k < 12 && oct * 12 + k <= 127; ++k) {
+                char nb[8];
+                wchar_t wb[16];
+                const int n = oct * 12 + k;
+                std::swprintf(wb, 16, L"%hs", NoteName88(n, nb, sizeof(nb)));
+                AppendMenuW(sub, MF_STRING | (n == pn ? MF_CHECKED : 0), 300 + n, wb);
+            }
+            wchar_t ob[16];
+            std::swprintf(ob, 16, L"C%d .. B%d", oct - 1, oct - 1);
+            if (oct == 10) std::swprintf(ob, 16, L"C9 .. G9");
+            AppendMenuW(pv_menu, MF_POPUP | ((pn / 12) == oct ? MF_CHECKED : 0), (UINT_PTR)sub, ob);
+        }
+    }
+    char nb[8];
+    std::swprintf(label, label_len, L"%ls: %hs", T(L"Preview note (Prevw Note)", L"Preview-Note (Prevw Note)"),
+                  NoteName88(p.preview_note.load(), nb, sizeof(nb)));
+    return pv_menu;
+}
+#endif
+
 void ShowSetupMenu(Editor& e)
 {
     NukedSc55& p   = *e.plugin;
@@ -272,24 +301,6 @@ void ShowSetupMenu(Editor& e)
     }
 #if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88) && \
     !defined(NUKED_SC55_DEVICE_8820)
-    HMENU pv_menu = CreatePopupMenu(); // "Prevw Note" C-1 .. G9 (Roland numbering, C4 = 60)
-    {
-        const int pn = p.preview_note.load();
-        for (int oct = 0; oct <= 10; ++oct) {
-            HMENU sub = CreatePopupMenu();
-            for (int k = 0; k < 12 && oct * 12 + k <= 127; ++k) {
-                char nb[8];
-                wchar_t wb[16];
-                const int n = oct * 12 + k;
-                std::swprintf(wb, 16, L"%hs", NoteName88(n, nb, sizeof(nb)));
-                AppendMenuW(sub, MF_STRING | (n == pn ? MF_CHECKED : 0), 300 + n, wb);
-            }
-            wchar_t ob[16];
-            std::swprintf(ob, 16, L"C%d .. B%d", oct - 1, oct - 1);
-            if (oct == 10) std::swprintf(ob, 16, L"C9 .. G9");
-            AppendMenuW(pv_menu, MF_POPUP | ((pn / 12) == oct ? MF_CHECKED : 0), (UINT_PTR)sub, ob);
-        }
-    }
     {
         const int tm = p.tone_map.load();
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
@@ -299,10 +310,8 @@ void ShowSetupMenu(Editor& e)
         AppendMenuW(m, MF_STRING | (tm == 2 ? MF_CHECKED : 0), 202,
                     T(L"   SC-88 Pro Map\t(default)", L"   SC-88 Pro Map\t(Standard)"));
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-        char nb[8];
         wchar_t pl[96];
-        std::swprintf(pl, 96, L"%ls: %hs", T(L"Preview note (Prevw Note)", L"Preview-Note (Prevw Note)"),
-                      NoteName88(p.preview_note.load(), nb, sizeof(nb)));
+        HMENU pv_menu = BuildPreviewMenu(p, pl, 96);
         AppendMenuW(m, MF_POPUP, (UINT_PTR)pv_menu, pl);
     }
 #endif
@@ -316,6 +325,14 @@ void ShowSetupMenu(Editor& e)
         AppendMenuW(m, MF_STRING | (tm == 2 ? MF_CHECKED : 0), 202, L"   SC-88 Pro Map");
         AppendMenuW(m, MF_STRING | (tm == 3 ? MF_CHECKED : 0), 203,
                     T(L"   SC-8820 Map\t(default)", L"   SC-8820 Map\t(Standard)"));
+    }
+#endif
+#if defined(NUKED_SC55_DEVICE_8820) || defined(NUKED_SC55_DEVICE_8850)
+    {   // PREVIEW (right click on the VOLUME knob / PREVIEW knob) plays this note, as on the SC-88 Pro
+        wchar_t pl[96];
+        HMENU pv_menu = BuildPreviewMenu(p, pl, 96);
+        AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(m, MF_POPUP, (UINT_PTR)pv_menu, pl);
     }
 #endif
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);

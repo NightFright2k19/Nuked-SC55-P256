@@ -30,6 +30,10 @@
 
 static std::string get_env_var(const char* var_name);
 
+#ifdef NUKED_SC55_DEVICE_8850
+constexpr uint32_t kRam8850CurPart = 0x01060349; // part shown on the panel, 0..63 = A01..D16
+#endif
+
 // #define DEBUG
 
 //----------------------------------------------------------------------------
@@ -804,7 +808,15 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 			preview_ch = preview_key = -1;
 		}
 		if (pv == 1) {
-			const int part = std::clamp(ui_preview_part.load(), 0, kNumParts - 1);
+			int part = ui_preview_part.load();
+#ifdef NUKED_SC55_DEVICE_8850
+			if (part < 0 && !instances.empty() && instances[0].ctx) { // part shown on unit 0's panel
+				uint8_t cur = 0;
+				emu88_peek_work_ram(instances[0].ctx, kRam8850CurPart, &cur, 1);
+				part = cur;
+			}
+#endif
+			part         = std::clamp(part, 0, kNumParts - 1); // SC-8820: part A01
 			preview_ch   = part % 16;
 			preview_port = part / 16;
 			preview_key  = std::clamp(preview_note.load(), 0, 127);
@@ -2245,7 +2257,6 @@ namespace {
 constexpr uint32_t kBtn8850NoEdit = (1u << 1) | (1u << 2) | (1u << 7) | (1u << 9) | (1u << 10) | (1u << 11) | (1u << 20);
 constexpr uint32_t kBtn8850Enter  = 1u << 8;
 constexpr uint32_t kLed8850Drum   = 1u << 1;
-constexpr uint32_t kRam8850CurPart = 0x01060349; // part shown on the panel, 0..63 = A01..D16
 } // namespace
 #endif
 
