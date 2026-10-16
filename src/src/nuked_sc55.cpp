@@ -31,6 +31,12 @@
 static std::string get_env_var(const char* var_name);
 
 #ifdef NUKED_SC55_DEVICE_8850
+constexpr bool kHas8850Map = true;  // tone map for all parts from the SETUP menu (Bank Select LSB)
+#else
+constexpr bool kHas8850Map = false;
+#endif
+
+#ifdef NUKED_SC55_DEVICE_8850
 constexpr uint32_t kRam8850CurPart = 0x01060349; // part shown on the panel, 0..63 = A01..D16
 #endif
 
@@ -833,6 +839,22 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	}
 	{
 		const int map = tone_map.load();
+#ifdef NUKED_SC55_DEVICE_8850
+		// SC-8850: the map is a per-part setting (Bank Select LSB, 1 = SC-55, 2 = SC-88, 3 = SC-88 Pro,
+		// 0 = SC-8850): send it for every part with the tracked bank / program
+		if (!instances.empty() && instances[0].applied_map != map) {
+			for (auto& inst : instances) inst.applied_map = map;
+			const uint8_t lsb = static_cast<uint8_t>((map + 1) & 3);
+			for (int part = 0; part < kNumParts; ++part) {
+				const auto& up = ui_parts[part];
+				const uint8_t c = static_cast<uint8_t>(part % 16);
+				const uint16_t port = static_cast<uint16_t>(part / 16);
+				InjectShort(static_cast<uint8_t>(0xB0 | c), 0, up.bank.load(), port);
+				InjectShort(static_cast<uint8_t>(0xB0 | c), 32, lsb, port);
+				InjectShort(static_cast<uint8_t>(0xC0 | c), up.prog.load(), 0, port);
+			}
+		}
+#endif
 		for (auto& inst : instances) {
 			if (inst.awake && inst.ctx && inst.seq_len == 0 && inst.applied_map != map)
 				E88StartMapSequence(inst, map);
@@ -1000,11 +1022,11 @@ bool NukedSc55::SaveState([[maybe_unused]] const clap_ostream_t* stream)
 // Settings only (CLAP state and VST2 chunk): "NSC55P1 max_voices=<n> ..."
 int NukedSc55::StateString(char* buf, const size_t size) const
 {
-#if defined(NUKED_SC55_DEVICE_8820)
+#if defined(NUKED_SC55_DEVICE_8820) || defined(NUKED_SC55_DEVICE_8850)
 	// INST MAP (all parts) is the one panel setting; synchronised on all units, kept here
 	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d", max_voices.load(),
 	                      tone_map.load(), static_cast<int>(std::lround(gain_db.load() * 10.0f)));
-#elif defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88)
+#elif defined(NUKED_SC55_DEVICE_88)
 	// the panel's own settings (tone maps, preview note, ...) live in the firmware
 	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d", max_voices.load(),
 	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)));
@@ -1026,7 +1048,7 @@ bool NukedSc55::ParseState(const char* buf)
 	if (std::sscanf(buf, "NSC55P1 max_voices=%d", &v) != 1) return false;
 	SetMaxVoices(v);
 #ifdef NUKED_SC55_ENGINE_88PRO
-	if (const char* m = std::strstr(buf, "map="); HasToneMap() && m && m[4] >= '0' &&
+	if (const char* m = std::strstr(buf, "map="); (HasToneMap() || kHas8850Map) && m && m[4] >= '0' &&
 	                                                    m[4] <= (kMaxToneMap + '0')) {
 		tone_map = m[4] - '0';
 	}
@@ -1659,6 +1681,9 @@ void NukedSc55::UiResetParts()
 		p.prog = 0; p.bank = 0; p.vol = 100; p.pan = 64;
 		p.rev = 40; p.cho = 0; p.expr = 127; p.key_shift = 0x40;
 	}
+#ifdef NUKED_SC55_DEVICE_8850
+	for (auto& inst : instances) inst.applied_map = 3; // a reset returns the parts to the SC-8850 map
+#endif
 }
 
 void NukedSc55::UiTrackShort(const uint8_t* d, const int port)
@@ -2005,8 +2030,8 @@ bool NukedSc55::E88BootUnit(const int i)
 		inst.buf_l.reserve(1 << 16);
 		inst.buf_r.reserve(1 << 16);
 		inst.seq_len     = 0;
-#ifdef NUKED_SC55_DEVICE_8820
-		inst.applied_map = 3; // boots with the SC-8820 map
+#if defined(NUKED_SC55_DEVICE_8820) || defined(NUKED_SC55_DEVICE_8850)
+		inst.applied_map = 3; // boots with its own map (SC-8820 / SC-8850)
 #else
 		inst.applied_map = 2; // boots with the SC-88 Pro map
 #endif
