@@ -62,12 +62,12 @@ KNOWN = {
     "19e670a82eebe4ff8610aab8013470a749d31a029483ce9e46ade85acdff5aab": ("8850", "program"),
     "48eeceb4dbba45b66e0d3f3c325896bc7913ba19bdf61c4a0690ae6f936cd863": ("8850", "data"),
     "3cfac9db381527a4bc21033a297518c4122b0af392996b036bd38dbada4ba1e2": ("8850", "wave"),
-    "7f3be975fc9ada3dee0c69e750380705b38aa814c3e68205dc35afba1ba113d6": ("8820", "internal"),  # reconstructed CPU ROM
+    "7f3be975fc9ada3dee0c69e750380705b38aa814c3e68205dc35afba1ba113d6": ("8820", "internal"),  # CPU ROM R02015367 (SH7016 on-chip ROM)
     "934df22a9056426ce855a1a6361bab9b3fba762d736ad925d3a5742de3d6fd35": ("8820", "program"),   # 2000-11-28
     "34a8a0af36fe38cba9f442d17881cb96305ec905d5baa4cc819f10d8d4ec49f7": ("8820", "wave0"),
     "7284bf21923f966c78019a5d697c8a11bb82ff3bf7a1af95957397feb8dfc597": ("8820", "wave1"),
 }
-# ROMs known only by MD5 (from 88emu's ROM registry): the other reconstruction of the SC-8820 CPU ROM
+# ROMs known only by MD5 (from 88emu's ROM registry): the earlier reconstruction of the SC-8820 CPU ROM
 KNOWN_MD5 = {
     "b03dc0c554fae77bb1782da4ccfadfbd": ("8820", "internal"),
 }

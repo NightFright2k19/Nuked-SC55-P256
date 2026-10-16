@@ -1,5 +1,5 @@
 diff --git a/source/ronaldo/88emu/88lib/boards/sc88.h b/source/ronaldo/88emu/88lib/boards/sc88.h
-index 363de6c..8570101 100644
+index 363de6c7..85701012 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc88.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc88.h
 @@ -118,6 +118,17 @@ namespace emu88Lib
@@ -35,10 +35,10 @@ index 363de6c..8570101 100644
  		Lcd&       lcd()       { return m_lcd; }
  		const Lcd& lcd() const { return m_lcd; }
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8820.h b/source/ronaldo/88emu/88lib/boards/sc8820.h
-index bf8626c..8306a33 100644
+index 57737485..61a7568d 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8820.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc8820.h
-@@ -39,6 +39,22 @@ namespace emu88Lib
+@@ -38,6 +38,22 @@ namespace emu88Lib
  		void transportDiscontinuity(uint32_t generation);
  		void setButton(Button button, bool pressed);
  		uint16_t leds() const;
@@ -62,7 +62,7 @@ index bf8626c..8306a33 100644
  	private:
  		struct XpHost final : emu::Device
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8850.cpp b/source/ronaldo/88emu/88lib/boards/sc8850.cpp
-index 0aa2451..72ae629 100644
+index 0aa2451c..72ae629d 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8850.cpp
 +++ b/source/ronaldo/88emu/88lib/boards/sc8850.cpp
 @@ -3,6 +3,9 @@
@@ -115,7 +115,7 @@ index 0aa2451..72ae629 100644
  		if(m_cpuRom.size() != CpuRomSize)
  		{
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8850.h b/source/ronaldo/88emu/88lib/boards/sc8850.h
-index 1ac9850..2424c43 100644
+index 1ac98504..2424c431 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8850.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc8850.h
 @@ -4,6 +4,7 @@
@@ -162,7 +162,7 @@ index 1ac9850..2424c43 100644
  		std::array<bool, 2> m_xpEnabled{};
  		std::array<int32_t, 8> m_xp0SdiaInput{};
 diff --git a/source/ronaldo/88emu/88lib/boards/sc88pro.cpp b/source/ronaldo/88emu/88lib/boards/sc88pro.cpp
-index 2053225..9b6ea87 100644
+index 2053225a..9b6ea876 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc88pro.cpp
 +++ b/source/ronaldo/88emu/88lib/boards/sc88pro.cpp
 @@ -1,3 +1,6 @@
@@ -208,7 +208,7 @@ index 2053225..9b6ea87 100644
  		, m_subMcu([this](Sc88SubMcu::Record&& _r) { m_midiInQueue.emplace_back(std::move(_r)); },
  		           SmSysExStage, SmCommand - SmSysExStage)
 diff --git a/source/ronaldo/88emu/88lib/boards/sc88pro.h b/source/ronaldo/88emu/88lib/boards/sc88pro.h
-index 9f21044..57003c3 100644
+index 9f21044a..57003c3f 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc88pro.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc88pro.h
 @@ -2,8 +2,10 @@
@@ -267,7 +267,7 @@ index 9f21044..57003c3 100644
  		xpLib::XP m_xp;
  		Lcd m_lcd;
 diff --git a/source/ronaldo/88emu/88lib/c_interface.cpp b/source/ronaldo/88emu/88lib/c_interface.cpp
-index 9ccf846..1ffe263 100644
+index 9ccf8461..577b0105 100644
 --- a/source/ronaldo/88emu/88lib/c_interface.cpp
 +++ b/source/ronaldo/88emu/88lib/c_interface.cpp
 @@ -1,3 +1,4 @@
@@ -306,7 +306,7 @@ index 9ccf846..1ffe263 100644
  	}
  
  	void updateResampler()
-@@ -515,3 +533,187 @@ void emu88_render_bit16s(const emu88_context _context, int16_t* _stream, const u
+@@ -515,3 +533,194 @@ void emu88_render_bit16s(const emu88_context _context, int16_t* _stream, const u
  }
  
  } // extern "C"
@@ -460,6 +460,13 @@ index 9ccf846..1ffe263 100644
 +	if (!cpu || !program || !wave0 || !wave1 || (cpuSize != 0x10000 && cpuSize != 0x20000) ||
 +	    programSize != 0x200000 || wave0Size != 0x1000000 || wave1Size != 0x800000)
 +		return EMU88_RC_INVALID_ARGUMENT;
++	// The CPU ROM is the SH7016's 64 KiB; a 128 KiB read holds it twice
++	if (cpuSize == 0x20000)
++	{
++		if (std::memcmp(cpu, cpu + 0x10000, 0x10000) != 0)
++			return EMU88_RC_INVALID_ARGUMENT;
++		cpuSize = 0x10000;
++	}
 +	emu88Lib::RomLoader::Sc8820RomImages im;
 +	im.cpu = cpu; im.cpuSize = cpuSize;
 +	im.program = program; im.programSize = programSize;
@@ -495,10 +502,10 @@ index 9ccf846..1ffe263 100644
 +	return EMU88_RC_OK;
 +}
 diff --git a/source/ronaldo/88emu/88lib/c_interface.h b/source/ronaldo/88emu/88lib/c_interface.h
-index c9a5132..7a31c92 100644
+index 6c1f2678..5cb84b47 100644
 --- a/source/ronaldo/88emu/88lib/c_interface.h
 +++ b/source/ronaldo/88emu/88lib/c_interface.h
-@@ -227,6 +227,55 @@ EMU88_EXPORT int emu88_is_display_on(emu88_context context, unsigned screen);
+@@ -229,6 +229,55 @@ EMU88_EXPORT int emu88_is_display_on(emu88_context context, unsigned screen);
   * closed synth produces silence. */
  EMU88_EXPORT void emu88_render_bit16s(emu88_context context, int16_t* stream, uint32_t length);
  EMU88_EXPORT void emu88_render_float(emu88_context context, float* stream, uint32_t length);
@@ -555,11 +562,11 @@ index c9a5132..7a31c92 100644
  #ifdef __cplusplus
  }
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.cpp b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-index 69c6751..581a117 100644
+index 14e24223..2bd94538 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-@@ -131,8 +131,18 @@ namespace emu88Lib
- 			break;
+@@ -140,8 +140,18 @@ namespace emu88Lib
+ 		}
  		case DeviceModel::Sc8820:
  		{
 -			const auto inventory = RomLoader::scan();
@@ -578,7 +585,7 @@ index 69c6751..581a117 100644
  			if(!inventory.read(cpu, RomDevice::Sc8820, RomSlot::Internal) ||
  				!inventory.read(program, RomDevice::Sc8820, RomSlot::Program) ||
  				!inventory.read(wave0, RomDevice::Sc8820, RomSlot::Wave, 0) ||
-@@ -154,6 +164,12 @@ namespace emu88Lib
+@@ -163,6 +173,12 @@ namespace emu88Lib
  		case DeviceModel::Xpgs:
  		{
  			const auto model = m_model == DeviceModel::Sc88VL ? Model::Sc88VL : m_model == DeviceModel::Xpgs ? Model::Xpgs : Model::Sc88;
@@ -591,7 +598,7 @@ index 69c6751..581a117 100644
  			auto rom = RomLoader::findROM(model);
  			if(!rom.isValid() || rom.model() != model) break;
  			auto waveData = m_model == DeviceModel::Xpgs
-@@ -480,6 +496,11 @@ namespace emu88Lib
+@@ -513,6 +529,11 @@ namespace emu88Lib
  			else if(m_sc55) m_sc55->setButtons(buttons);
  			else if(m_la) m_la->setButtons(buttons);
  			else if(m_cm64) m_cm64->setButtons(buttons);
@@ -602,17 +609,17 @@ index 69c6751..581a117 100644
 +			}
  			m_nextPanelCommandSample = m_renderedSamples + g_minimumPanelEdgeSamples;
  		}
- 		else if(m_sc8850)
-@@ -562,6 +583,8 @@ namespace emu88Lib
- 			next.leds = m_sc8850->leds();
- 			m_sc8850->lcd().renderMono(first.mono);
+ 		else if(command.type == PanelCommandType::Mv30Panel)
+@@ -620,6 +641,8 @@ namespace emu88Lib
+ 			first.displayOn = (lcd.displayMode() & 0x0c) != 0;
+ 			lcd.renderMono(first.mono);
  		}
 +		else if(m_sc8820)
 +			next.leds = m_sc8820->leds(); // Nuked SC-55 Poly: lamp rows (no LCD)
+ 		if(m_mv30)
+ 			m_mv30->readParts(m_mv30PartsScratch);
  		std::unique_lock lock(m_displayMutex, std::try_to_lock);
- 		if(!lock.owns_lock())
- 			return; // The UI can keep its previous snapshot if it is busy.
-@@ -714,3 +737,45 @@ namespace emu88Lib
+@@ -784,3 +807,45 @@ namespace emu88Lib
  			m_activeChannels &= ~channelMask;
  	}
  }
@@ -659,10 +666,10 @@ index 69c6751..581a117 100644
 +	}
 +}
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.h b/source/ronaldo/88emu/88lib/hardwareDevice.h
-index 3ad2087..bfbdb2a 100644
+index eb2b1bd5..f800c943 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.h
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.h
-@@ -45,6 +45,13 @@ namespace emu88Lib
+@@ -47,6 +47,13 @@ namespace emu88Lib
  	class HardwareDevice final : public synthLib::Device
  	{
  	public:
@@ -676,49 +683,8 @@ index 3ad2087..bfbdb2a 100644
  		struct DisplaySnapshot
  		{
  			enum class Type : uint8_t { None, Character, Graphic };
-diff --git a/source/ronaldo/88emu/88lib/mcu/sc88_submcu.cpp b/source/ronaldo/88emu/88lib/mcu/sc88_submcu.cpp
-index ba0424e..447cf6e 100644
---- a/source/ronaldo/88emu/88lib/mcu/sc88_submcu.cpp
-+++ b/source/ronaldo/88emu/88lib/mcu/sc88_submcu.cpp
-@@ -326,12 +326,16 @@ namespace emu88Lib
- 		uint8_t command = _sysEx[DT1AddrOffset];	// address high byte
- 		uint8_t source = src;
- 
--		// System parameters use the 0x20 mailbox family. Command 0 would
--		// enter the display-only branch and discard them. Keep the staged
--		// address intact: the firmware parameter parser handles 00 00 7F
--		// (mode) and 00 01 00..1F (per-part input assignment) itself.
--		// SC-88: 00:18DE -> 00:3640; Pro: 00:1C4A -> 00:5106.
--		if(command == 0)
-+		// The blocks below 0x10 use the 0x20 mailbox family. Below 0x20 the
-+		// CPU's bulk task takes only its display records, 0x10 and 0x12, and
-+		// drops any other opcode (SC-88 00:188F, Pro 00:1BF7); from 0x20 up it
-+		// hands the staged address to the parameter parser (SC-88 00:18DE ->
-+		// 00:3640, Pro 00:1C4A -> 00:5106), which handles those blocks itself:
-+		// 00 system - 00 00 7F (mode) and 00 01 00..1F (per-part input
-+		// assignment) - and 08 and 0C. On the Pro 0C 20 04 is the SC-88 mode
-+		// that SELECT+ALL toggles (00:5517, table 01:49EC, handler 00:559D).
-+		// Keep the staged address intact.
-+		if(command < 0x10)
- 			command = 0x20;
- 
- 		// The main firmware routes patch/drum parameters to the A or B part
-diff --git a/source/ronaldo/88emu/88lib/mcu/sc88_submcu.h b/source/ronaldo/88emu/88lib/mcu/sc88_submcu.h
-index f53ec19..a8b5e4d 100644
---- a/source/ronaldo/88emu/88lib/mcu/sc88_submcu.h
-+++ b/source/ronaldo/88emu/88lib/mcu/sc88_submcu.h
-@@ -24,7 +24,8 @@ namespace emu88Lib
- 	//
- 	// What the record shapes reproduce, all read out of the H8 ISR:
- 	//   * channel voice: opcode = (status >> 4) - 7, params = the data bytes
--	//   * Roland DT1: a decoded transfer — opcode = address high byte, payload
-+	//   * Roland DT1: a decoded transfer — opcode = address high byte, or 0x20
-+	//     for the blocks below 0x10, payload
- 	//     staged in shared RAM with the 4-byte sub-MCU header, split into
- 	//     <= 0x7f chunks with 0xE7 continuations (both pointers are 7-bit)
- 	//   * universal GM System On / Master Volume: raw transfers 0xEE / 0xEF,
 diff --git a/source/ronaldo/88emu/88lib/rom/romloader.cpp b/source/ronaldo/88emu/88lib/rom/romloader.cpp
-index 9e0b9fe..be0865b 100644
+index e4f25b70..8dff76d8 100644
 --- a/source/ronaldo/88emu/88lib/rom/romloader.cpp
 +++ b/source/ronaldo/88emu/88lib/rom/romloader.cpp
 @@ -29,7 +29,65 @@ namespace emu88Lib
@@ -788,7 +754,7 @@ index 9e0b9fe..be0865b 100644
  
      bool RomLoader::isDeviceAvailable(const DeviceModel _model) { return isDeviceAvailable(toRomDevice(_model)); }
  
-@@ -114,6 +172,17 @@ namespace emu88Lib
+@@ -116,6 +174,17 @@ namespace emu88Lib
  
      Sc88ProRomSet RomLoader::findSc88ProRomSet(const RomDevice _device)
      {
@@ -806,7 +772,7 @@ index 9e0b9fe..be0865b 100644
          const auto inventory = scan();
          if ((_device != RomDevice::Sc88Pro && _device != RomDevice::VeGsPro) || !inventory.isComplete(_device))
              return {};
-@@ -134,6 +203,15 @@ namespace emu88Lib
+@@ -136,6 +205,15 @@ namespace emu88Lib
  
      Sc8850RomSet RomLoader::findSc8850RomSet()
      {
@@ -822,7 +788,7 @@ index 9e0b9fe..be0865b 100644
          const auto inventory = scan();
  
          Sc8850RomSet result;
-@@ -148,6 +226,14 @@ namespace emu88Lib
+@@ -150,6 +228,14 @@ namespace emu88Lib
      Sc8850WaveRomSet RomLoader::findSc8850WaveRomSet()
      {
          Sc8850WaveRomSet result;
@@ -838,7 +804,7 @@ index 9e0b9fe..be0865b 100644
          if (!inventory.read(result.romA, RomDevice::Sc8850, RomSlot::Wave, 0) ||
              !inventory.read(result.romB, RomDevice::Sc8850, RomSlot::Wave, 1))
 diff --git a/source/ronaldo/88emu/88lib/rom/romloader.h b/source/ronaldo/88emu/88lib/rom/romloader.h
-index e0d8ff6..308c51d 100644
+index 9ad0e583..9921c1a4 100644
 --- a/source/ronaldo/88emu/88lib/rom/romloader.h
 +++ b/source/ronaldo/88emu/88lib/rom/romloader.h
 @@ -1,5 +1,6 @@
@@ -896,44 +862,3 @@ index e0d8ff6..308c51d 100644
  
          // SC-8850 uses the SH7016's 64 KiB internal ROM, a 1 MiB CS0
          // executable flash and a 2 MiB CS3 data/tone flash.
-diff --git a/source/ronaldo/88emu/88lib/tests/sc88_submcu_test.cpp b/source/ronaldo/88emu/88lib/tests/sc88_submcu_test.cpp
-index e9b7421..42358dd 100644
---- a/source/ronaldo/88emu/88lib/tests/sc88_submcu_test.cpp
-+++ b/source/ronaldo/88emu/88lib/tests/sc88_submcu_test.cpp
-@@ -145,6 +145,29 @@ namespace
- 		CHECK_EQ(f.records.size(), 1u);
- 		CHECK_EQ(f.records.front().command, 0x20); // System Mode Set uses same family.
- 	}
-+
-+	// The blocks below 0x10 travel in the 0x20 family too: the CPU drops any other opcode below
-+	// 0x20 but its display records. 0C 20 04 is the Pro's SC-88 mode, the one SELECT+ALL toggles.
-+	void lowBlocks()
-+	{
-+		for(const uint8_t block : {uint8_t{0x08}, uint8_t{0x0c}})
-+		{
-+			Fixture f;
-+			const auto checksum = static_cast<uint8_t>((0x80 - ((block + 0x20 + 0x04 + 0x01) & 0x7f)) & 0x7f);
-+			f.input({0xf0, 0x41, 0x10, 0x42, 0x12, block, 0x20, 0x04, 0x01, checksum, 0xf7});
-+			CHECK_EQ(f.records.size(), 1u);
-+			if(f.records.empty()) continue;
-+			const auto& r = f.records.front();
-+			CHECK_EQ(r.command, 0x20);
-+			CHECK_EQ(r.channel, 0x80);
-+			CHECK(r.payload == std::vector<uint8_t>({0, 0, 0, 0, block, 0x20, 0x04, 0x01, checksum}));
-+		}
-+		// The part block keeps its own opcode.
-+		Fixture f;
-+		f.input({0xf0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x41, 0x19, 0x00, 0x66, 0xf7});
-+		CHECK_EQ(f.records.size(), 1u);
-+		if(!f.records.empty()) CHECK_EQ(f.records.front().command, 0x40);
-+	}
- }
- 
- int main()
-@@ -156,5 +179,6 @@ int main()
- 	rawRequests();
- 	universalMessages();
- 	channelMessageRxPort();
-+	lowBlocks();
- 	return finish("sc88_submcu");
- }
