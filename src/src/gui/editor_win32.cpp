@@ -339,6 +339,16 @@ void ShowSetupMenu(Editor& e)
                     T(L"   SC-8850 Map\t(default)", L"   SC-8850 Map\t(Standard)"));
     }
 #endif
+#ifdef NUKED_SC55_DEVICE_88
+    {   // tone map (all parts), as on the SC-88 Pro; the panel's INST MAP still sets it per part
+        const int tm = p.tone_map.load();
+        AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Tone map (all parts)", L"Klang-Map (alle Parts)"));
+        AppendMenuW(m, MF_STRING | (tm == 0 ? MF_CHECKED : 0), 200, L"   SC-55 Map");
+        AppendMenuW(m, MF_STRING | (tm == 1 ? MF_CHECKED : 0), 201,
+                    T(L"   SC-88 Map\t(default)", L"   SC-88 Map\t(Standard)"));
+    }
+#endif
 #if defined(NUKED_SC55_DEVICE_8820) || defined(NUKED_SC55_DEVICE_8850)
     {   // PREVIEW (right click on the VOLUME knob / PREVIEW knob) plays this note, as on the SC-88 Pro
         wchar_t pl[96];
