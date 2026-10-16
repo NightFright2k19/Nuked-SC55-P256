@@ -148,7 +148,7 @@ The ROMs are recognised **by content** (SHA-256), not by file name. Dumps of oth
 | | data | `sc8850_data.bin` | `48eeceb4dbba45b6` |
 | | wave | `sc8850_wave.bin` | `3cfac9db381527a4` |
 
-The SC-88 files are the raw dumps (control ROM 512 KB, four wave ROMs of 2 MB each). The SC-88 Pro files are the raw dumps (control ROM 1 MB, wave ROMs 8 + 8 + 4 MB). The SC-8820 set is the CPU ROM (64 or 128 KB; no original dump is known, both reconstructions in circulation are accepted, the second one by its MD5 from 88emu's ROM list), the program flash of 2000-11-28 (2 MB) and the wave ROMs of 16 + 8 MB. The SC-8850 set is internal 64 KB, program 1 MB, data 2 MB and the wave ROM as one 32 MB file.
+The SC-88 files are the raw dumps (control ROM 512 KB, four wave ROMs of 2 MB each). The SC-88 Pro files are the raw dumps (control ROM 1 MB, wave ROMs 8 + 8 + 4 MB). The SC-8820 set is the CPU ROM R02015367 (64 KB, the on-chip ROM of the SH7016 CPU; the earlier reconstruction is still accepted by its MD5 from 88emu's ROM list), the program flash of 2000-11-28 (2 MB) and the wave ROMs of 16 + 8 MB. The SC-8850 set is internal 64 KB, program 1 MB, data 2 MB and the wave ROM as one 32 MB file.
 
 > [!NOTE]
 > **SC-55mk2:** either `rom2` works. If only the original `rom2` (512 KB) is found, the builder applies the CTF patch itself and checks the result against the known checksum (see [Capital Tone Fallback](#capital-tone-fallback-sc-55mk2)).
@@ -260,8 +260,8 @@ The SC-88 plug-in uses the same 88emu core with the firmware of the first SC-88 
 
 The SC-88 Pro variant does not use the Nuked core. It uses **88emu**, a low-level emulation of the SC-88 / SC-88VL / SC-88Pro / SC-8820 / SC-8850 with the original firmware, written by The Usual Suspects and part of [Gearmulator](https://github.com/dsp56300/gearmulator) (marked "early access alpha" there, GPLv3).
 
-- **Pinned version:** Gearmulator `96deb437794baf109fb996a2f8806ce2ee949246`, with the submodules dsp56300 `c1d6593`, asmjit `3577608`, mc68k `cc3693a`, freetype `8289165`, lunasvg `f8aabfb` (+ plutovg `5e4712c`) and RmlUi `d2e83ba`. `tools/build_88emu.sh <target> <source>` fetches and builds exactly this state (about 8-10 min on one core).
-- **Patches** (`third_party/88emu/`): `88emu-nuked-poly.patch` adds `emu88_get_active_voice_count` (voice counter), `emu88_set_sc88pro_rom_images` (a normalised ROM set from memory, bypassing the file scan), `emu88_dump_sc88pro_rom_images` (build tool), `emu88_get_display_memory` (LCD) and `emu88_get_midi_in_backlog` (MIDI not yet taken in by the firmware). It also carries the upstream fix [c41eb8d3](https://github.com/dsp56300/gearmulator/commit/c41eb8d3) from after the pin: on the SC-88 and SC-88 Pro, DT1 SysEx to the address blocks `08` and `0C` (e.g. `0C 20 04`, the Pro's SC-88 mode) now reaches the firmware instead of being dropped. `dsp56300-mingw.patch` restricts SEH (`__try`) to MSVC.
+- **Pinned version:** Gearmulator `c8047e7a61a9a466e3cd9192157965856e774786`, with the submodules dsp56300 `da2ff23`, asmjit `3577608`, mc68k `cc3693a`, freetype `8289165`, lunasvg `f8aabfb` (+ plutovg `5e4712c`) and RmlUi `df1b338`. `tools/build_88emu.sh <target> <source>` fetches and builds exactly this state (about 8-10 min on one core).
+- **Patches** (`third_party/88emu/`): `88emu-nuked-poly.patch` adds `emu88_get_active_voice_count` (voice counter), `emu88_set_sc88pro_rom_images` (a normalised ROM set from memory, bypassing the file scan), `emu88_dump_sc88pro_rom_images` (build tool), `emu88_get_display_memory` (LCD) and `emu88_get_midi_in_backlog` (MIDI not yet taken in by the firmware). `dsp56300-mingw.patch` restricts SEH (`__try`) to MSVC.
 - **Engine variant:** compile-time `NUKED_SC55_ENGINE_88PRO` (model index 6). All differences sit in `#ifdef` blocks at about ten coupling points, so the SC-55 code is unchanged.
 - **Units:** 64 voices per unit, 4 units. 88emu renders at the device rate of 32 kHz, which goes through the existing resampler. Boot takes about 0.7 s per unit.
 - **Ports:** both MIDI inputs, 32 parts (A01-B16): CLAP note ports "MIDI IN A" and "MIDI IN B"; on VST2 (one input) the port select messages `F5 01` / `F5 02`.
@@ -608,7 +608,7 @@ These are limits of the approach, or things that are not done yet.
 
 ### SC-8820
 
-- **CPU ROM:** no original dump of the SC-8820's CPU ROM is known; both sets in circulation are reconstructions. The plug-in runs with them as 88emu does; rare firmware paths may behave differently from the device.
+- **CPU ROM:** the file `7f3be975fc9ada3d` is the original dump R02015367. The earlier reconstruction (MD5 `b03dc0c5…`) still boots as in 88emu; rare firmware paths may behave differently from the device with it.
 - **Level indicators:** the emulation gives the firmware's lamps in four blocks per part group (3 columns each); finer steps that the device may show are not available.
 
 ### SC-8850
@@ -645,7 +645,7 @@ The development workbench contains the source, the complete patch series (`patch
 
 ### Keeping up with upstream
 
-`upstream.lock` pins the observed states: Nuked-SC55-CLAP `de2a799` (paths `src/`, CMake, vcpkg) and Gearmulator `96deb437794b` (88lib, XP chip, panel graphics, CPU cores including dsp56300, synthLib / hardwareLib / baseLib). Our own changes to the Nuked core are also kept as a single patch, `third_party/nuked-core/nuked-core-timers.patch` (timers, memory, state copy), so that it can be checked on its own against a new upstream. A new state is taken over by changing the pin, adapting the patches if needed, rebuilding and renewing the golden values. A GitHub Actions template for a weekly report as an issue is in `ci/`.
+`upstream.lock` pins the observed states: Nuked-SC55-CLAP `de2a799` (paths `src/`, CMake, vcpkg) and Gearmulator `c8047e7a61a9` (88lib, XP chip, panel graphics, CPU cores including dsp56300, synthLib / hardwareLib / baseLib). Our own changes to the Nuked core are also kept as a single patch, `third_party/nuked-core/nuked-core-timers.patch` (timers, memory, state copy), so that it can be checked on its own against a new upstream. A new state is taken over by changing the pin, adapting the patches if needed, rebuilding and renewing the golden values. A GitHub Actions template for a weekly report as an issue is in `ci/`.
 
 ---
 

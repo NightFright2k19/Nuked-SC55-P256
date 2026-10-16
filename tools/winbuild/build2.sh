@@ -1,6 +1,6 @@
 # Grafikordner des 88emu-Players (Gearmulator, festgehaltener Stand); ohne 88emu-Build nur die Grafiken holen
 gm_assets() {
- local G=${GM:-/home/claude/wb/gearmulator} C=96deb437794baf109fb996a2f8806ce2ee949246 P=source/ronaldo/88emu/88emuplayer/assets
+ local G=${GM:-/home/claude/wb/gearmulator} C=c8047e7a61a9a466e3cd9192157965856e774786 P=source/ronaldo/88emu/88emuplayer/assets
  if [ ! -f $G/$P/sc55_panel.png ]; then
   G=/home/claude/wb/gm_assets
   if [ ! -f $G/$P/sc55_panel.png ]; then
