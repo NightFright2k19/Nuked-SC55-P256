@@ -40,7 +40,7 @@ constexpr RECT E20_VOICES = {33, 37, 149, 132}, E20_UNITS = {36, 140, 146, 160};
 constexpr RECT E20_GAIN = {682, 146, 742, 160};                                     // value under the knob
 constexpr COLORREF E20_INK = RGB(0x30, 0x2e, 0x2c);                                 // front print
 // [0] Basic, [1] Pro interface
-constexpr RECT E20_SETUP[2] = {{800, 218, 890, 242}, {812, 240, 900, 264}};
+constexpr RECT E20_SETUP[2] = {{812, 240, 900, 264}, {812, 240, 900, 264}}; // same place (issue #67)
 constexpr RECT E20_POWER[2] = {{309, 70, 338, 99}, {322, 125, 347, 149}};
 constexpr RECT E20_USB[2]   = {{368, 72, 401, 96}, {376, 127, 405, 147}};
 constexpr double E20_GX = 508.0, E20_GW = 11.4;           // first dot column, column pitch

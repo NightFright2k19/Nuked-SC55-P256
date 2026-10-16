@@ -184,12 +184,11 @@ def centred(box, text, font, fill):
 if not pro:
     d.text((X(40), X(FRONT+22)), "Nuked-SC", font=F(22, "-Oblique"), fill=(150, 150, 150))
     d.text((X(148), X(FRONT+20)), "8820", font=F(24, "-BoldOblique"), fill=(200, 200, 200))
-    SB = (800, FRONT+22, 890, FRONT+46)
 else:
     d.text((X(22), X(FRONT+24)), "Nuked-SC", font=F(20, "-Oblique"), fill=(150, 150, 150))
     d.text((X(119), X(FRONT+22)), "8820", font=F(22, "-BoldOblique"), fill=(200, 200, 200))
     d.text((X(187), X(FRONT+22)), "Pro", font=F(22, "-BoldOblique"), fill=OR)
-    SB = (812, FRONT+44, 900, FRONT+68)
+SB = (812, FRONT+44, 900, FRONT+68)  # same place in Basic and Pro (issue #67)
 d.rectangle(tuple(X(v) for v in SB), fill=(16, 16, 16))
 if not base: centred(SB, "SETUP  >", F(11, "-Bold"), OR)
 
