@@ -269,7 +269,7 @@ void Draw8850(Editor& e, HDC dc)
         const int face = b.led < 0 ? 0 : ((leds >> b.led) & 1u) ? 2 : 1;
         Switch85(dc, b, face, ((e.held85 | e.latch85) >> b.bit) & 1u);
     }
-    Blend85(dc, 169, 111, E85_Y_PRV + ((e.held85 >> E85_BIT_PREVIEW) & 1u) * E85_PRV_SZ, E85_PRV_SZ);
+    Blend85(dc, 169, 111, E85_Y_PRV + (e.preview_down ? 1u : 0u) * E85_PRV_SZ, E85_PRV_SZ);
     Blend85(dc, E85_VALUE_X, E85_VALUE_Y, E85_Y_VAL + (e.value85 & 3) * E85_VAL_SZ, E85_VAL_SZ,
             e.push85 > 0 ? 200 : 255);
     const float gain = p.gain_db.load();
@@ -298,8 +298,13 @@ bool Mouse8850(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_LBUTTONDBLCLK: {
         const int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
         const int h = Hit8850(x, y);
-        if ((h >= 1 && h <= E85_NBTN) || h == E85_HIT_PREVIEW) {
-            e.held85 |= 1u << (h == E85_HIT_PREVIEW ? E85_BIT_PREVIEW : E85_BTNS[h - 1].bit);
+        if (h == E85_HIT_PREVIEW) { // plays the Setup menu's "Prevw Note" on the part shown by the panel
+            p.ui_preview_part = -1;
+            p.ui_preview      = 1;
+            e.preview_down    = true;
+            SetCapture(hwnd);
+        } else if (h >= 1 && h <= E85_NBTN) {
+            e.held85 |= 1u << E85_BTNS[h - 1].bit;
             e.release85 = false;
             e.press85   = GetTickCount();
             send();

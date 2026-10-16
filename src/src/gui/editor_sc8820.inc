@@ -158,21 +158,17 @@ bool Mouse8820(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_RBUTTONDOWN: { // right click on the knob = push the knob (PREVIEW), held while the button is down
         const int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
         if (Hit8820(x, y) == E20_HIT_KNOB && !e.drag_vol && !e.held85) {
-            e.held85    = E20_BIT_PREVIEW;
-            e.release85 = false;
-            e.press85   = GetTickCount();
-            send();
+            p.ui_preview_part = -1; // Setup menu's "Prevw Note" on the part the firmware plays preview on
+            p.ui_preview      = 1;
+            e.preview_down    = true;
             SetCapture(hwnd);
         }
         return true;
     }
     case WM_RBUTTONUP:
-        if (e.held85 == E20_BIT_PREVIEW && !e.release85) { // let go by the timer once held long enough
-            e.release85 = true;
-            if (GetTickCount() - e.press85 >= E20_MIN_HOLD_MS) {
-                e.held85 = 0;
-                send();
-            }
+        if (e.preview_down) {
+            e.preview_down = false;
+            p.ui_preview   = 2; // note off
             ReleaseCapture();
         }
         return true;
