@@ -1,5 +1,5 @@
 diff --git a/source/ronaldo/88emu/88lib/boards/sc88.h b/source/ronaldo/88emu/88lib/boards/sc88.h
-index 363de6c7..85701012 100644
+index 363de6c..8570101 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc88.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc88.h
 @@ -118,6 +118,17 @@ namespace emu88Lib
@@ -35,7 +35,7 @@ index 363de6c7..85701012 100644
  		Lcd&       lcd()       { return m_lcd; }
  		const Lcd& lcd() const { return m_lcd; }
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8820.h b/source/ronaldo/88emu/88lib/boards/sc8820.h
-index 57737485..61a7568d 100644
+index 5773748..61a7568 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8820.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc8820.h
 @@ -38,6 +38,22 @@ namespace emu88Lib
@@ -62,7 +62,7 @@ index 57737485..61a7568d 100644
  	private:
  		struct XpHost final : emu::Device
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8850.cpp b/source/ronaldo/88emu/88lib/boards/sc8850.cpp
-index 0aa2451c..72ae629d 100644
+index 0aa2451..72ae629 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8850.cpp
 +++ b/source/ronaldo/88emu/88lib/boards/sc8850.cpp
 @@ -3,6 +3,9 @@
@@ -115,7 +115,7 @@ index 0aa2451c..72ae629d 100644
  		if(m_cpuRom.size() != CpuRomSize)
  		{
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8850.h b/source/ronaldo/88emu/88lib/boards/sc8850.h
-index 1ac98504..2424c431 100644
+index 1ac9850..2424c43 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8850.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc8850.h
 @@ -4,6 +4,7 @@
@@ -162,7 +162,7 @@ index 1ac98504..2424c431 100644
  		std::array<bool, 2> m_xpEnabled{};
  		std::array<int32_t, 8> m_xp0SdiaInput{};
 diff --git a/source/ronaldo/88emu/88lib/boards/sc88pro.cpp b/source/ronaldo/88emu/88lib/boards/sc88pro.cpp
-index 2053225a..9b6ea876 100644
+index 2053225..9b6ea87 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc88pro.cpp
 +++ b/source/ronaldo/88emu/88lib/boards/sc88pro.cpp
 @@ -1,3 +1,6 @@
@@ -208,7 +208,7 @@ index 2053225a..9b6ea876 100644
  		, m_subMcu([this](Sc88SubMcu::Record&& _r) { m_midiInQueue.emplace_back(std::move(_r)); },
  		           SmSysExStage, SmCommand - SmSysExStage)
 diff --git a/source/ronaldo/88emu/88lib/boards/sc88pro.h b/source/ronaldo/88emu/88lib/boards/sc88pro.h
-index 9f21044a..57003c3f 100644
+index 9f21044..57003c3 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc88pro.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc88pro.h
 @@ -2,8 +2,10 @@
@@ -267,7 +267,7 @@ index 9f21044a..57003c3f 100644
  		xpLib::XP m_xp;
  		Lcd m_lcd;
 diff --git a/source/ronaldo/88emu/88lib/c_interface.cpp b/source/ronaldo/88emu/88lib/c_interface.cpp
-index 9ccf8461..577b0105 100644
+index 9ccf846..577b010 100644
 --- a/source/ronaldo/88emu/88lib/c_interface.cpp
 +++ b/source/ronaldo/88emu/88lib/c_interface.cpp
 @@ -1,3 +1,4 @@
@@ -502,7 +502,7 @@ index 9ccf8461..577b0105 100644
 +	return EMU88_RC_OK;
 +}
 diff --git a/source/ronaldo/88emu/88lib/c_interface.h b/source/ronaldo/88emu/88lib/c_interface.h
-index 6c1f2678..5cb84b47 100644
+index 6c1f267..5cb84b4 100644
 --- a/source/ronaldo/88emu/88lib/c_interface.h
 +++ b/source/ronaldo/88emu/88lib/c_interface.h
 @@ -229,6 +229,55 @@ EMU88_EXPORT int emu88_is_display_on(emu88_context context, unsigned screen);
@@ -562,7 +562,7 @@ index 6c1f2678..5cb84b47 100644
  #ifdef __cplusplus
  }
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.cpp b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-index 14e24223..2bd94538 100644
+index 14e2422..7a0dacc 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 @@ -140,8 +140,18 @@ namespace emu88Lib
@@ -571,13 +571,13 @@ index 14e24223..2bd94538 100644
  		{
 -			const auto inventory = RomLoader::scan();
  			std::vector<uint8_t> cpu, program, wave0, wave1;
-+			if(const auto* im = RomLoader::injectedSc8820RomImages())
++			if(RomLoader::Sc8820RomImages im; RomLoader::injectedSc8820RomImages(im))
 +			{
 +				// Nuked SC-55 Poly: images embedded in the plugin
-+				cpu.assign(im->cpu, im->cpu + im->cpuSize);
-+				program.assign(im->program, im->program + im->programSize);
-+				wave0.assign(im->wave0, im->wave0 + im->wave0Size);
-+				wave1.assign(im->wave1, im->wave1 + im->wave1Size);
++				cpu.assign(im.cpu, im.cpu + im.cpuSize);
++				program.assign(im.program, im.program + im.programSize);
++				wave0.assign(im.wave0, im.wave0 + im.wave0Size);
++				wave1.assign(im.wave1, im.wave1 + im.wave1Size);
 +				m_sc8820 = std::make_unique<Sc8820>(cpu, program, std::move(wave0), std::move(wave1));
 +				break;
 +			}
@@ -666,7 +666,7 @@ index 14e24223..2bd94538 100644
 +	}
 +}
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.h b/source/ronaldo/88emu/88lib/hardwareDevice.h
-index eb2b1bd5..f800c943 100644
+index eb2b1bd..f800c94 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.h
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.h
 @@ -47,6 +47,13 @@ namespace emu88Lib
@@ -684,22 +684,47 @@ index eb2b1bd5..f800c943 100644
  		{
  			enum class Type : uint8_t { None, Character, Graphic };
 diff --git a/source/ronaldo/88emu/88lib/rom/romloader.cpp b/source/ronaldo/88emu/88lib/rom/romloader.cpp
-index e4f25b70..8dff76d8 100644
+index e4f25b7..060bf65 100644
 --- a/source/ronaldo/88emu/88lib/rom/romloader.cpp
 +++ b/source/ronaldo/88emu/88lib/rom/romloader.cpp
-@@ -29,7 +29,65 @@ namespace emu88Lib
+@@ -29,7 +29,75 @@ namespace emu88Lib
              return {std::move(data), baseLib::filesystem::getFilenameWithoutPath(found->path), model};
          }
      } // namespace
 -    bool RomLoader::isDeviceAvailable(const RomDevice _device) { return scan().isComplete(_device); }
 +    namespace
 +    {
-+        RomLoader::Sc88ProRomImages g_injectedImages;
-+        const RomLoader::Sc88ProRomImages* g_injectedSc88Pro = nullptr;
-+        RomLoader::Sc8850RomImages g_injected8850Images;
-+        const RomLoader::Sc8850RomImages* g_injectedSc8850 = nullptr;
-+        RomLoader::Sc8820RomImages g_injected8820Images;
-+        const RomLoader::Sc8820RomImages* g_injectedSc8820 = nullptr;
++        // Nuked SC-55 Poly: ROM images held by the plugin. Process-wide (one per plugin binary), set by
++        // every instance while it initialises and read while devices are created, also by units of
++        // another instance that boot in the background: guarded, and readers work on a copy.
++        template <typename T> class InjectedImages
++        {
++        public:
++            void set(const T* _images)
++            {
++                std::lock_guard lock(m_mutex);
++                m_valid = _images != nullptr;
++                if (_images) m_images = *_images;
++            }
++            bool get(T& _out) const
++            {
++                std::lock_guard lock(m_mutex);
++                if (m_valid) _out = m_images;
++                return m_valid;
++            }
++            bool isSet() const
++            {
++                std::lock_guard lock(m_mutex);
++                return m_valid;
++            }
++        private:
++            mutable std::mutex m_mutex;
++            T m_images{};
++            bool m_valid = false;
++        };
++        InjectedImages<RomLoader::Sc88ProRomImages> g_injectedSc88Pro;
++        InjectedImages<RomLoader::Sc8850RomImages> g_injectedSc8850;
++        InjectedImages<RomLoader::Sc8820RomImages> g_injectedSc8820;
 +        std::shared_ptr<const RomLoader::Sc88RomImages> g_injectedSc88;
 +        std::mutex g_injectedSc88Mutex;
 +    }
@@ -716,36 +741,21 @@ index e4f25b70..8dff76d8 100644
 +        return g_injectedSc88;
 +    }
 +
-+    void RomLoader::setInjectedSc8850RomImages(const Sc8850RomImages* _images)
-+    {
-+        if (_images) { g_injected8850Images = *_images; g_injectedSc8850 = &g_injected8850Images; }
-+        else g_injectedSc8850 = nullptr;
-+    }
++    void RomLoader::setInjectedSc8850RomImages(const Sc8850RomImages* _images) { g_injectedSc8850.set(_images); }
 +
-+    void RomLoader::setInjectedSc8820RomImages(const Sc8820RomImages* _images)
-+    {
-+        if (_images) { g_injected8820Images = *_images; g_injectedSc8820 = &g_injected8820Images; }
-+        else g_injectedSc8820 = nullptr;
-+    }
++    void RomLoader::setInjectedSc8820RomImages(const Sc8820RomImages* _images) { g_injectedSc8820.set(_images); }
 +
-+    const RomLoader::Sc8820RomImages* RomLoader::injectedSc8820RomImages()
-+    {
-+        return g_injectedSc8820;
-+    }
++    bool RomLoader::injectedSc8820RomImages(Sc8820RomImages& _out) { return g_injectedSc8820.get(_out); }
 +
-+    void RomLoader::setInjectedSc88ProRomImages(const Sc88ProRomImages* _images)
-+    {
-+        if (_images) { g_injectedImages = *_images; g_injectedSc88Pro = &g_injectedImages; }
-+        else g_injectedSc88Pro = nullptr;
-+    }
++    void RomLoader::setInjectedSc88ProRomImages(const Sc88ProRomImages* _images) { g_injectedSc88Pro.set(_images); }
 +
 +    bool RomLoader::isDeviceAvailable(const RomDevice _device)
 +    {
-+        if (g_injectedSc88Pro && _device == RomDevice::Sc88Pro)
++        if (_device == RomDevice::Sc88Pro && g_injectedSc88Pro.isSet())
 +            return true;
-+        if (g_injectedSc8850 && _device == RomDevice::Sc8850)
++        if (_device == RomDevice::Sc8850 && g_injectedSc8850.isSet())
 +            return true;
-+        if (g_injectedSc8820 && _device == RomDevice::Sc8820)
++        if (_device == RomDevice::Sc8820 && g_injectedSc8820.isSet())
 +            return true;
 +        if (_device == RomDevice::Sc88 && injectedSc88RomImages())
 +            return true;
@@ -754,13 +764,12 @@ index e4f25b70..8dff76d8 100644
  
      bool RomLoader::isDeviceAvailable(const DeviceModel _model) { return isDeviceAvailable(toRomDevice(_model)); }
  
-@@ -116,6 +174,17 @@ namespace emu88Lib
+@@ -116,6 +184,16 @@ namespace emu88Lib
  
      Sc88ProRomSet RomLoader::findSc88ProRomSet(const RomDevice _device)
      {
-+        if (g_injectedSc88Pro && _device == RomDevice::Sc88Pro)
++        if (Sc88ProRomImages im; _device == RomDevice::Sc88Pro && g_injectedSc88Pro.get(im))
 +        {
-+            const auto& im = *g_injectedSc88Pro;
 +            Sc88ProRomSet set;
 +            set.firmware.assign(im.firmware, im.firmware + im.firmwareSize);
 +            set.waveA.assign(im.waveA, im.waveA + im.waveASize);
@@ -772,13 +781,12 @@ index e4f25b70..8dff76d8 100644
          const auto inventory = scan();
          if ((_device != RomDevice::Sc88Pro && _device != RomDevice::VeGsPro) || !inventory.isComplete(_device))
              return {};
-@@ -136,6 +205,15 @@ namespace emu88Lib
+@@ -136,6 +214,14 @@ namespace emu88Lib
  
      Sc8850RomSet RomLoader::findSc8850RomSet()
      {
-+        if (g_injectedSc8850)
++        if (Sc8850RomImages im; g_injectedSc8850.get(im))
 +        {
-+            const auto& im = *g_injectedSc8850;
 +            Sc8850RomSet set;
 +            set.cpu.assign(im.cpu, im.cpu + im.cpuSize);
 +            set.program.assign(im.program, im.program + im.programSize);
@@ -788,13 +796,12 @@ index e4f25b70..8dff76d8 100644
          const auto inventory = scan();
  
          Sc8850RomSet result;
-@@ -150,6 +228,14 @@ namespace emu88Lib
+@@ -150,6 +236,13 @@ namespace emu88Lib
      Sc8850WaveRomSet RomLoader::findSc8850WaveRomSet()
      {
          Sc8850WaveRomSet result;
-+        if (g_injectedSc8850)
++        if (Sc8850RomImages im; g_injectedSc8850.get(im))
 +        {
-+            const auto& im = *g_injectedSc8850;
 +            if (im.waveSize != Sc8850WaveRomSet::Size) return {};
 +            result.romA.assign(im.wave, im.wave + Sc8850WaveRomSet::ChipSize);
 +            result.romB.assign(im.wave + Sc8850WaveRomSet::ChipSize, im.wave + Sc8850WaveRomSet::Size);
@@ -804,7 +811,7 @@ index e4f25b70..8dff76d8 100644
          if (!inventory.read(result.romA, RomDevice::Sc8850, RomSlot::Wave, 0) ||
              !inventory.read(result.romB, RomDevice::Sc8850, RomSlot::Wave, 1))
 diff --git a/source/ronaldo/88emu/88lib/rom/romloader.h b/source/ronaldo/88emu/88lib/rom/romloader.h
-index 9ad0e583..9921c1a4 100644
+index 9ad0e58..ad737a1 100644
 --- a/source/ronaldo/88emu/88lib/rom/romloader.h
 +++ b/source/ronaldo/88emu/88lib/rom/romloader.h
 @@ -1,5 +1,6 @@
@@ -849,7 +856,7 @@ index 9ad0e583..9921c1a4 100644
 +            const uint8_t* wave1 = nullptr;   size_t wave1Size = 0;
 +        };
 +        static void setInjectedSc8820RomImages(const Sc8820RomImages* _images);
-+        static const Sc8820RomImages* injectedSc8820RomImages();
++        static bool injectedSc8820RomImages(Sc8820RomImages& _out); // copy, false if none is set
 +        // The same for the SC-88, already prepared: control ROM 512 KiB in CPU byte order and the
 +        // four wave chips de-scrambled into one 8 MiB image (as Rom / WaveRom produce them).
 +        struct Sc88RomImages

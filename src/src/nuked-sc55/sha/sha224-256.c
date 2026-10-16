@@ -63,13 +63,18 @@
 /*
  * Add "length" to the length.
  * Set Corrupted when overflow has occurred.
+ * Nuked SC-55 P256: a function with a local temporary instead of the reference
+ * code's file-scope "addTemp", which made concurrent hashing in two threads
+ * (two plugin instances loading their ROMs at once) mark a context as corrupted.
  */
-static uint32_t addTemp;
-#define SHA224_256AddLength(context, length)               \
-  (addTemp = (context)->Length_Low, (context)->Corrupted = \
-    (((context)->Length_Low += (length)) < addTemp) &&     \
-    (++(context)->Length_High == 0) ? shaInputTooLong :    \
-                                      (context)->Corrupted )
+static int SHA224_256AddLength(SHA256Context *context, unsigned int length)
+{
+  const uint32_t addTemp = context->Length_Low;
+  context->Corrupted =
+    ((context->Length_Low += length) < addTemp) &&
+    (++context->Length_High == 0) ? shaInputTooLong : context->Corrupted;
+  return context->Corrupted;
+}
 
 /* Local Function Prototypes */
 static int SHA224_256Reset(SHA256Context *context, uint32_t *H0);

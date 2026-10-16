@@ -12,6 +12,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
+#include <string>
 
 #include "editor.h"
 
@@ -84,9 +86,8 @@ const char* DrumKitName(int prog)
 // --- Language (menus follow the Windows UI language) -----------------------
 bool IsGerman()
 {
-    static int de = -1;
-    if (de < 0) de = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_GERMAN ? 1 : 0;
-    return de == 1;
+    static const bool de = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_GERMAN;
+    return de;
 }
 const wchar_t* T(const wchar_t* en, const wchar_t* de) { return IsGerman() ? de : en; }
 
@@ -210,6 +211,11 @@ bool GatherLcd(NukedSc55& p, lcdview::View& view)
 
 void Draw(Editor& e, HDC dc)
 {
+    // The sprite sheets and lamp images are built once and shared by all editors of the plugin
+    // (memory DCs, which GDI lets only one thread use at a time). Hosts that run editors on
+    // different threads therefore paint one editor after the other (issue #63).
+    static std::mutex shared_gdi;
+    std::lock_guard lock(shared_gdi);
 #if defined(NUKED_SC55_DEVICE_8850)
     Draw8850(e, dc);
 #elif defined(NUKED_SC55_DEVICE_8820)
@@ -438,10 +444,12 @@ void ShowSetupMenu(Editor& e)
 
 const char* ClassName()
 {
-    static char name[64] = {};
-    if (!name[0])
-        std::snprintf(name, sizeof(name), NUKED_SC55_WNDCLASS_PREFIX "%p", (void*)ModuleInstance());
-    return name;
+    static const std::string name = [] {
+        char buf[64] = {};
+        std::snprintf(buf, sizeof(buf), NUKED_SC55_WNDCLASS_PREFIX "%p", (void*)ModuleInstance());
+        return std::string(buf);
+    }();
+    return name.c_str();
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
