@@ -1,8 +1,7 @@
 # Grafikordner des 88emu-Players (Gearmulator, festgehaltener Stand); ohne 88emu-Build nur die Grafiken holen
 gm_assets() {
- local G=${GM:-/home/claude/wb/gearmulator} C=96deb437794baf109fb996a2f8806ce2ee949246 P=source/ronaldo/88emu/88emuplayer/assets
- # Panelgrafiken bleiben auf $C (knob.png hat sich danach geaendert): anderer 88emu-Stand -> eigener Grafik-Checkout
- if [ ! -f $G/$P/sc55_panel.png ] || [ "$(git -C $G rev-parse HEAD 2>/dev/null)" != $C ]; then
+ local G=${GM:-/home/claude/wb/gearmulator} C=c8047e7a61a9a466e3cd9192157965856e774786 P=source/ronaldo/88emu/88emuplayer/assets
+ if [ ! -f $G/$P/sc55_panel.png ]; then
   G=/home/claude/wb/gm_assets
   if [ ! -f $G/$P/sc55_panel.png ]; then
    rm -rf $G; git init -q $G
@@ -13,7 +12,7 @@ gm_assets() {
  python3 -c 'import cairosvg' 2>/dev/null || pip install -q --break-system-packages cairosvg >&2
  echo $G/$P; }
 build(){ F="$1"; N="$2"; M=$3; ID=$4; RS=$5; RN=$6; shift 6
- # NK_SLOT_CAP gesetzt: ROM-lose Vorlage (reservierter ROM-Bereich, befuellt von p256_builder.py bzw. dem Patcher)
+ # NK_SLOT_CAP gesetzt: ROM-lose Vorlage (reservierter ROM-Bereich, befuellt von tools/p256_builder)
  if [ -n "$NK_SLOT_CAP" ]; then python3 $S/tools/gen_embedded_roms.py --slot "gen/roms_$M.cpp" $RS "$RN" $NK_SLOT_CAP
  else python3 $S/tools/gen_embedded_roms.py "gen/roms_$M.cpp" $RS "$RN" "$@"; fi
  O="${OUTDIR:-out2}"; mkdir -p "$O"
