@@ -1,3 +1,226 @@
+diff --git a/source/cpu/h8500/bus.hpp b/source/cpu/h8500/bus.hpp
+index 17ded73..1fd2b50 100644
+--- a/source/cpu/h8500/bus.hpp
++++ b/source/cpu/h8500/bus.hpp
+@@ -16,8 +16,12 @@
+ // ROM, unmapped space or RAM lines that hold decoded instructions also take
+ // the slow path (the latter so the CPU can drop stale instruction-cache cells).
+ #pragma once
++#include <algorithm>
+ #include <cassert>
++#include <cstdlib>
+ #include <cstring>
++#include <memory>
++#include <new>
+ #include <vector>
+ 
+ #include "common/device.hpp"
+@@ -41,15 +45,21 @@ class Bus {
+   static constexpr u8 kCode = 0x20;       // RAM line containing decoded instructions
+   static constexpr unsigned kWaitShift = 6;  // bits 7-6: wait states (0..3)
+ 
+-  explicit Bus(unsigned addr_bits = 24) : addr_mask_((1u << addr_bits) - 1) {
+-    const size_t bytes = size_t(addr_mask_) + 1;
+-    mem_.assign(bytes, 0xFF);  // open bus reads as H'FF
+-    lines_.assign(bytes >> kLineShift, Line{});
+-    attr_.assign(bytes >> kLineShift, u8(kWrSlow | u8(BusClass::W16_S3)));
++  // Nuked SC-55 Poly: the backing store is zero pages from the OS that are only touched where
++  // something is mapped (ROM image, RAM), so the unused rest of the address space (up to 16 MiB
++  // per unit) takes no memory. Unmapped space reads as H'FF through the slow read path instead
++  // of from the (untouched) array; ROM lines are filled with H'FF once, before they are loaded.
++  explicit Bus(unsigned addr_bits = 24)
++      : addr_mask_((1u << addr_bits) - 1), bytes_(size_t(addr_mask_) + 1),
++        mem_(alloc_zero_pages(bytes_), PagesDeleter{bytes_}) {
++    if (!mem_) throw std::bad_alloc();
++    filled_.assign((bytes_ + kFillPage - 1) / kFillPage, false);
++    lines_.assign(bytes_ >> kLineShift, Line{});
++    attr_.assign(bytes_ >> kLineShift, u8(kRdSlow | kWrSlow | u8(BusClass::W16_S3)));
+   }
+ 
+   u32 addr_mask() const { return addr_mask_; }
+-  size_t size() const { return mem_.size(); }
++  size_t size() const { return bytes_; }
+ 
+   // --- mapping (128-byte granularity) ---------------------------------------
+   void map_ram(u32 base, u32 size, BusClass cls, u8 wait = 0) { map(base, size, Line::Ram, nullptr, cls, wait); }
+@@ -60,17 +70,21 @@ class Bus {
+   // Attributes of space nothing is mapped at.
+   void set_unmapped(BusClass cls, u8 wait = 0) {
+     for (size_t i = 0; i < lines_.size(); ++i)
+-      if (lines_[i].kind == Line::Unmapped) attr_[i] = u8(kWrSlow | u8(cls) | (wait << kWaitShift));
++      if (lines_[i].kind == Line::Unmapped) attr_[i] = u8(kRdSlow | kWrSlow | u8(cls) | (wait << kWaitShift));
+   }
+   void set_noexec(u32 base, u32 size, bool noexec = true) {
+     for (u32 l = base >> kLineShift; l < (base + size) >> kLineShift; ++l)
+       attr_[l] = noexec ? u8(attr_[l] | kNoExec) : u8(attr_[l] & ~kNoExec);
+   }
+   // Fill the backing store (works for ROM too; use it to load images).
+-  void load(u32 base, const u8* data, size_t n) { std::memcpy(&mem_[base & addr_mask_], data, n); }
++  void load(u32 base, const u8* data, size_t n) {
++    base &= addr_mask_;
++    fill_open_bus(base, n);
++    std::memcpy(&mem_[base], data, n);
++  }
+ 
+-  u8* mem() { return mem_.data(); }
+-  const u8* mem() const { return mem_.data(); }
++  u8* mem() { return mem_.get(); }
++  const u8* mem() const { return mem_.get(); }
+ 
+   // --- per-line queries (address must already be masked) --------------------
+   u8 attr(u32 a) const { return attr_[a >> kLineShift]; }
+@@ -99,16 +113,18 @@ class Bus {
+   // --- slow paths (public so the CPU's inlined accessors can reach them) ----
+   u8 slow_read8(u32 a) const {
+     const Line& l = line(a);
+-    return l.dev ? l.dev->read8(a) : mem_[a];
++    if (Device* d = dev_of(l)) return d->read8(a);
++    return l.kind == Line::Unmapped ? u8(0xFF) : mem_[a];
+   }
+   u16 slow_read16(u32 a) const {
+     const Line& l = line(a);
+-    return l.dev ? l.dev->read16(a) : be16(&mem_[a]);
++    if (Device* d = dev_of(l)) return d->read16(a);
++    return l.kind == Line::Unmapped ? u16(0xFFFF) : be16(&mem_[a]);
+   }
+   void slow_write8(u32 a, u8 v) {
+     Line& l = line(a);
+     switch (l.kind) {
+-      case Line::Dev: l.dev->write8(a, v); break;
++      case Line::Dev: dev_of(l)->write8(a, v); break;
+       case Line::Ram: mem_[a] = v; if ((attr(a) & kCode) && sink_) sink_->code_line_written(a); break;
+       default: break;  // ROM / unmapped: ignored
+     }
+@@ -116,7 +132,7 @@ class Bus {
+   void slow_write16(u32 a, u16 v) {
+     Line& l = line(a);
+     switch (l.kind) {
+-      case Line::Dev: l.dev->write16(a, v); break;
++      case Line::Dev: dev_of(l)->write16(a, v); break;
+       case Line::Ram: put_be16(&mem_[a], v); if ((attr(a) & kCode) && sink_) sink_->code_line_written(a); break;
+       default: break;
+     }
+@@ -139,10 +155,20 @@ class Bus {
+   static void put_be16(u8* p, u16 v) { p[0] = u8(v >> 8); p[1] = u8(v); }
+ 
+  private:
++  // Nuked SC-55 Poly: 2 bytes per line (the device is an index into devs_), not 16.
+   struct Line {
+     enum Kind : u8 { Unmapped = 0, Ram, Rom, Dev } kind = Unmapped;
+-    Device* dev = nullptr;
++    u8 dev_index = 0;  // 0 = none, else index into devs_ + 1
+   };
++  Device* dev_of(const Line& l) const { return l.dev_index ? devs_[l.dev_index - 1] : nullptr; }
++  u8 dev_index_for(Device* dev) {
++    if (!dev) return 0;
++    for (size_t i = 0; i < devs_.size(); ++i)
++      if (devs_[i] == dev) return u8(i + 1);
++    assert(devs_.size() < 255);
++    devs_.push_back(dev);
++    return u8(devs_.size());
++  }
+ 
+   const Line& line(u32 a) const { return lines_[a >> kLineShift]; }
+   Line& line(u32 a) { return lines_[a >> kLineShift]; }
+@@ -155,19 +181,48 @@ class Bus {
+     u8 at = u8(u8(cls) | (wait << kWaitShift));
+     if (kind == Line::Dev) at |= kRdSlow | kWrSlow;
+     if (kind == Line::Rom) at |= kWrSlow;
++    const u8 dev_index = dev_index_for(dev);
+     for (u32 l = base >> kLineShift; l < (base + size) >> kLineShift; ++l) {
+       lines_[l].kind = kind;
+-      lines_[l].dev = dev;
++      lines_[l].dev_index = dev_index;
+       attr_[l] = u8(at | (attr_[l] & kNoExec));
+     }
+-    if (kind == Line::Ram) std::memset(&mem_[base], 0, size);
++    if (kind == Line::Ram) {
++      fill_open_bus(base, size);
++      std::memset(&mem_[base], 0, size);
++    } else if (kind == Line::Rom) {
++      fill_open_bus(base, size);  // (what is not loaded reads as H'FF)
++    }
++  }
++
++  // Gives the pages of [base, base + n) their open-bus content (H'FF) the first time they are
++  // used; later calls leave the pages alone (they may already hold an image).
++  void fill_open_bus(size_t base, size_t n) {
++    for (size_t p = base / kFillPage; n && p <= (base + n - 1) / kFillPage; ++p) {
++      if (filled_[p]) continue;
++      filled_[p] = true;
++      std::memset(&mem_[p * kFillPage], 0xFF, std::min<size_t>(kFillPage, bytes_ - p * kFillPage));
++    }
+   }
+ 
+-  std::vector<u8> mem_;
++  // Fresh zero pages straight from the OS (not from the C heap, which may recycle and clear
++  // memory); defined in chip.cpp.
++  struct PagesDeleter {
++    size_t bytes;
++    void operator()(u8* p) const { free_zero_pages(p, bytes); }
++  };
++  static u8* alloc_zero_pages(size_t bytes);
++  static void free_zero_pages(u8* p, size_t bytes);
++  static constexpr size_t kFillPage = 4096;
++
++  u32 addr_mask_;
++  size_t bytes_;
++  std::unique_ptr<u8[], PagesDeleter> mem_;
++  std::vector<bool> filled_;
+   std::vector<Line> lines_;
++  std::vector<Device*> devs_;
+   std::vector<u8> attr_;
+   CodeSink* sink_ = nullptr;
+-  u32 addr_mask_;
+ };
+ 
+ }  // namespace h8500
+diff --git a/source/cpu/h8500/chip.cpp b/source/cpu/h8500/chip.cpp
+index f82e7ae..d020758 100644
+--- a/source/cpu/h8500/chip.cpp
++++ b/source/cpu/h8500/chip.cpp
+@@ -1,3 +1,14 @@
++#ifdef _WIN32
++#ifndef NOMINMAX
++#define NOMINMAX
++#endif
++#ifndef WIN32_LEAN_AND_MEAN
++#define WIN32_LEAN_AND_MEAN
++#endif
++#include <windows.h>
++#else
++#include <sys/mman.h>
++#endif
+ #include "cpu/h8500/chip.hpp"
+ 
+ #include "cpu/h8500/bus.hpp"
+@@ -74,3 +85,26 @@ void configure_bus(Bus& bus, const ChipConfig& cfg) {
+ }
+ 
+ }  // namespace h8500
++
++namespace h8500 {
++
++// Nuked SC-55 Poly: see Bus. Zero pages that take no memory until they are touched.
++u8* Bus::alloc_zero_pages(size_t bytes) {
++#ifdef _WIN32
++  return static_cast<u8*>(VirtualAlloc(nullptr, bytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
++#else
++  void* p = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++  return p == MAP_FAILED ? nullptr : static_cast<u8*>(p);
++#endif
++}
++
++void Bus::free_zero_pages(u8* p, size_t bytes) {
++#ifdef _WIN32
++  (void)bytes;
++  VirtualFree(p, 0, MEM_RELEASE);
++#else
++  munmap(p, bytes);
++#endif
++}
++
++}  // namespace h8500
 diff --git a/source/ronaldo/88emu/88lib/boards/sc88.h b/source/ronaldo/88emu/88lib/boards/sc88.h
 index 363de6c..8570101 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc88.h
