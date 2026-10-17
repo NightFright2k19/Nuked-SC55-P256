@@ -33,6 +33,8 @@
 #define NUKED_SC55_FAMILY "Nuked SC-8850 P256"
 #elif defined(NUKED_SC55_DEVICE_8820)
 #define NUKED_SC55_FAMILY "Nuked SC-8820 P256"
+#elif defined(NUKED_SC55_DEVICE_LA)
+#define NUKED_SC55_FAMILY "Nuked MT-32 P256"
 #elif defined(NUKED_SC55_ENGINE_88PRO)
 #define NUKED_SC55_FAMILY "Nuked SC-88 P256"
 #else

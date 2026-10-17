@@ -8,9 +8,11 @@
 <img width="918" height="280" alt="sc8820" src="docs/images/sc8820_panel.png" />
 <img width="918" height="280" alt="sc8820pro" src="docs/images/sc8820pro_panel.png" />
 <img width="918" height="279" alt="sc_8850" src="https://github.com/user-attachments/assets/853f8c54-9bf6-4ff2-bf91-a5d85f23c303" />
+<img width="918" height="280" alt="mt32" src="docs/images/mt32_panel.png" />
+<img width="918" height="280" alt="cm32l" src="docs/images/cm32l_panel.png" />
 </p>
 
-Single-file **CLAP** and **VST2** plug-ins (Windows x64) for the Roland **SC-55 (v1.21)**, **SC-55mk2 (v1.01, with Capital Tone Fallback)**, **SC-88**, **SC-88 Pro**, **SC-8820** and **SC-8850**, built on the low-level emulation of [Nuked SC-55](https://github.com/nukeykt/Nuked-SC55) and [88emu](https://github.com/dsp56300/gearmulator). The original modules stop at 24 (SC-55), 28 (SC-55mk2), 64 (SC-88, SC-88 Pro and SC-8820) or 128 (SC-8850) simultaneous voices. These plug-ins run several bit-identical emulator instances side by side and distribute the MIDI notes among them, which raises the limit to **264 voices** (SC-55), **280 voices** (SC-55mk2) and **256 voices** (SC-88, SC-88 Pro, SC-8820 and SC-8850) without changing how a single module sounds.
+Single-file **CLAP** and **VST2** plug-ins (Windows x64) for the Roland **SC-55 (v1.21)**, **SC-55mk2 (v1.01, with Capital Tone Fallback)**, **SC-88**, **SC-88 Pro**, **SC-8820**, **SC-8850** and the **MT-32 / CM-32L**, built on the low-level emulation of [Nuked SC-55](https://github.com/nukeykt/Nuked-SC55) and [88emu](https://github.com/dsp56300/gearmulator). The original modules stop at 24 (SC-55), 28 (SC-55mk2), 32 (MT-32, CM-32L), 64 (SC-88, SC-88 Pro and SC-8820) or 128 (SC-8850) simultaneous voices. These plug-ins run several bit-identical emulator instances side by side and distribute the MIDI notes among them, which raises the limit to **264 voices** (SC-55), **280 voices** (SC-55mk2), **256 voices** (SC-88, SC-88 Pro, SC-8820 and SC-8850) and **64 voices** (MT-32 / CM-32L) without changing how a single module sounds.
 
 > [!IMPORTANT]
 > The plug-ins aim to preserve an important part of DOS gaming history for all to enjoy. They are only intended for **personal use** (retro gaming, writing music as a hobby) and **research purposes**. **No ROM files are included in this repository.** Plug-ins that contain your ROMs (everything the builder produces) are for **private use only** and must not be shared.
@@ -28,6 +30,7 @@ Single-file **CLAP** and **VST2** plug-ins (Windows x64) for the Roland **SC-55 
 - [SC-8820 engine (88emu)](#sc-8820-engine-88emu)
   - [SC-8820 Pro interface](#sc-8820-pro-interface)
 - [SC-8850 engine (88emu)](#sc-8850-engine-88emu)
+- [MT-32 / CM-32L engine (88emu)](#mt-32--cm-32l-engine-88emu)
 - [Panels and controls](#panels-and-controls)
 - [Settings and plug-in state](#settings-and-plug-in-state)
 - [Configuration (environment variables)](#configuration-environment-variables)
@@ -50,7 +53,7 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 
 ### Polyphony
 
-- **Multi-instance polyphony:** N identical, bit-exact emulators run in parallel and their outputs are summed. A note router in `src/poly_router.h` decides which instance plays which note. Result: **264 voices** (SC-55 v1.21, 11 units), **280 voices** (SC-55mk2, 10 units), **256 voices** (SC-88, SC-88 Pro and SC-8820, 4 units of 64; SC-8850, 2 units of 128).
+- **Multi-instance polyphony:** N identical, bit-exact emulators run in parallel and their outputs are summed. A note router in `src/poly_router.h` decides which instance plays which note. Result: **264 voices** (SC-55 v1.21, 11 units), **280 voices** (SC-55mk2, 10 units), **256 voices** (SC-88, SC-88 Pro and SC-8820, 4 units of 64; SC-8850, 2 units of 128), **64 partials** (MT-32 / CM-32L, 2 units of 32).
 - **Dynamic instances:** only as many instances run as the music needs. Sleeping instances are brought up to date from a compact state log when they wake (`src/state_log.h`), and a background thread pre-synchronises the next sleeping units so that waking up never causes a dropout.
 - **Constant DC offset compensation:** every instance outputs a constant 1/32 of full scale; it is measured after boot and subtracted from all additional instances. With 24/28 voices or fewer, the output is **bit-identical** with a single module.
 - **Runtime voice limit** (SETUP menu): 24 / 48 / 64 / 96 / 128 / 160 / 192 / 224 / 256 (SC-55mk2: 28 / 56 / ...). Instances above the limit receive no new notes and go to sleep once silent.
@@ -64,6 +67,7 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 - **SC-8820:** the same 88emu engine with the SC-8820 firmware, 32 parts on two MIDI inputs (A, B), a front panel drawn after the device (lamps from the firmware, INST MAP, GAIN knob, PREVIEW on a right click). See [SC-8820 engine](#sc-8820-engine-88emu).
 - **SC-8820 Pro interface:** the SC-8820 plug-in has a second panel, chosen in the SETUP menu ("Interface Style": Basic / Pro): a 16-part level display, a part display (program, instrument, bank MSB / LSB, level, pan, reverb, chorus) and buttons to change them. It is customized, with more features and less faithful to the device; the sound engine is the same. See [SC-8820 Pro interface](#sc-8820-pro-interface).
 - **SC-8850:** the same 88emu engine with the SC-8850 firmware, 64 parts on four MIDI inputs (A-D), the original front panel with graphic LCD driven by the firmware, and GAIN. See [SC-8850 engine](#sc-8850-engine-88emu).
+- **MT-32 / CM-32L:** one plug-in for the MT-32 (old board, 1.x firmware), the MT-32 (new board, 2.x) and the CM-32L, chosen in the SETUP menu ("Device"). The 88emu LA board with the original firmware, the device's own panel (MT-32: LCD, PART / RHYTHM and function switches; CM-32L: MIDI MESSAGE / POWER lamps), GAIN, up to 2 units = 64 partials. See [MT-32 / CM-32L engine](#mt-32--cm-32l-engine-88emu).
 
 ### Formats and packaging
 
@@ -103,7 +107,7 @@ There are two ways to get the plug-ins. The first needs nothing but your ROM fil
 3. Start it, check the list of found models and click **Patch**.
 4. Copy the results from `Plugins/CLAP/*.clap` and/or `Plugins/VST2/*.dll` to your plug-in folders (see [Using the plug-ins](#using-the-plug-ins)).
 
-Everything for which a complete ROM set is found is built (SC-55 v1.21, SC-55mk2 v1.01, SC-88, SC-88 Pro, SC-8820, SC-8850). More in [The patcher](#the-patcher).
+Everything for which a complete ROM set is found is built (SC-55 v1.21, SC-55mk2 v1.01, SC-88, SC-88 Pro, SC-8820, SC-8850, MT-32 / CM-32L). More in [The patcher](#the-patcher).
 
 ### Option B: build from source
 
@@ -125,6 +129,7 @@ See [Building from source](#building-from-source).
 | SC-88 Pro | yes | 64 | 4 | 256 |
 | SC-8820 | yes | 64 | 4 | 256 |
 | SC-8850 | yes | 128 | 2 | 256 |
+| MT-32 (old / new), CM-32L | yes, one plug-in | 32 | 2 | 64 |
 
 The ROMs are recognised **by content** (SHA-256), not by file name. Dumps of other versions are ignored. The hashes below are the first 16 digits; the full values are in `p256_builder.py`.
 
@@ -150,8 +155,18 @@ The ROMs are recognised **by content** (SHA-256), not by file name. Dumps of oth
 | | program | `sc8850_program.bin` | `19e670a82eebe4ff` |
 | | data | `sc8850_data.bin` | `48eeceb4dbba45b6` |
 | | wave | `sc8850_wave.bin` | `3cfac9db381527a4` |
+| MT-32 (old) | control 1.07 (IC27 + IC26, or both as one 64 KB file) | `mt32_1.0.7.ic27.bin` + `mt32_1.0.7.ic26.bin` | `967d2e3c782d8701` + `f2889cdd5e8dce29` (combined `a73a06c23ed38370`) |
+| | control 1.06 / 1.05 / 1.04 / Blue Ridge / M-9 (used when 1.07 is missing) | `mt32_1.0.6.ic27.bin` ... | see `p256_builder.py` |
+| | PCM | `r15449121.ic37.bin` (or `r15179844` + `r15179845`) | `d9164063f293410c` (`990d5bb6b6dd1ba7` + `95f312aee6f359b8`) |
+| | reverb | `r15179857.ic13.bin` | `8ec50a524dde9c39` |
+| MT-32 (new) | control 2.04 (2.07 when 2.04 is missing) | `mt32_2.0.4.ic28` | `a5339b966142dd2c` (2.07: `a1ee6ac3190bb94d`) |
+| | PCM | as MT-32 (old) | |
+| | reverb | `r15179917.ic19.bin` | `a4e146bfad60bdb4` |
+| CM-32L | control 1.02 (LAPC-I 1.00 when 1.02 is missing) | `cm32l_control.rom` | `08d68695e5bff6bb` (1.00: `c8aea5fb1b281835`) |
+| | PCM (1 MB, or `r15449121` + `r15179945`) | `CM32L_PCM.ROM` | `0dc50190bb7ea3fb` (`d9164063f293410c` + `5ed28de779c05b35`) |
+| | reverb | as MT-32 (new) | |
 
-The SC-88 files are the raw dumps (control ROM 512 KB, four wave ROMs of 2 MB each). The SC-88 Pro files are the raw dumps (control ROM 1 MB, wave ROMs 8 + 8 + 4 MB). The SC-8820 set is the CPU ROM R02015367 (64 KB, the on-chip ROM of the SH7016 CPU; the earlier reconstruction is still accepted by its MD5 from 88emu's ROM list), the program flash of 2000-11-28 (2 MB) and the wave ROMs of 16 + 8 MB. The SC-8850 set is internal 64 KB, program 1 MB, data 2 MB and the wave ROM as one 32 MB file.
+The SC-88 files are the raw dumps (control ROM 512 KB, four wave ROMs of 2 MB each). The SC-88 Pro files are the raw dumps (control ROM 1 MB, wave ROMs 8 + 8 + 4 MB). The SC-8820 set is the CPU ROM R02015367 (64 KB, the on-chip ROM of the SH7016 CPU; the earlier reconstruction is still accepted by its MD5 from 88emu's ROM list), the program flash of 2000-11-28 (2 MB) and the wave ROMs of 16 + 8 MB. The SC-8850 set is internal 64 KB, program 1 MB, data 2 MB and the wave ROM as one 32 MB file. The MT-32 / CM-32L plug-in is built when at least one of its three sets (MT-32 old, MT-32 new, CM-32L) is complete; devices without a set are greyed out in its SETUP menu. Per device the firmware listed first is used, and the menu shows its version.
 
 > [!NOTE]
 > **SC-55mk2:** either `rom2` works. If only the original `rom2` (512 KB) is found, the builder applies the CTF patch itself and checks the result against the known checksum (see [Capital Tone Fallback](#capital-tone-fallback-sc-55mk2)).
@@ -170,13 +185,14 @@ For source builds with **external** ROMs, the layout of the original plug-in app
 | Nuked-SC88 Pro | `Nuked-SC88_Pro` | 88emu | `net.nuked_sc55_poly_clap.sc88pro` | `S8PP` (0x53385050) | 256 |
 | Nuked-SC8820 | `Nuked-SC8820` | 88emu | `net.nuked_sc55_poly_clap.sc8820` | `S820` (0x53383230) | 256 |
 | Nuked-SC8850 | `Nuked-SC8850` | 88emu | `net.nuked_sc55_poly_clap.sc8850` | `S885` (0x53383835) | 256 |
+| Nuked-MT32 | `Nuked-MT32` | 88emu | `net.nuked_sc55_poly_clap.mt32` | `MT32` (0x4D543332) | 32 (of 64) |
 
 - The file names contain no spaces or dots (some hosts and drivers dislike them); the display names in the host stay "Nuked-SC55 v1.21", "Nuked-SC55 MkII" and "Nuked-SC88 Pro".
 - Both formats are the **same file** with two entry points (`clap_entry` and `VSTPluginMain`). The builder writes it twice, once as `.clap` and once as `.dll`.
-- Category: instrument/synth; flags: editor, replacing, program chunks. VST2 vendor `Nuked SC-55 P256` (SC-88 and SC-88 Pro: `Nuked SC-88 P256`, SC-8820: `Nuked SC-8820 P256`, SC-8850: `Nuked SC-8850 P256`).
+- Category: instrument/synth; flags: editor, replacing, program chunks. VST2 vendor `Nuked SC-55 P256` (SC-88 and SC-88 Pro: `Nuked SC-88 P256`, SC-8820: `Nuked SC-8820 P256`, SC-8850: `Nuked SC-8850 P256`, MT-32: `Nuked MT-32 P256`).
 - The IDs of the plug-ins never changed since the first version, so projects stay compatible. Hosts may show a new vendor after a rescan.
 - Windows version info: product name, description and internal name are the display name; file and product version are the build date (`2026.10.07` is stored as `2026,10,7,0` numerically, which Windows shows as `2026.10.7.0`).
-- A DLL with ROMs is large: about 14 MB for the SC-88 (8.5 MB ROMs), about 27 MB for the SC-88 Pro (21 MB ROMs, 1 MB panel graphics), about 35 MB for the SC-8820 (26 MB ROMs, 4 MB panel graphics for both interfaces), about 42 MB for the SC-8850 (35 MB ROMs).
+- A DLL with ROMs is large: about 14 MB for the SC-88 (8.5 MB ROMs), about 27 MB for the SC-88 Pro (21 MB ROMs, 1 MB panel graphics), about 35 MB for the SC-8820 (26 MB ROMs, 4 MB panel graphics for both interfaces), about 42 MB for the SC-8850 (35 MB ROMs), about 10 MB for the MT-32 / CM-32L (2.4 MB ROMs for all three devices, 4 MB panel graphics).
 
 ---
 
@@ -342,6 +358,27 @@ The SC-8850 plug-in uses the same 88emu core with the SC-8850 firmware (compile-
 
 ---
 
+## MT-32 / CM-32L engine (88emu)
+
+The MT-32 plug-in uses the 88emu LA board (the 8095 / 8098 CPU with the original firmware, LA32 sound generator, reverb chip) in three variants (compile-time `NUKED_SC55_DEVICE_LA` on top of `NUKED_SC55_ENGINE_88PRO`, model index 10).
+
+- **Devices (SETUP > Device):** MT-32 (old board, 1.x firmware), MT-32 (new board, 2.x firmware) and CM-32L, default CM-32L. The menu shows the firmware version the plug-in was built with; devices whose ROM set was missing at build time are greyed out. Choosing a device boots the units again as that device (about 1 s, with a short dropout), like swapping the module: what the host sent before (patches, timbres) is gone. The panel follows the device. Stored in the state (`dev=0..2`).
+- **Units:** 32 partials per unit, as the device. **One unit is the default** (32 voices); SETUP offers 64 voices (2 units). Unlike the Sound Canvas models, all units run from the start and receive every message: a sleeping unit would have to be brought up to date by replaying the SysEx state at MIDI speed (faster corrupts the firmware's patch memory), which would take seconds. One unit costs about 15 % of one core.
+- **MIDI:** one MIDI input (parts 1-8 on channels 2-9, rhythm on channel 10, as the device; channels can be changed by SysEx). The firmware takes MIDI in at wire speed (3125 bytes/s), as on the device. The old firmware needs pauses between large SysEx blocks ("Exc. Buffer overflow" on the LCD otherwise), as on a real MT-32.
+- **Voice counter:** a partial counts while its pitch is set and one of its envelope ramps is above zero (the firmware leaves the pitch of finished partials in place).
+- **GAIN:** -12 ... +12 dB, 0 dB at 12 o'clock (default). The LA output is used as it is (RMS of E1M1 on the CM-32L about the level of the SC-55 plug-ins).
+- **Send Reset:** "All parameters reset" (the firmware's own initialization, as after power-on). **All notes off** releases all notes and the hold pedal on every unit.
+- **Patches:** `88emu-nuked-poly.patch` also adds `emu88_set_la_rom_images` (one ROM set per device from memory), the LA partial counter, the LA MIDI input backlog and `emu88_set_midi_in_rate`.
+- **Builds:** `tools/winbuild/buildmt32.sh` (single file / template; ROM slots 0 = MT-32 old, 1 = MT-32 new, 2 = CM-32L, each a block of control, PCM and reverb ROM written by `p256_builder.la_blob`).
+
+### MT-32 / CM-32L panels (918 x 280 px)
+
+- **Graphics:** drawn from scratch by `tools/make_la_panel.py` after photos of the devices (no photo or third-party art is used); the maker's logos are replaced by the plug-in's own branding. VOICES (count, bar) and UNITS on the left, the name and SETUP (bottom right) in the strip below, as on the other panels.
+- **MT-32:** the dark front with the display window: the 20-character LCD (dark green, light characters, unlit cells, glass) shows unit 0's display text, the MIDI MESSAGE lamp lights for notes of any unit. PART 1-5, RHYTHM, SOUND GROUP, VOLUME, SOUND and MASTER VOLUME are the device's switches, pressed on all units alike (held while the mouse button is down, at least 120 ms; a right click holds a switch until the next left-click switch, for key combinations). The knob is labelled SELECT/GAIN: left-drag or mouse wheel = GAIN (0.1 dB per notch, double-click = 0 dB), right-drag or Shift + wheel = the device's own knob (SELECT, for example in the SOUND menu; in play mode it is the device's master volume, starting at "vol:100").
+- **CM-32L:** the beige front with the knob (GAIN), the GAIN value under it, and the MIDI MESSAGE (green) and POWER (red) lamps on the grooved strip.
+
+---
+
 ## Panels and controls
 
 All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and read the engine only through atomics.
@@ -383,6 +420,9 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 | Tone map (SC-88 Pro) | SC-55 / SC-88 / SC-88 Pro |
 | Tone map (SC-8850) | SC-55 / SC-88 / SC-88 Pro / SC-8850 (default SC-8850) for all parts: sends Bank Select LSB (CC#32) and the part's bank and program again to every part; stored in the state (`map=0..3`), a GS / GM reset returns to the SC-8850 map. The panel's INST MAP still sets it per part |
 | Prevw Note (SC-88 Pro, SC-8820, SC-8850) | submenu per octave |
+| Max polyphony (MT-32) | 32 (1 unit, default) / 64 (2 units) |
+| Device (MT-32) | MT-32 (old, v1.xx) / MT-32 (new, v2.xx) / CM-32L (v1.xx, default): boots the units again as that device; stored in the state (`dev=0..2`). Devices without ROMs are greyed out |
+| Send Reset (MT-32) | All parameters reset |
 | Interface Style (SC-8820) | Basic (default) / Pro: the device's panel or the [Pro interface](#sc-8820-pro-interface); last entry of the menu, stored in the state (`style=0..1`); a left click on the logo switches too |
 
 After a reset from the menu, the plug-in holds back the host's next MIDI events for 100 ms (System Mode: 200 ms) and then plays them in their original order, so that the firmware has finished the reset (measured with `tools/test/reset26.cpp`: notes sound exactly as after boot from 50-100 ms after GM / GS / GM2 and from 150 ms after a System Mode Set on the SC-88 Pro). Resets that come from the host or a MIDI file are passed on unchanged, as before.
@@ -405,11 +445,12 @@ NSC55P1 max_voices=<n> map=<0..1> gain=<-120..120> smode=<0..1>          SC-88 (
 NSC55P1 max_voices=<n> map=<0..2> gain=<-120..120> pnote=<0..127> smode=<0..1>    SC-88 Pro
 NSC55P1 max_voices=<n> map=<0..3> gain=<-120..120> style=<0..1>         SC-8820 (map: INST MAP, 0 SC-55 ... 3 SC-8820; style: 0 Basic, 1 Pro)
 NSC55P1 max_voices=<n> gain=<-120..120>                                 SC-8850
+NSC55P1 max_voices=<n> gain=<-120..120> dev=<0..2>                      MT-32 (dev: 0 MT-32 old, 1 MT-32 new, 2 CM-32L)
 ```
 
 `smode` = last system mode chosen in the SETUP menu (0 = Mode 1, 1 = Mode 2). It is only the mark in the menu: loading a state sends nothing, and the start-up stays as before (SC-55 / SC-55mkII: GS reset at boot, 88emu devices: factory state without a reset).
 
-A new plug-in instance starts with the maximum number of voices. Old chunks without `map=` start with the SC-88 Pro map (before Issue #20: SC-88); chunks with `map=` keep their map. Whether a particular host or driver keeps the chunk is up to the host; if it does not, the plug-in starts with the maximum each time, which is harmless.
+A new plug-in instance starts with the maximum number of voices (MT-32 / CM-32L: 32, one unit like the device). Old chunks without `map=` start with the SC-88 Pro map (before Issue #20: SC-88); chunks with `map=` keep their map. Whether a particular host or driver keeps the chunk is up to the host; if it does not, the plug-in starts with the maximum each time, which is harmless.
 
 ---
 
@@ -434,7 +475,7 @@ Build-time options (CMake cache variable or compiler define):
 | Option | Meaning |
 | --- | --- |
 | `NUKED_SC55_POLY_TARGET_VOICES` | polyphony target (default 128 in CMake, 256 in the shipped builds) |
-| `NUKED_SC55_ONLY_MODEL=<0..6>` | single-model build: 0 = v1.00, 1 = v1.10, 2 = v1.20, 3 = v1.21, 4 = v2.00, 5 = mk2 v1.01, 6 = SC-88 Pro |
+| `NUKED_SC55_ONLY_MODEL=<0..10>` | single-model build: 0 = v1.00, 1 = v1.10, 2 = v1.20, 3 = v1.21, 4 = v2.00, 5 = mk2 v1.01, 6 = SC-88 Pro, 7 = SC-8850, 8 = SC-88, 9 = SC-8820, 10 = MT-32 / CM-32L |
 | `NUKED_SC55_ENGINE_88PRO` | use the 88emu engine |
 | `NUKED_SC55_EMBED_ROMS` | embedded ROMs (with a source from `tools/gen_embedded_roms.py`) |
 | `NUKED_SC55_DISPLAY_NAME`, `NUKED_SC55_VST2_NAME`, `NUKED_SC55_VST2_ID` | names and VST2 unique ID |
@@ -467,7 +508,7 @@ python p256_builder.py
 ```
 
 ```
-Nuked SC-55 / SC-88 / SC-8820 / SC-8850 P256 - Plugin Builder
+Nuked SC-55 / SC-88 / SC-8820 / SC-8850 / MT-32 P256 - Plugin Builder
 
 [ok] SC-55 v1.21: output/CLAP/Nuked-SC55_v121.clap, output/VST2/Nuked-SC55_v121.dll
 [ok] SC-55mk2 v1.01 (CTF) (CTF patch will be applied): output/CLAP/Nuked-SC55_MkII.clap, ...
@@ -475,12 +516,13 @@ Nuked SC-55 / SC-88 / SC-8820 / SC-8850 P256 - Plugin Builder
 [--] SC-88 Pro: no ROMs found
 [--] SC-8820: no ROMs found
 [--] SC-8850: no ROMs found
+[--] MT-32 / CM-32L: no ROMs found
 
 2 plugin(s) created.
 ```
 
 - **Detection:** `roms` is searched recursively (symbolic links and junctions are followed, with loop protection); each file is identified by SHA-256, so names do not matter. Unknown files are skipped.
-- **Per model:** a plug-in is built when its set is complete. An incomplete set is reported with the missing parts.
+- **Per model:** a plug-in is built when its set is complete. An incomplete set is reported with the missing parts. MT-32 / CM-32L: built when at least one device set is complete, with all complete device sets in one plug-in.
 - **Result:** `output/CLAP/<name>.clap` and `output/VST2/<name>.dll` per model (identical files).
 - **Exit code:** 0 if something was built, 2 if nothing was built, 1 if `roms` is missing.
 
@@ -557,6 +599,7 @@ Tried and rejected: polling the peripherals less often (< 5 %), skipping silent 
 | SC-88 Pro | 247 MB | **166 MB** |
 | SC-8820 (4 units) | 213 MB | **81 MB** |
 | SC-8850 (2 units) | 160 MB | **129 MB** |
+| MT-32 / CM-32L (2 units) | - | about 3 MB per unit on top of the plug-in (measured on Linux) |
 
 Each SC-55 unit held 19.5 MB of arrays (wave ROMs 5 MB + card 2 MB + expansion 8 MB + a 4 MB LCD buffer), of which about 3.5 MB were used. Now the wave ROMs are one `calloc` block shared by all units (untouched pages cost nothing) and the LCD buffer is only created on demand. In the SC-88 Pro, the decoded wave ROM is shared process-wide (cache by FNV hash of the raw data); the rest (about 35 MB per unit) is the internal state of 88emu and JIT code. The SC-8820 and SC-8850 map their wave ROM straight from the embedded image instead of copying it (the SC-8820 used to copy 24 MB per unit, the SC-8850 a shared 32 MB block that was also hashed at every boot), so a unit costs about 13 MB (SC-8820) or 34 MB (SC-8850) in the Linux measurement; the output is bit-identical.
 
@@ -637,6 +680,12 @@ These are limits of the approach, or things that are not done yet.
 - **Level indicators:** the emulation gives the firmware's lamps in four blocks per part group (3 columns each); finer steps that the device may show are not available.
 - **SC-8820 Pro interface, part display:** the work RAM addresses it reads belong to the accepted program ROM (2000-11-28). Some tone names end in a marker character of the firmware (for example `Violin    :`).
 
+### MT-32 / CM-32L
+
+- **Device switch:** booting the units again takes about 1 s in the audio thread (a short dropout); what the host sent before is gone, as after swapping the module.
+- **Firmware choice:** per device the plug-in contains the one firmware the builder found first (MT-32 old: 1.07 before 1.06, 1.05, 1.04, Blue Ridge, M-9; MT-32 new: 2.04 before 2.07; CM-32L: 1.02 before LAPC-I 1.00). Other versions cannot be chosen in the plug-in.
+- **Units never sound sample-identical:** the LA32 phases run freely, so two units with the same memory differ slightly in phase. Whether they hold the same patches can only be compared through their memory (RQ1), not by their sound.
+
 ### SC-8850
 
 - **Panel edits of user tones and user drum sets** (stored in the firmware's user memory) are not passed on to the other units; part, system, effect and drum map settings are. The firmware RAM addresses the plug-in reads (current part, MUTE / SOLO) belong to the accepted program ROM.
@@ -663,6 +712,7 @@ The development workbench contains the source, the complete patch series (`patch
 | `tools/test/play`, `e1`, `host`, `diag`, `peaks` | CLAP-level tests: polyphony test per round, event lists with CPU and voices per 10 s, scenarios (single note, 160-note flood, CTF, 256 retriggers, runtime limit), wake/sleep log with replay bytes and block time |
 | `tools/test/diag88`, `play88`, `peaks88`, `map88`, `tools/sc88probe/` | the same against the SC-88 Pro engine, including the map transitions |
 | `tools/winbuild/vsthost.exe`, `hostw.exe`, `clapgui.exe`, `guihost.exe`, `lcdhost.exe`, `guiload.exe` | Windows test hosts (run under Wine): VST2 / CLAP host, editor test with screenshots and menu, LCD screenshots at song times, CPU of the interface thread |
+| `tools/winbuild/panelhost.exe`, `mt32host.exe` | Windows test hosts (run under Wine): mouse actions on the panel with screenshots at song times (`NK_CHUNK` loads a state first, for example the MT-32 device); MT-32 / CM-32L: RMS per second, device switch during playback |
 | `tools/test/lcdtest`, `lcddump` | LCD renderer (incremental vs. full, must give 0 differences), character memory dump |
 | `tools/test/mem`, `act`, `idle` | memory, load time and idle load of a plug-in |
 | `tools/make_golden.sh`, `tests/golden.json` | reference hashes and CPU times |
@@ -679,10 +729,10 @@ The development workbench contains the source, the complete patch series (`patch
 
 - **NukeYKT** - [Nuked-SC55](https://github.com/nukeykt/Nuked-SC55), the low-level SC-55 emulation this project is built on
 - **John Novak** - [Nuked-SC-55-CLAP](https://github.com/johnnovak/Nuked-SC55-CLAP), the CLAP plug-in this project forked from
-- **dsp56300** - [Gearmulator](https://github.com/dsp56300/gearmulator), including the 88emu core used for the SC-88, SC-88 Pro, SC-8820 and SC-8850
+- **dsp56300** - [Gearmulator](https://github.com/dsp56300/gearmulator), including the 88emu core used for the SC-88, SC-88 Pro, SC-8820, SC-8850, MT-32 and CM-32L
 - **shingo45endo** - [SC55MK2-CTF-Patcher](https://github.com/shingo45endo/sc55mk2-ctf-patcher), tool to modify the SC-55mkII firmware for CTF support
 - **Falcosoft** - Falcosoft MIDI Player and Falcosoft VST MIDI Driver ([falcosoft.hu](https://falcosoft.hu/))
-- **Roland** - [Roland](https://www.roland.com), the SC-55, SC-55mk2, SC-88, SC-88 Pro, SC-8820 and SC-8850 sound modules
+- **Roland** - [Roland](https://www.roland.com), the SC-55, SC-55mk2, SC-88, SC-88 Pro, SC-8820 and SC-8850 sound modules, the MT-32 and the CM-32L
 
 ### License
 
