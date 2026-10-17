@@ -29,18 +29,19 @@ void ShowSetupMenu(Editor& e); // editor_win32.cpp
 namespace {
 
 // Geometry (panel pixels, see make_la_panel.py); [0] MT-32, [1] CM-32L
-constexpr RECT ELA_VOICES = {24, 37, 158, 132}, ELA_UNITS = {30, 138, 152, 156}; // DrawVoices88 window
+constexpr RECT ELA_VOICES[2] = {{24, 37, 158, 132}, {24, 31, 158, 126}}; // DrawVoices88 window (the CM-32L box sits 6 px higher)
+constexpr RECT ELA_UNITS[2]  = {{30, 138, 152, 156}, {30, 132, 152, 150}};
 constexpr RECT ELA_SETUP  = {812, 226, 900, 256};
 constexpr POINT ELA_KNOB[2] = {{850, 108}, {470, 116}};
 constexpr int ELA_KNOB_R    = 30;
-constexpr RECT ELA_GAIN[2]  = {{810, 150, 890, 166}, {430, 154, 510, 168}};      // value under the knob
+constexpr RECT ELA_GAIN[2]  = {{810, 150, 890, 166}, {430, 64, 510, 78}};        // value under (MT-32) / above (CM-32L) the knob
 constexpr COLORREF ELA_GAIN_INK[2] = {RGB(0xff, 0x96, 0x1e), RGB(0x96, 0x5a, 0x0a)};
-constexpr RECT ELA_LAMP_MIDI[2] = {{396, 116, 421, 141}, {682, 167, 699, 182}};
-constexpr RECT ELA_LAMP_POWER   = {752, 167, 769, 182};                          // CM-32L, always lit
-// MT-32 LCD: 20 cells (LX0 + 4 + i * cell width), the glass over LX0..LX1 x LY0..LY1
-constexpr int ELA_LX0 = 196, ELA_LY0 = 98, ELA_LX1 = 372, ELA_LY1 = 138;
+constexpr RECT ELA_LAMP_MIDI[2] = {{436, 84, 462, 100}, {684, 164, 696, 185}};   // lamp with its glow
+constexpr RECT ELA_LAMP_POWER   = {754, 164, 766, 185};                          // CM-32L, always lit
+// MT-32 LCD: 20 cells (LX0 + 4 + i * cell width) of 5 x 8 dots (same numbers as make_la_panel.py), the glass over LX0..LX1 x LY0..LY1
+constexpr int ELA_LX0 = 196, ELA_LY0 = 100, ELA_LX1 = 456, ELA_LY1 = 140;
 constexpr double ELA_CELL_W = (ELA_LX1 - ELA_LX0 - 8) / 20.0;
-constexpr int ELA_CELL_Y = ELA_LY0 + 6, ELA_CELL_H = 23;
+constexpr double ELA_DOT_W = 1.8, ELA_DOT_PX = 2.2, ELA_DOT_H = 2.3, ELA_DOT_PY = 2.9, ELA_DOT_X0 = 1.0, ELA_DOT_Y0 = 8.0;
 constexpr COLORREF ELA_LCD_INK = RGB(210, 250, 110);
 // MT-32 switches: PART 1-5, RHYTHM (26 x 26), SOUND GROUP, VOLUME, SOUND, MASTER VOLUME (60 x 24)
 struct LaSwitch { int cx, cy, hw, hh; uint32_t bit; };
@@ -55,8 +56,10 @@ constexpr int ELA_SELECT_PX     = 1;     // right-drag: pixels per SELECT detent
 constexpr int ELA_HIT_KNOB = 1, ELA_HIT_SETUP = 2, ELA_HIT_SW = 100; // + switch index
 
 HDC g_bg_la[2] = {}, g_lit_la[2] = {}, g_glass_la = nullptr; // kept for the process
+HDC g_dots_la = nullptr;                                      // lit LCD dots (premultiplied BGRA, LCD rectangle)
+uint32_t* g_dots_bits = nullptr;
 
-HDC DibLa(const unsigned char* b, const unsigned char* e, int w, int h)
+HDC DibLa(const unsigned char* b, const unsigned char* e, int w, int h, uint32_t** out_bits = nullptr)
 {
     HDC screen = GetDC(nullptr);
     HDC dc     = CreateCompatibleDC(screen);
@@ -72,6 +75,7 @@ HDC DibLa(const unsigned char* b, const unsigned char* e, int w, int h)
     HBITMAP bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
     SelectObject(dc, bmp);
     std::memcpy(bits, b, std::min(static_cast<size_t>(w) * h * 4, static_cast<size_t>(e - b)));
+    if (out_bits) *out_bits = static_cast<uint32_t*>(bits);
     return dc;
 }
 
@@ -111,6 +115,7 @@ void DrawMt32(Editor& e, HDC dc)
         g_lit_la[0] = DibLa(nk_litmt32_b, nk_litmt32_e, Width, Height);
         g_lit_la[1] = DibLa(nk_litcm32l_b, nk_litcm32l_e, Width, Height);
         g_glass_la  = DibLa(nk_glassmt32_b, nk_glassmt32_e, ELA_LX1 - ELA_LX0, ELA_LY1 - ELA_LY0);
+        g_dots_la   = DibLa(nk_glassmt32_b, nk_glassmt32_b, ELA_LX1 - ELA_LX0, ELA_LY1 - ELA_LY0, &g_dots_bits);
     }
     BitBlt(dc, 0, 0, Width, Height, g_bg_la[k], 0, 0, SRCCOPY);
 
@@ -126,16 +131,34 @@ void DrawMt32(Editor& e, HDC dc)
             for (int i = 0; i < 20 && t[i] && t[i] != '\n'; ++i)
                 e.la_text[i] = (t[i] >= 0x20 && t[i] < 0x7f) ? t[i] : ' ';
         }
-        SelectObject(dc, e.f_lcd);
-        SetTextColor(dc, ELA_LCD_INK);
-        SetBkMode(dc, TRANSPARENT);
+        // lit dots of the LCD controller's character ROM, anti-aliased by their area coverage
+        constexpr int LW = ELA_LX1 - ELA_LX0, LH = ELA_LY1 - ELA_LY0;
+        std::memset(g_dots_bits, 0, static_cast<size_t>(LW) * LH * 4);
+        const auto cover = [](double a0, double a1, int px) { // overlap of [a0, a1] with pixel px
+            return std::max(0.0, std::min(a1, px + 1.0) - std::max(a0, static_cast<double>(px)));
+        };
+        const unsigned ir = GetRValue(ELA_LCD_INK), ig = GetGValue(ELA_LCD_INK), ib = GetBValue(ELA_LCD_INK);
         for (int i = 0; i < 20; ++i) {
-            if (e.la_text[i] == ' ' || e.la_text[i] == 0) continue;
-            const int x0 = static_cast<int>(std::lround(ELA_LX0 + 4 + i * ELA_CELL_W));
-            const int x1 = static_cast<int>(std::lround(ELA_LX0 + 4 + (i + 1) * ELA_CELL_W));
-            RECT r{x0, ELA_CELL_Y, x1 + 1, ELA_CELL_Y + ELA_CELL_H};
-            DrawTextA(dc, &e.la_text[i], 1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP);
+            const unsigned char ch = static_cast<unsigned char>(e.la_text[i]);
+            if (ch < 0x21) continue;
+            const unsigned char* gl = lcd_font[ch - 16];
+            for (int row = 0; row < 8; ++row)
+                for (int col = 0; col < 5; ++col) {
+                    if (!((gl[row] >> (4 - col)) & 1)) continue;
+                    const double x0 = 4 + i * ELA_CELL_W + ELA_DOT_X0 + col * ELA_DOT_PX, x1 = x0 + ELA_DOT_W;
+                    const double y0 = ELA_DOT_Y0 + row * ELA_DOT_PY, y1 = y0 + ELA_DOT_H;
+                    for (int py = static_cast<int>(y0); py <= static_cast<int>(y1) && py < LH; ++py)
+                        for (int px = static_cast<int>(x0); px <= static_cast<int>(x1) && px < LW; ++px) {
+                            const double c = cover(x0, x1, px) * cover(y0, y1, py);
+                            if (c <= 0.0) continue;
+                            uint32_t& q = g_dots_bits[py * LW + px];
+                            const unsigned a = std::min(255u, ((q >> 24) & 255u) + static_cast<unsigned>(c * 255.0 + 0.5));
+                            q = (a << 24) | ((ir * a / 255) << 16) | ((ig * a / 255) << 8) | (ib * a / 255);
+                        }
+                }
         }
+        BLENDFUNCTION bd{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+        AlphaBlend(dc, ELA_LX0, ELA_LY0, LW, LH, g_dots_la, 0, 0, LW, LH, bd);
         BLENDFUNCTION bf{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
         AlphaBlend(dc, ELA_LX0, ELA_LY0, ELA_LX1 - ELA_LX0, ELA_LY1 - ELA_LY0, g_glass_la, 0, 0, ELA_LX1 - ELA_LX0,
                    ELA_LY1 - ELA_LY0, bf);
@@ -153,10 +176,11 @@ void DrawMt32(Editor& e, HDC dc)
         const double a   = (-135.0 + 270.0 * t) * 3.14159265358979 / 180.0;
         const double sx = std::sin(a), sy = -std::cos(a);
         const POINT c = ELA_KNOB[k];
-        HPEN pen   = CreatePen(PS_SOLID, 3, RGB(0xeb, 0xeb, 0xeb));
+        HPEN pen   = CreatePen(PS_SOLID, 2, k == 0 ? RGB(0xeb, 0xeb, 0xeb) : RGB(0xd7, 0xd7, 0xd7));
         HGDIOBJ op = SelectObject(dc, pen);
-        MoveToEx(dc, c.x, c.y, nullptr);
-        LineTo(dc, c.x + static_cast<int>(sx * (ELA_KNOB_R - 3 - k)), c.y + static_cast<int>(sy * (ELA_KNOB_R - 3 - k)));
+        const double r0 = k == 0 ? 10 : ELA_KNOB_R - 13, r1 = k == 0 ? ELA_KNOB_R - 2 : ELA_KNOB_R - 3; // marker near the rim
+        MoveToEx(dc, c.x + static_cast<int>(std::lround(sx * r0)), c.y + static_cast<int>(std::lround(sy * r0)), nullptr);
+        LineTo(dc, c.x + static_cast<int>(std::lround(sx * r1)), c.y + static_cast<int>(std::lround(sy * r1)));
         SelectObject(dc, op);
         DeleteObject(pen);
         char g[16];
@@ -164,7 +188,7 @@ void DrawMt32(Editor& e, HDC dc)
         Text(dc, k == 0 ? e.f_label : e.f_tiny, ELA_GAIN_INK[k], ELA_GAIN[k].left, ELA_GAIN[k].top, g, DT_CENTER,
              ELA_GAIN[k].right - ELA_GAIN[k].left, ELA_GAIN[k].bottom - ELA_GAIN[k].top);
     }
-    DrawVoices88(e, dc, ELA_VOICES, ELA_UNITS);
+    DrawVoices88(e, dc, ELA_VOICES[k], ELA_UNITS[k]);
     Box88(e, dc, ELA_SETUP, e.menu_open ? "SETUP  \x85" : "SETUP  >", C88_LED, true);
 }
 
