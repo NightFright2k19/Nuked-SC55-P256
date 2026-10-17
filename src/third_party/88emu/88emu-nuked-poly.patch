@@ -34,11 +34,60 @@ index 363de6c..8570101 100644
  
  		Lcd&       lcd()       { return m_lcd; }
  		const Lcd& lcd() const { return m_lcd; }
+diff --git a/source/ronaldo/88emu/88lib/boards/sc8820.cpp b/source/ronaldo/88emu/88lib/boards/sc8820.cpp
+index e115eb1..a144822 100644
+--- a/source/ronaldo/88emu/88lib/boards/sc8820.cpp
++++ b/source/ronaldo/88emu/88lib/boards/sc8820.cpp
+@@ -5,9 +5,21 @@ namespace emu88Lib
+ 	Sc8820::Sc8820(const std::vector<uint8_t>& cpuRom, const std::vector<uint8_t>& programRom,
+ 		std::vector<uint8_t> wave0, std::vector<uint8_t> wave1)
+ 		: m_waves{std::move(wave0), std::move(wave1)}
++	{
++		init(cpuRom, programRom, m_waves[0].data(), m_waves[0].size(), m_waves[1].data(), m_waves[1].size());
++	}
++
++	Sc8820::Sc8820(const std::vector<uint8_t>& cpuRom, const std::vector<uint8_t>& programRom,
++		const uint8_t* wave0, const size_t wave0Size, const uint8_t* wave1, const size_t wave1Size)
++	{
++		init(cpuRom, programRom, wave0, wave0Size, wave1, wave1Size);
++	}
++
++	void Sc8820::init(const std::vector<uint8_t>& cpuRom, const std::vector<uint8_t>& programRom,
++		const uint8_t* wave0, const size_t wave0Size, const uint8_t* wave1, const size_t wave1Size)
+ 	{
+ 		if(cpuRom.size() != CpuRomSize || programRom.size() != ProgramRomSize ||
+-			m_waves[0].size() != 0x1000000 || m_waves[1].size() != 0x800000)
++			!wave0 || !wave1 || wave0Size != 0x1000000 || wave1Size != 0x800000)
+ 			return;
+ 
+ 		using Bus = sh2::Bus;
+@@ -23,8 +35,8 @@ namespace emu88Lib
+ 		bus.map_device(0x00580000, Bus::kLineSize, &m_controller, Bus::kClsCs1);
+ 		bus.map_device(0x00900000, 0x4000, &m_xpHost, Bus::kClsCs2);
+ 
+-		for(size_t i = 0; i < m_waves.size(); ++i)
+-			m_xp.mapWaveRom(i, m_waves[i].data(), m_waves[i].size(), xpLib::XP::PhysicalWaveRomWidth::bits16);
++		m_xp.mapWaveRom(0, wave0, wave0Size, xpLib::XP::PhysicalWaveRomWidth::bits16);
++		m_xp.mapWaveRom(1, wave1, wave1Size, xpLib::XP::PhysicalWaveRomWidth::bits16);
+ 		m_xp.setInterruptCallback([this](bool level) { m_machine.intc().set_irq_pin(0, level); });
+ 		m_machine.sci(0).set_tx_sink([this](uint8_t value, bool, uint64_t) { m_midiOut.write(value); });
+ 		m_machine.ports().set_write_hook([this](sh2::Port port, uint16_t, uint16_t)
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8820.h b/source/ronaldo/88emu/88lib/boards/sc8820.h
-index 5773748..61a7568 100644
+index 5773748..49f2a88 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8820.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc8820.h
-@@ -38,6 +38,22 @@ namespace emu88Lib
+@@ -30,6 +30,10 @@ namespace emu88Lib
+ 
+ 		Sc8820(const std::vector<uint8_t>& cpuRom, const std::vector<uint8_t>& programRom,
+ 			std::vector<uint8_t> wave0, std::vector<uint8_t> wave1);
++		// Nuked SC-55 Poly: wave ROMs held by the caller (e.g. linked into the plugin), mapped without
++		// a copy; they must outlive the board. Several units then share one image.
++		Sc8820(const std::vector<uint8_t>& cpuRom, const std::vector<uint8_t>& programRom,
++			const uint8_t* wave0, size_t wave0Size, const uint8_t* wave1, size_t wave1Size);
+ 		bool isValid() const { return m_valid; }
+ 		void reset();
+ 		SampleFrame renderSample();
+@@ -38,6 +42,22 @@ namespace emu88Lib
  		void transportDiscontinuity(uint32_t generation);
  		void setButton(Button button, bool pressed);
  		uint16_t leds() const;
@@ -61,8 +110,17 @@ index 5773748..61a7568 100644
  
  	private:
  		struct XpHost final : emu::Device
+@@ -65,6 +85,8 @@ namespace emu88Lib
+ 		};
+ 
+ 		void updateLamps();
++		void init(const std::vector<uint8_t>& cpuRom, const std::vector<uint8_t>& programRom,
++			const uint8_t* wave0, size_t wave0Size, const uint8_t* wave1, size_t wave1Size);
+ 
+ 		sh2::Machine m_machine{sh2::ChipModel::SH7016, 2};
+ 		std::array<std::vector<uint8_t>, 2> m_waves;
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8850.cpp b/source/ronaldo/88emu/88lib/boards/sc8850.cpp
-index 0aa2451..72ae629 100644
+index 0aa2451..284567f 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8850.cpp
 +++ b/source/ronaldo/88emu/88lib/boards/sc8850.cpp
 @@ -3,6 +3,9 @@
@@ -104,18 +162,61 @@ index 0aa2451..72ae629 100644
  }
  
  namespace emu88Lib
-@@ -57,7 +82,8 @@ namespace emu88Lib
+@@ -53,12 +78,23 @@ namespace emu88Lib
+ 
+ 	Sc8850::Sc8850(std::vector<uint8_t> _cpuRom, std::vector<uint8_t> _programRom,
+ 				   std::vector<uint8_t> _dataRom, const std::vector<uint8_t>& _waveRom0,
+-				   const std::vector<uint8_t>& _waveRom1, const bool _factoryReset)
++				   const std::vector<uint8_t>& _waveRom1, const bool _factoryReset,
++				   const uint8_t* _externalWaveRom)
  		: m_cpuRom(std::move(_cpuRom))
  		, m_programRom(std::move(_programRom))
  		, m_dataRom(std::move(_dataRom))
 -		, m_waveRom(combineWaveRoms(_waveRom0, _waveRom1))
-+		, m_waveRomShared(sharedWaveRoms(_waveRom0, _waveRom1))
-+		, m_waveRom(*m_waveRomShared)
  	{
++		if(_externalWaveRom)
++		{
++			m_waveData = _externalWaveRom;
++			m_waveSize = 0x2000000;
++		}
++		else
++		{
++			m_waveRomShared = sharedWaveRoms(_waveRom0, _waveRom1);
++			m_waveData = m_waveRomShared->data();
++			m_waveSize = m_waveRomShared->size();
++		}
  		if(m_cpuRom.size() != CpuRomSize)
  		{
+ 			std::fprintf(stderr, "Sc8850: CPU ROM must be %u bytes, got %zu\n", CpuRomSize, m_cpuRom.size());
+@@ -102,14 +138,14 @@ namespace emu88Lib
+ 		bus.map_device(0x00a80000u, 0x4000, &m_xpDevice1, Bus::kClsCs2);
+ 		m_machine.cpu().invalidate_all();
+ 
+-		if(m_waveRom.size() >= 0x2000000)
++		if(m_waveSize >= 0x2000000)
+ 		{
+ 			for(auto& xp : m_xp)
+ 			{
+ 				for(size_t chip = 0; chip < xpLib::XP::nWaveChipSelects; ++chip)
+ 				{
+ 					const size_t physicalOffset = chip * 0x400000;
+-					xp.mapWaveRom(chip, m_waveRom.data() + physicalOffset, 0x400000,
++					xp.mapWaveRom(chip, m_waveData + physicalOffset, 0x400000,
+ 								  xpLib::XP::PhysicalWaveRomWidth::bits16, 2, 0);
+ 				}
+ 			}
+@@ -122,7 +158,8 @@ namespace emu88Lib
+ 		m_gateArray.setIrqCallback([this](const bool _level) { m_machine.intc().set_irq_pin(2, _level); });
+ 		m_usb.receiveInterrupt = [this] { return queueGateIrq(hwLib::Tc160g22af::externalIrqSource(1)); };
+ 		m_usb.transmitInterrupt = [this] { return queueGateIrq(hwLib::Tc160g22af::externalIrqSource(0)); };
+-		m_xpEnabled = {!_waveRom0.empty() || !_waveRom1.empty(), !_waveRom0.empty() || !_waveRom1.empty()};
++		const bool hasWave = _externalWaveRom || !_waveRom0.empty() || !_waveRom1.empty();
++		m_xpEnabled = {hasWave, hasWave};
+ 		// MIDI OUT 2 is SCI0, MIDI OUT 1 is SCI1.
+ 		for(unsigned channel = 0; channel < 2; ++channel)
+ 			m_machine.sci(channel).set_tx_sink([this, channel](const uint8_t _value, bool, uint64_t)
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8850.h b/source/ronaldo/88emu/88lib/boards/sc8850.h
-index 1ac9850..2424c43 100644
+index 1ac9850..4641ad9 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8850.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc8850.h
 @@ -4,6 +4,7 @@
@@ -126,7 +227,17 @@ index 1ac9850..2424c43 100644
  #include <utility>
  #include <vector>
  
-@@ -112,6 +113,22 @@ namespace emu88Lib
+@@ -102,7 +103,8 @@ namespace emu88Lib
+ 
+ 		Sc8850(std::vector<uint8_t> _cpuRom, std::vector<uint8_t> _programRom,
+ 			   std::vector<uint8_t> _dataRom, const std::vector<uint8_t>& _waveRom0 = {},
+-			   const std::vector<uint8_t>& _waveRom1 = {}, bool _factoryReset = true);
++			   const std::vector<uint8_t>& _waveRom1 = {}, bool _factoryReset = true,
++			   const uint8_t* _externalWaveRom = nullptr); // Nuked SC-55 Poly: 32 MiB image held by the caller, mapped in place
+ 		~Sc8850();
+ 
+ 		Sc8850(const Sc8850&) = delete;
+@@ -112,6 +114,22 @@ namespace emu88Lib
  
  		bool isValid() const { return m_valid; }
  		SampleFrame renderSample();
@@ -149,15 +260,17 @@ index 1ac9850..2424c43 100644
  
  		hwLib::SED1335& lcd() { return m_lcd; }
  		const hwLib::SED1335& lcd() const { return m_lcd; }
-@@ -247,7 +264,10 @@ namespace emu88Lib
+@@ -247,7 +265,12 @@ namespace emu88Lib
  		std::vector<uint8_t> m_cpuRom;
  		std::vector<uint8_t> m_programRom;
  		std::vector<uint8_t> m_dataRom;
 -		std::vector<uint8_t> m_waveRom;
 +		// Combined wave ROM, read-only after construction. Shared by all boards created from the
 +		// same ROM set in this process (Nuked SC-55 Poly runs several units).
++		// Or (Nuked SC-55 Poly) an image held by the caller: m_waveData points at what is mapped.
 +		std::shared_ptr<const std::vector<uint8_t>> m_waveRomShared;
-+		const std::vector<uint8_t>& m_waveRom;
++		const uint8_t* m_waveData = nullptr;
++		size_t m_waveSize = 0;
  
  		std::array<bool, 2> m_xpEnabled{};
  		std::array<int32_t, 8> m_xp0SdiaInput{};
@@ -562,10 +675,10 @@ index 6c1f267..5cb84b4 100644
  #ifdef __cplusplus
  }
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.cpp b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-index 14e2422..7a0dacc 100644
+index 14e2422..0690487 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-@@ -140,8 +140,18 @@ namespace emu88Lib
+@@ -140,8 +140,17 @@ namespace emu88Lib
  		}
  		case DeviceModel::Sc8820:
  		{
@@ -574,18 +687,34 @@ index 14e2422..7a0dacc 100644
 +			if(RomLoader::Sc8820RomImages im; RomLoader::injectedSc8820RomImages(im))
 +			{
 +				// Nuked SC-55 Poly: images embedded in the plugin
++				// (the waves are mapped in place, shared by all units: no 24 MiB copy per unit)
 +				cpu.assign(im.cpu, im.cpu + im.cpuSize);
 +				program.assign(im.program, im.program + im.programSize);
-+				wave0.assign(im.wave0, im.wave0 + im.wave0Size);
-+				wave1.assign(im.wave1, im.wave1 + im.wave1Size);
-+				m_sc8820 = std::make_unique<Sc8820>(cpu, program, std::move(wave0), std::move(wave1));
++				m_sc8820 = std::make_unique<Sc8820>(cpu, program, im.wave0, im.wave0Size, im.wave1, im.wave1Size);
 +				break;
 +			}
 +			const auto inventory = RomLoader::scan();
  			if(!inventory.read(cpu, RomDevice::Sc8820, RomSlot::Internal) ||
  				!inventory.read(program, RomDevice::Sc8820, RomSlot::Program) ||
  				!inventory.read(wave0, RomDevice::Sc8820, RomSlot::Wave, 0) ||
-@@ -163,6 +173,12 @@ namespace emu88Lib
+@@ -151,6 +160,16 @@ namespace emu88Lib
+ 		}
+ 		case DeviceModel::Sc8850:
+ 		{
++			// Nuked SC-55 Poly: the wave image embedded in the plugin is mapped in place (no copy, no hash)
++			if(RomLoader::Sc8850RomImages im; RomLoader::injectedSc8850RomImages(im) &&
++			   im.wave && im.waveSize == Sc8850WaveRomSet::Size)
++			{
++				auto roms = RomLoader::findSc8850RomSet();
++				if(!roms.isValid()) break;
++				m_sc8850 = std::make_unique<Sc8850>(std::move(roms.cpu), std::move(roms.program),
++					std::move(roms.data), std::vector<uint8_t>{}, std::vector<uint8_t>{}, factoryReset, im.wave);
++				break;
++			}
+ 			auto roms = RomLoader::findSc8850RomSet();
+ 			auto waves = RomLoader::findSc8850WaveRomSet();
+ 			if(!roms.isValid() || !waves.isValid()) break;
+@@ -163,6 +182,12 @@ namespace emu88Lib
  		case DeviceModel::Xpgs:
  		{
  			const auto model = m_model == DeviceModel::Sc88VL ? Model::Sc88VL : m_model == DeviceModel::Xpgs ? Model::Xpgs : Model::Sc88;
@@ -598,7 +727,7 @@ index 14e2422..7a0dacc 100644
  			auto rom = RomLoader::findROM(model);
  			if(!rom.isValid() || rom.model() != model) break;
  			auto waveData = m_model == DeviceModel::Xpgs
-@@ -513,6 +529,11 @@ namespace emu88Lib
+@@ -513,6 +538,11 @@ namespace emu88Lib
  			else if(m_sc55) m_sc55->setButtons(buttons);
  			else if(m_la) m_la->setButtons(buttons);
  			else if(m_cm64) m_cm64->setButtons(buttons);
@@ -610,7 +739,7 @@ index 14e2422..7a0dacc 100644
  			m_nextPanelCommandSample = m_renderedSamples + g_minimumPanelEdgeSamples;
  		}
  		else if(command.type == PanelCommandType::Mv30Panel)
-@@ -620,6 +641,8 @@ namespace emu88Lib
+@@ -620,6 +650,8 @@ namespace emu88Lib
  			first.displayOn = (lcd.displayMode() & 0x0c) != 0;
  			lcd.renderMono(first.mono);
  		}
@@ -619,7 +748,7 @@ index 14e2422..7a0dacc 100644
  		if(m_mv30)
  			m_mv30->readParts(m_mv30PartsScratch);
  		std::unique_lock lock(m_displayMutex, std::try_to_lock);
-@@ -784,3 +807,45 @@ namespace emu88Lib
+@@ -784,3 +816,45 @@ namespace emu88Lib
  			m_activeChannels &= ~channelMask;
  	}
  }
@@ -684,10 +813,10 @@ index eb2b1bd..f800c94 100644
  		{
  			enum class Type : uint8_t { None, Character, Graphic };
 diff --git a/source/ronaldo/88emu/88lib/rom/romloader.cpp b/source/ronaldo/88emu/88lib/rom/romloader.cpp
-index e4f25b7..060bf65 100644
+index e4f25b7..a484988 100644
 --- a/source/ronaldo/88emu/88lib/rom/romloader.cpp
 +++ b/source/ronaldo/88emu/88lib/rom/romloader.cpp
-@@ -29,7 +29,75 @@ namespace emu88Lib
+@@ -29,7 +29,77 @@ namespace emu88Lib
              return {std::move(data), baseLib::filesystem::getFilenameWithoutPath(found->path), model};
          }
      } // namespace
@@ -743,6 +872,8 @@ index e4f25b7..060bf65 100644
 +
 +    void RomLoader::setInjectedSc8850RomImages(const Sc8850RomImages* _images) { g_injectedSc8850.set(_images); }
 +
++    bool RomLoader::injectedSc8850RomImages(Sc8850RomImages& _out) { return g_injectedSc8850.get(_out); }
++
 +    void RomLoader::setInjectedSc8820RomImages(const Sc8820RomImages* _images) { g_injectedSc8820.set(_images); }
 +
 +    bool RomLoader::injectedSc8820RomImages(Sc8820RomImages& _out) { return g_injectedSc8820.get(_out); }
@@ -764,7 +895,7 @@ index e4f25b7..060bf65 100644
  
      bool RomLoader::isDeviceAvailable(const DeviceModel _model) { return isDeviceAvailable(toRomDevice(_model)); }
  
-@@ -116,6 +184,16 @@ namespace emu88Lib
+@@ -116,6 +186,16 @@ namespace emu88Lib
  
      Sc88ProRomSet RomLoader::findSc88ProRomSet(const RomDevice _device)
      {
@@ -781,7 +912,7 @@ index e4f25b7..060bf65 100644
          const auto inventory = scan();
          if ((_device != RomDevice::Sc88Pro && _device != RomDevice::VeGsPro) || !inventory.isComplete(_device))
              return {};
-@@ -136,6 +214,14 @@ namespace emu88Lib
+@@ -136,6 +216,14 @@ namespace emu88Lib
  
      Sc8850RomSet RomLoader::findSc8850RomSet()
      {
@@ -796,7 +927,7 @@ index e4f25b7..060bf65 100644
          const auto inventory = scan();
  
          Sc8850RomSet result;
-@@ -150,6 +236,13 @@ namespace emu88Lib
+@@ -150,6 +238,13 @@ namespace emu88Lib
      Sc8850WaveRomSet RomLoader::findSc8850WaveRomSet()
      {
          Sc8850WaveRomSet result;
@@ -811,7 +942,7 @@ index e4f25b7..060bf65 100644
          if (!inventory.read(result.romA, RomDevice::Sc8850, RomSlot::Wave, 0) ||
              !inventory.read(result.romB, RomDevice::Sc8850, RomSlot::Wave, 1))
 diff --git a/source/ronaldo/88emu/88lib/rom/romloader.h b/source/ronaldo/88emu/88lib/rom/romloader.h
-index 9ad0e58..ad737a1 100644
+index 9ad0e58..de8bc0c 100644
 --- a/source/ronaldo/88emu/88lib/rom/romloader.h
 +++ b/source/ronaldo/88emu/88lib/rom/romloader.h
 @@ -1,5 +1,6 @@
@@ -821,7 +952,7 @@ index 9ad0e58..ad737a1 100644
  #include <string>
  #include <vector>
  
-@@ -141,6 +142,47 @@ namespace emu88Lib
+@@ -141,6 +142,48 @@ namespace emu88Lib
          // The SC-88Pro board's set. The VE-GS Pro is the same board with its own
          // control ROM and the same waves, so _device picks whose control ROM is read.
          static Sc88ProRomSet findSc88ProRomSet(RomDevice _device = RomDevice::Sc88Pro);
@@ -846,6 +977,7 @@ index 9ad0e58..ad737a1 100644
 +            const uint8_t* wave = nullptr;    size_t waveSize = 0;
 +        };
 +        static void setInjectedSc8850RomImages(const Sc8850RomImages* _images);
++        static bool injectedSc8850RomImages(Sc8850RomImages& _out); // copy, false if none is set
 +        // Nuked SC-55 Poly: SC-8820 images held by the caller (CPU 64/128 KiB, program 2 MiB,
 +        // waves 16 + 8 MiB); used instead of scanning the ROM folders while set
 +        struct Sc8820RomImages

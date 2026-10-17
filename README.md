@@ -76,7 +76,7 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 - **Bit-exact lazy timer evaluation** in `mcu_timer.cpp`: event-free timer ticks only increment a counter. About **35-40 % less CPU** per instance (with `-O3 -flto`), output identical to the original core.
 - **Bit-exact timer and sub-MCU shortcuts** (Issue #28): the 8-bit timer skips whole counting cycles while all its interrupts are off (the SC-55mk2 runs it as a 6-cycle loop), and the SC-55mk2 sub-MCU takes its timer prescaler and interrupt checks in bulk. SC-55mk2 about 12 % and SC-55 about 9 % less CPU under full load, output still identical to the original core.
 - **Packing and wake logic:** notes fill the lowest awake instance first; a single awake instance renders directly in the audio thread without any threading overhead.
-- **Memory:** wave ROMs are shared between SC-55 units (one block, untouched pages cost nothing); the unused 4 MB LCD pixel buffer per unit is gone; 88emu units share one decoded wave ROM.
+- **Memory:** wave ROMs are shared between SC-55 units (one block, untouched pages cost nothing); the unused 4 MB LCD pixel buffer per unit is gone; 88emu units share one decoded wave ROM; the SC-8820 and SC-8850 read their wave ROM directly from the embedded image (no per-unit copy).
 - **Faster loading:** SC-55 units are cloned from unit 0 instead of each booting itself (SC-55mk2 load time 6.4 s to 0.6 s under Wine); SC-88 Pro units boot in the background.
 
 ### User interface (Windows)
@@ -555,8 +555,10 @@ Tried and rejected: polling the peripherals less often (< 5 %), skipping silent 
 | SC-55 v1.21 | 236 MB | **30 MB** |
 | SC-55mk2 | 216 MB | **29 MB** |
 | SC-88 Pro | 247 MB | **166 MB** |
+| SC-8820 (4 units) | 213 MB | **81 MB** |
+| SC-8850 (2 units) | 160 MB | **129 MB** |
 
-Each SC-55 unit held 19.5 MB of arrays (wave ROMs 5 MB + card 2 MB + expansion 8 MB + a 4 MB LCD buffer), of which about 3.5 MB were used. Now the wave ROMs are one `calloc` block shared by all units (untouched pages cost nothing) and the LCD buffer is only created on demand. In the SC-88 Pro, the decoded wave ROM is shared process-wide (cache by FNV hash of the raw data); the rest (about 35 MB per unit) is the internal state of 88emu and JIT code.
+Each SC-55 unit held 19.5 MB of arrays (wave ROMs 5 MB + card 2 MB + expansion 8 MB + a 4 MB LCD buffer), of which about 3.5 MB were used. Now the wave ROMs are one `calloc` block shared by all units (untouched pages cost nothing) and the LCD buffer is only created on demand. In the SC-88 Pro, the decoded wave ROM is shared process-wide (cache by FNV hash of the raw data); the rest (about 35 MB per unit) is the internal state of 88emu and JIT code. The SC-8820 and SC-8850 map their wave ROM straight from the embedded image instead of copying it (the SC-8820 used to copy 24 MB per unit, the SC-8850 a shared 32 MB block that was also hashed at every boot), so a unit costs about 13 MB (SC-8820) or 34 MB (SC-8850) in the Linux measurement; the output is bit-identical.
 
 ### Load time (Wine, one core)
 
@@ -566,7 +568,7 @@ Each SC-55 unit held 19.5 MB of arrays (wave ROMs 5 MB + card 2 MB + expansion 8
 | SC-55mk2 | 6.41 s | **0.58 s** |
 | SC-88 Pro | 3.56 s | **1.06 s** |
 
-Only SC-55 unit 0 boots; the others take a bit-exact copy of its state (`Emulator::CopyStateFrom`). SC-88 Pro units 1..N boot in background threads, and a unit that is needed before it has booted makes the wake-up wait. The warmer also waits for a booting unit it needs, because otherwise the warm-up time would depend on the boot time and the output would not be reproducible.
+Only SC-55 unit 0 boots; the others take a bit-exact copy of its state (`Emulator::CopyStateFrom`). SC-88 Pro units 1..N boot in background threads, and a unit that is needed before it has booted makes the wake-up wait. The warmer thread (not the audio thread) waits for a booting unit it needs, and it schedules by the logical position in the state log, because otherwise the warm-up would depend on the boot time and the output would not be reproducible. So playing right after loading no longer stalls the first block (SC-8820 1.7 s to 2 ms, SC-8850 2.8 s to 4 ms in the sandbox).
 
 ---
 
