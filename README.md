@@ -298,19 +298,19 @@ The SC-8820 plug-in uses the 88emu core with the SC-8820 firmware (compile-time 
 
 - **Graphics:** drawn from scratch by `tools/make_sc8820_panel.py` after photos of the device (no photo or third-party art is used): the champagne metal front, the smoked display window with the POWER (red) and USB (amber) symbols, the PART A / PART B level indicators (12 x 3 dots each, green through yellow and orange to red, each dot in a fixed colour), the map labels, the INST MAP button and the knob (labelled GAIN). The maker's logos are replaced by the plug-in's own branding. VOICES (count, bar) and UNITS sit left of INST MAP as on the other panels, the GAIN value under the knob; the strip below holds the name and SETUP.
 - **Lamps:** from unit 0's firmware. It lights the level indicators in 4 blocks of 3 columns per part group and multiplexes them, so the panel combines them over 40 ms. After INST MAP the PART B block above the chosen map lights, as on the device. POWER and USB are always lit (the emulation has no USB host; the firmware would blink USB).
-- **Controls:** INST MAP is the device's button (held while the mouse button is down, at least 120 ms). The knob in place of the device's VOLUME turns GAIN (left-button drag, mouse wheel = 0.1 dB per notch, double-click = 0 dB; its marker follows GAIN), always silently. **Deviation from the device:** there pushing the knob plays the PREVIEW note, but here the left button is needed for turning, so PREVIEW is a **right click** on the knob (held while the button is down). It plays the note chosen in the SETUP menu ("Prevw Note", default C4) on part A01 (Issue #51).
+- **Controls:** INST MAP is the device's button (held while the mouse button is down, at least 120 ms). The knob in place of the device's VOLUME turns GAIN (left-button drag, mouse wheel = 0.1 dB per notch, double-click = 0 dB; its marker follows GAIN), always silently. **Deviation from the device:** there pushing the knob plays the PREVIEW note, but here the left button is needed for turning, so PREVIEW is a **right click** on the knob (held while the button is down). It plays the note chosen in the SETUP menu ("Prevw Note", default C4) on part A01 (Issue #51). A left click on the "Nuked-SC8820" logo switches to the [Pro interface](#sc-8820-pro-interface) (the same as SETUP > Interface Style > Pro).
 - **SETUP:** max polyphony, tone map for all parts (SC-55 / SC-88 / SC-88 Pro / SC-8820, default SC-8820; the same setting as the INST MAP button), Send Reset (MT-32 / GM / GS / GM2, see [MT-32 reset](#mt-32-reset)), all notes off, and below them Interface Style (Basic / Pro, default Basic, stored in the state).
 
 ### SC-8820 Pro interface
 
-The SETUP menu entry **Interface Style** switches the panel of `Nuked-SC8820` between **Basic** (default, the device's front) and **Pro** (both drawn by `tools/make_sc8820_panel.py`, Pro with `--pro`). The device has no display and almost no controls; the Pro interface adds them, inspired by the part view of Sound Canvas VA. It is **customized and less faithful to the original**: everything the panel shows or changes goes through normal MIDI messages, the firmware and the sound are the same in both styles. The choice is stored in the state (`style=0..1`) and switches the panel at once.
+The SETUP menu entry **Interface Style** switches the panel of `Nuked-SC8820` between **Basic** (default, the device's front) and **Pro** (both drawn by `tools/make_sc8820_panel.py`, Pro with `--pro`). The device has no display and almost no controls; the Pro interface adds them, inspired by the part view of Sound Canvas VA. It is **customized and less faithful to the original**: everything the panel shows or changes goes through normal MIDI messages, the firmware and the sound are the same in both styles. A left click on the logo in the lower strip ("Nuked-SC8820" or "Nuked-SC8820 Pro") switches to the other style in the same way. The choice is stored in the state (`style=0..1`) and switches the panel at once.
 
 | | Basic | Pro |
 | --- | --- | --- |
 | Panel | as on the device | device front plus a part display and edit buttons in the lower strip |
 | Display window | POWER, USB, PART A / B lamps, INST MAP | the same, plus a 16-part level display (POWER and USB smaller, at the bottom of the window) |
 | Part settings | MIDI only | shown and editable per part (A01-B16) |
-| Name | `Nuked-SC8820` | `Nuked-SC8820` with an orange "Pro" |
+| Name (logo, left click = switch style) | `Nuked-SC8820` | `Nuked-SC8820` with an orange "Pro" |
 | INST MAP, GAIN, PREVIEW (right click), SETUP | identical | identical |
 
 - **16-part level display:** 16 columns x 8 dots in the style of the device's lamps, for the 16 parts of the port (A or B) the selected part belongs to. The levels come from the notes (velocity x volume x expression, like the SC-55 / SC-88 bar display). Clicking a column selects that part; the marker under the columns shows the selected part.
@@ -383,7 +383,7 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 | Tone map (SC-88 Pro) | SC-55 / SC-88 / SC-88 Pro |
 | Tone map (SC-8850) | SC-55 / SC-88 / SC-88 Pro / SC-8850 (default SC-8850) for all parts: sends Bank Select LSB (CC#32) and the part's bank and program again to every part; stored in the state (`map=0..3`), a GS / GM reset returns to the SC-8850 map. The panel's INST MAP still sets it per part |
 | Prevw Note (SC-88 Pro, SC-8820, SC-8850) | submenu per octave |
-| Interface Style (SC-8820) | Basic (default) / Pro: the device's panel or the [Pro interface](#sc-8820-pro-interface); last entry of the menu, stored in the state (`style=0..1`) |
+| Interface Style (SC-8820) | Basic (default) / Pro: the device's panel or the [Pro interface](#sc-8820-pro-interface); last entry of the menu, stored in the state (`style=0..1`); a left click on the logo switches too |
 
 After a reset from the menu, the plug-in holds back the host's next MIDI events for 100 ms (System Mode: 200 ms) and then plays them in their original order, so that the firmware has finished the reset (measured with `tools/test/reset26.cpp`: notes sound exactly as after boot from 50-100 ms after GM / GS / GM2 and from 150 ms after a System Mode Set on the SC-88 Pro). Resets that come from the host or a MIDI file are passed on unchanged, as before.
 
