@@ -4,6 +4,7 @@
 #   sowie, falls 88emu gebaut ist (setup_wb.sh mit sc88pro.zip): Nuked-SC88_Pro.clap/.dll
 #   und mit SC-8850-ROMs (setup_wb.sh, 4. Argument): Nuked-SC8850.clap/.dll
 #   und mit SC-88-ROMs (setup_wb.sh, 5. Argument): Nuked-SC88.clap/.dll
+#   und mit MT-32/CM-32L-ROMs (setup_wb.sh, mt32_roms.zip): Nuked-MT32.clap/.dll
 set -e
 WB=/home/claude/wb; S=$WB/src; R=$WB/roms; CXX=x86_64-w64-mingw32-g++-posix
 cd $WB/tools/winbuild && mkdir -p gen out2 && . ./build2.sh
@@ -26,5 +27,10 @@ if [ -f $WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ] && [ -f
   echo "SC-88 (88emu):"
   export GM=$WB/gearmulator LIBW=$WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ROM88O=$WB/rom88sc
   . ./build88o.sh; build88o
+fi
+if [ -f $WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ] && [ -d $WB/testdata/roms_la ]; then
+  echo "MT-32 / CM-32L (88emu):"
+  export GM=$WB/gearmulator LIBW=$WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ROMLA=$WB/testdata/roms_la P256=$WB/p256_repo
+  . ./buildmt32.sh; buildmt32
 fi
 ls -la out2

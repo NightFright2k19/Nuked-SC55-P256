@@ -2,8 +2,11 @@
 
 // SC-88 Pro (88emu engine without an SC-8850 / SC-88 device switch)
 #if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88) && \
-    !defined(NUKED_SC55_DEVICE_8820)
+    !defined(NUKED_SC55_DEVICE_8820) && !defined(NUKED_SC55_DEVICE_LA)
 #define NUKED_SC55_DEVICE_88PRO 1
+#endif
+#if defined(NUKED_SC55_DEVICE_LA) && !defined(NUKED_SC55_LA_LEVEL_DB)
+#define NUKED_SC55_LA_LEVEL_DB 0.0f // level matching of the MT-32 / CM-32L at GAIN 0 dB, see kLevelMatchDb
 #endif
 
 #include <array>
@@ -65,7 +68,8 @@ public:
 		Sc88Pro,
 		Sc8850,
 		Sc88,
-		Sc8820
+		Sc8820,
+		Mt32 // MT-32 (old / new) and CM-32L, device chosen in the SETUP menu (issue #69)
 #endif
 	};
 
@@ -306,6 +310,8 @@ public:
 	// SC-8850 A01..D16 (IN A..D, the four USB cables)
 #if defined(NUKED_SC55_DEVICE_8850)
 	static constexpr int kNumPorts = 4;
+#elif defined(NUKED_SC55_DEVICE_LA)
+	static constexpr int kNumPorts = 1; // one MIDI IN
 #elif defined(NUKED_SC55_ENGINE_88PRO)
 	static constexpr int kNumPorts = 2;
 #else
@@ -394,6 +400,38 @@ public:
 	static constexpr int kMaxToneMap = 3, kMapRounds = 2;
 	std::atomic<int> tone_map{3};
 	int last_tone_map = 3;
+#elif defined(NUKED_SC55_DEVICE_LA)
+	// MT-32 / CM-32L: no tone maps
+	static constexpr int kMaxToneMap = 0, kMapRounds = 1;
+	std::atomic<int> tone_map{0};
+	int last_tone_map = 0;
+	// SETUP menu "Device" (stored in the state): the units are booted again as the new device
+	static constexpr int kLaDevices = 3; // 0 = MT-32 (old), 1 = MT-32 (new), 2 = CM-32L
+	std::atomic<int> la_device{2};       // default CM-32L (or the first device whose ROMs are there)
+	bool LaAvailable(int d) const;       // ROM set of device d present
+	const char* LaVersion(int d) const;  // firmware version of its ROM set ("1.07"), "" if none
+	int LaActive() const { return la_active.load(); } // device the units run as (-1 while none)
+	// Text on unit 0's 20-character display (GUI thread; false while the units are rebooted)
+	bool GetLaText(char* buf, size_t size);
+	std::atomic<int> ui_encoder{0};      // SELECT: knob detents (right-drag), passed on to all units
+	// Emulated seconds each unit runs at boot (88emu default: 10 s). All three LA devices are past their
+	// intro and take MIDI after 2 s (CM-32L not yet after 1 s); 3 s keeps a margin and boots 3x faster.
+	static constexpr float kLaBootSeconds = 3.0f;
+	static constexpr int kLaKnobStep = 4; // knob travel per detent (of 1023): 256 detents for the whole travel
+	std::atomic<uint32_t> ui_panel_buttons{0}; // MT-32 switches held in the GUI (EMU88_MT32_BUTTON_*)
+	uint32_t PanelLeds() const;          // lamps of all units ORed (bit 0 = MIDI MESSAGE)
+private:
+	std::atomic<int> la_active{-1};
+	bool la_have[kLaDevices]        = {};  // ROM set found (Init)
+	char la_version[kLaDevices][16] = {};  // its firmware version
+	static constexpr emu88_device_id kLaDeviceIds[kLaDevices] = {EMU88_DEVICE_MT32_OLD, EMU88_DEVICE_MT32_NEW,
+	                                                               EMU88_DEVICE_CM32L};
+	uint32_t applied_buttons = 0;
+	double last_sample_rate = 0.0;       // of the last Activate(): a device switch activates again
+	uint32_t last_max_frames = 0;
+	void LaPanelInput();
+	void LaSwitchDevice();
+public:
 #elif defined(NUKED_SC55_DEVICE_88)
 	// SC-88: 0 SC-55, 1 SC-88 (boots with the SC-88 map); SETUP menu, all parts (Issue #59)
 	static constexpr int kMaxToneMap = 1, kMapRounds = 2;
@@ -418,6 +456,8 @@ public:
 	// matches the SC-88 Pro with the same 5 dB (-20.8/-17.0/-18.6 dBFS vs. -20.8/-17.0/-18.5).
 #if defined(NUKED_SC55_DEVICE_8850)
 	static constexpr float kLevelMatchDb = 7.5f;
+#elif defined(NUKED_SC55_DEVICE_LA)
+	static constexpr float kLevelMatchDb = NUKED_SC55_LA_LEVEL_DB;
 #else
 	static constexpr float kLevelMatchDb = 5.0f;
 #endif
@@ -538,7 +578,7 @@ public:
 #endif
 	static constexpr bool HasToneMap()
 	{
-#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88)
+#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_LA)
 		return false; // INST MAP on the panel, per part (synchronised like other panel edits)
 #elif defined(NUKED_SC55_ENGINE_88PRO)
 		return true;

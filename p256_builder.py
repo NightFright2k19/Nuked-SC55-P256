@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Nuked SC-55 / SC-88 / SC-8820 / SC-8850 P256 - Plugin Builder
+Nuked SC-55 / SC-88 / SC-8820 / SC-8850 / MT-32 P256 - Plugin Builder
 
 Creates the single-file plugins (CLAP + VST2, Windows x64) from the ROM-less templates in
 "templates" (without ROMs and without space reserved for them; the script inserts the ROMs)
@@ -14,6 +14,9 @@ filenames do not matter - identification is based on the contents via SHA-256).
   SC-88 Pro          -> output/.../Nuked-SC88_Pro.*
   SC-8820            -> output/.../Nuked-SC8820.*  (interface Basic / Pro in the SETUP menu)
   SC-8850            -> output/.../Nuked-SC8850.*
+  MT-32 / CM-32L     -> output/.../Nuked-MT32.*    (MT-32 old, MT-32 new and CM-32L in one plugin,
+                                                    device chosen in the SETUP menu; built when at
+                                                    least one of the three ROM sets is complete)
 
 Everything for which a complete ROM set is found will be built.
 SC-55mk2: If only the original rom2 (512 KB) is available, the CTF patch (Capital Tone
@@ -67,6 +70,40 @@ KNOWN = {
     "34a8a0af36fe38cba9f442d17881cb96305ec905d5baa4cc819f10d8d4ec49f7": ("8820", "wave0"),
     "7284bf21923f966c78019a5d697c8a11bb82ff3bf7a1af95957397feb8dfc597": ("8820", "wave1"),
 }
+# MT-32 / CM-32L (LA boards, SHA-256 -> ("la", role)). Old MT-32 firmware: the two 32 KiB EPROMs
+# (A = IC27, even addresses; B = IC26, odd addresses) or the combined 64 KiB image.
+for _sha, _role in (
+    ("a73a06c23ed38370e58a11fb1b86f7ea4c547061a60d7aa62bae446235fd2dff", "old 1.07"),
+    ("967d2e3c782d87015b4a0b08348baf6bef9ad7fa7fb0d2e35d83b3158850bafd", "old 1.07 A"),
+    ("f2889cdd5e8dce2989d0a63628480191eba50aa46e3ee349fcc4926045ebaf91", "old 1.07 B"),
+    ("1942ad350727dad28f986f89f473e5fb86b17aabf9c9b91fd1382ad6767b83a6", "old 1.06"),
+    ("17d9b8b65b92ed73a4608247858f3ffefe901934df4e14783993e49238cdc675", "old 1.06 A"),
+    ("5be9dba23bebfe4b342d2b086ed5fddca1e7436eb4900b3e4e8fdd7064490c22", "old 1.06 B"),
+    ("a476d2f8273c06ffba54f6c828eb8184b44d89a6aed38a26dfd9096a2c8cc11a", "old 1.05"),
+    ("886433723e396c01efb5844d4edfa9caa419240a03dec2153f075048d79f3129", "old 1.05 A"),
+    ("4d1a74c385abb7e2a1868c9ca1720702d1959ef60376b1f4aa3b9effac5a9c87", "old 1.05 B"),
+    ("c0ea149eaadc48049572ec429e45f90ab1bb75f1ed07000c636fc0124b64da23", "old 1.04"),
+    ("70fe51fef3ef16fac12f014f5c03e5cb69d9819d7568322459d9b08c675be78a", "old 1.04 A"),
+    ("4ed69cdcb5a575f869f55f0751a14da7c9d31b3a6720b91c203ba7029d6cde84", "old 1.04 B"),
+    ("c088c026ad99e13204ac4aa157052f443c52424cbd6394a82abd60bab4c34b91", "old Blue Ridge"),
+    ("6416f335c596d853d6bb773fcdd2f575e291b57aa382092b375ba5bd1f3d8108", "old Blue Ridge A"),
+    ("9da6e3f5f81915b4956ca4c9398589419b2b82d7a11ff8baae821e22566b85b2", "old Blue Ridge B"),
+    ("9b16e6132fbc16e84ee74a21b3683ef60ffe6e7cbde12444e87586fbde99f7f1", "old M-9"),
+    ("4b67dc6e09085b969efaf475f61fb0c5534bf78a8cfb8dbca6c1335442de9538", "old M-9 A"),
+    ("d0121e2fb1fbd34ee23b56e11fdb811ebc1bd1f1c94ec3802653cc17dcd817d7", "old M-9 B"),
+    ("a5339b966142dd2ca0e49b7c4cc1307510a753ea3331c85355706d306ac01d86", "new 2.04"),
+    ("a1ee6ac3190bb94daeae1785b1c4b0f91dc1648880ecef0772df794f20673dfb", "new 2.07"),
+    ("08d68695e5bff6bbcbb751d6e4453db9f5ead0b5f41e86480798a04376dfe090", "cm32l 1.02"),
+    ("c8aea5fb1b28183523601bbc5fd7e2f48397c1cb26f8687d240333c2190e83e2", "cm32l 1.00"),  # LAPC-I 1.00
+    ("d9164063f293410cf33f2f64cdcea6893b44723fe41938e07ec9aef58b406238", "R15449121"),   # PCM, both MT-32
+    ("990d5bb6b6dd1ba74a009ee4712beb5cecc97b11ee63dfd78c26babd0f8e5b53", "R15179844"),   # = 1st half of it
+    ("95f312aee6f359b844776c6a18d9e5ae728d295a1bd256b0a5339b58b3852899", "R15179845"),   # = 2nd half
+    ("5ed28de779c05b35e456cc95bdd4f520ea1b8d3079c6809fd49ae061fee9f763", "R15179945"),   # CM-32L PCM extension
+    ("0dc50190bb7ea3fb212c970346b771a511772b528801e7eda6d27efda8c40698", "R15449121+R15179945"),
+    ("8ec50a524dde9c39479550ca204b5803ea4dce0bc668152983ad7f3914c2c63f", "R15179857"),   # reverb, old MT-32
+    ("a4e146bfad60bdb47738b8b53292d16c612ef8edcfe710ee40ca69618421bd82", "R15179917"),   # reverb, new MT-32 + CM-32L
+):
+    KNOWN[_sha] = ("la", _role)
 # ROMs known only by MD5 (from 88emu's ROM registry): the earlier reconstruction of the SC-8820 CPU ROM
 KNOWN_MD5 = {
     "b03dc0c554fae77bb1782da4ccfadfbd": ("8820", "internal"),
@@ -84,7 +121,16 @@ MODELS = [
     ("88pro", "Nuked-SC88_Pro", "SC-88 Pro", [(0, "control"), (1, "wave0"), (2, "wave1"), (3, "wave2")]),
     ("8820", "Nuked-SC8820", "SC-8820", [(0, "internal"), (1, "program"), (2, "wave0"), (3, "wave1")]),
     ("8850", "Nuked-SC8850", "SC-8850", [(0, "internal"), (1, "program"), (2, "data"), (3, "wave")]),
+    # MT-32 / CM-32L: one ROM set per device (slot 0 = MT-32 old, 1 = MT-32 new, 2 = CM-32L), see la_sets()
+    ("la", "Nuked-MT32", "MT-32 / CM-32L", [(0, "MT-32 old"), (1, "MT-32 new"), (2, "CM-32L")]),
 ]
+# Firmware per LA device, preferred first (the plugin shows the version it was built with)
+LA_FIRMWARE = {
+    "MT-32 old": ["old 1.07", "old 1.06", "old 1.05", "old 1.04", "old Blue Ridge", "old M-9"],
+    "MT-32 new": ["new 2.04", "new 2.07"],
+    "CM-32L": ["cm32l 1.02", "cm32l 1.00"],
+}
+LA_MAGIC = b"NKLA1\0\0\0"
 
 
 def apply_ctf(rom2: bytes) -> bytes:
@@ -152,10 +198,77 @@ def fill_template(template: bytes, entries, name: str) -> bytes:
     return bytes(out)
 
 
+def la_sets(found):
+    """MT-32 / CM-32L: per device (role) the best complete set ->
+    {role: (version, control parts, wave parts, reverb)} and the missing pieces of the others."""
+    sets, missing = {}, []
+
+    def first(*names):
+        for n in names:
+            if ("la", n) in found:
+                return [found[("la", n)]]
+            if all(("la", p) in found for p in n.split("+")) and "+" in n:
+                return [found[("la", p)] for p in n.split("+")]
+        return None
+
+    for role, firmwares in LA_FIRMWARE.items():
+        control = version = None
+        for fw in firmwares:
+            if ("la", fw) in found:
+                control, version = [found[("la", fw)]], fw
+            elif ("la", fw + " A") in found and ("la", fw + " B") in found:
+                control, version = [found[("la", fw + " A")], found[("la", fw + " B")]], fw
+            if control:
+                break
+        if role == "CM-32L":
+            wave, reverb = first("R15449121+R15179945"), first("R15179917")
+            if wave is None and ("la", "R15179945") in found:
+                pcm = first("R15449121", "R15179844+R15179845")
+                wave = pcm + [found[("la", "R15179945")]] if pcm else None
+        else:
+            wave = first("R15449121", "R15179844+R15179845")
+            reverb = first("R15179857" if role == "MT-32 old" else "R15179917")
+        if control and wave and reverb:
+            sets[role] = (version.split(" ", 1)[1], control, wave, reverb[0])
+        else:
+            missing += [f"{role} {what}" for what, ok in (("control", control), ("wave", wave), ("reverb", reverb))
+                        if not ok]
+    return sets, missing
+
+
+def la_blob(version, control, wave, reverb) -> bytes:
+    """One LA device set for the plugin: header (magic, version text, sizes), control, wave, reverb.
+    Two control files are the old MT-32's EPROM pair: A = even, B = odd addresses."""
+    if len(control) == 2:
+        a, b = control[0].read_bytes(), control[1].read_bytes()
+        ctl = bytearray(len(a) + len(b))
+        ctl[0::2], ctl[1::2] = a, b
+        ctl = bytes(ctl)
+    else:
+        ctl = control[0].read_bytes()
+    pcm = b"".join(p.read_bytes() for p in wave)
+    rev = reverb.read_bytes()
+    head = LA_MAGIC + version.encode("ascii")[:15].ljust(16, b"\0") + struct.pack("<4I", len(ctl), len(pcm), len(rev), 0)
+    return head + ctl + pcm + rev
+
+
 def plan(found):
     """Per model: what was found. List of dicts (key, file, title, parts, have, missing, ctf)."""
     result = []
     for key, tpl_name, title, parts in MODELS:
+        if key == "la":
+            sets, missing = la_sets(found)
+            if sets:  # complete: the devices whose set was found
+                parts = [(loc, r) for loc, r in parts if r in sets]
+                have = {r: sets[r][1][0] for _, r in parts}
+                missing = []
+            else:
+                have = {r: None for _, r in parts}
+                if any(k[0] == "la" for k in found):
+                    have[parts[0][1]] = next(p for k, p in found.items() if k[0] == "la")
+            result.append(dict(key=key, file=tpl_name, title=title, parts=parts, have=have, ctf=False,
+                               missing=missing, la=sets))
+            continue
         roles = [r for _, r in parts]
         have = {r: found.get((key, r)) for r in roles}
         ctf = False
@@ -174,7 +287,9 @@ def build_model(item, templates: Path = TEMPLATES, output: Path = OUTPUT):
     if not tpl.is_file():
         raise ValueError(f"template missing ({tpl})")
     entries = []
-    for location, role in parts:
+    if key == "la":
+        entries = [(location, la_blob(*item["la"][role])) for location, role in parts]
+    for location, role in ([] if key == "la" else parts):
         blob = item["have"][role].read_bytes()
         if key == "mk2" and role == "rom2" and hashlib.sha256(blob).hexdigest() != CTF_SHA:
             blob = apply_ctf(blob)
@@ -192,7 +307,7 @@ def build_model(item, templates: Path = TEMPLATES, output: Path = OUTPUT):
 
 
 def main() -> int:
-    print("Nuked SC-55 / SC-88 / SC-8820 / SC-8850 P256 - Plugin Builder\n")
+    print("Nuked SC-55 / SC-88 / SC-8820 / SC-8850 / MT-32 P256 - Plugin Builder\n")
     if not ROMS.is_dir():
         print(f"Folder missing: {ROMS}\n-> Put your ROM files there (subfolders are allowed).")
         return 1

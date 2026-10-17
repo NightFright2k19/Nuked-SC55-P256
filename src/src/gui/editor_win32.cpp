@@ -22,6 +22,8 @@
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC8850P256Editor_"
 #elif defined(NUKED_SC55_DEVICE_8820)
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC8820P256Editor_"
+#elif defined(NUKED_SC55_DEVICE_LA)
+#define NUKED_SC55_WNDCLASS_PREFIX "NukedMT32P256Editor_"
 #elif defined(NUKED_SC55_DEVICE_88)
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC88oP256Editor_"
 #elif defined(NUKED_SC55_ENGINE_88PRO)
@@ -132,6 +134,11 @@ struct Editor {
     DWORD pend_until[32][7] = {}; // ... shown and stepped from until the firmware's own values follow
     HFONT f_pro        = nullptr;
 #endif
+#ifdef NUKED_SC55_DEVICE_LA
+    char la_text[21]   = "                    "; // MT-32 LCD as last read
+    bool drag_sel      = false;  // knob turned as the device's SELECT (right-drag)
+    HFONT f_lcd        = nullptr;
+#endif
     bool menu_open  = false;
     float peak      = 0;     // polyphony peak hold
     int peak_hold   = 0;     // frames
@@ -207,6 +214,9 @@ bool GatherLcd(NukedSc55& p, lcdview::View& view)
 #ifdef NUKED_SC55_DEVICE_8820
 #include "editor_sc8820.inc"
 #endif
+#ifdef NUKED_SC55_DEVICE_LA
+#include "editor_mt32.inc"
+#endif
 
 void Draw(Editor& e, HDC dc)
 {
@@ -219,6 +229,8 @@ void Draw(Editor& e, HDC dc)
     Draw8850(e, dc);
 #elif defined(NUKED_SC55_DEVICE_8820)
     Draw8820(e, dc);
+#elif defined(NUKED_SC55_DEVICE_LA)
+    DrawMt32(e, dc);
 #elif defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     Draw88o(e, dc);
 #else
@@ -252,6 +264,8 @@ int HitButton([[maybe_unused]] const Editor& e, int x, int y)
     return Hit8850(x, y);
 #elif defined(NUKED_SC55_DEVICE_8820)
     return Hit8820(e, x, y);
+#elif defined(NUKED_SC55_DEVICE_LA)
+    return HitMt32(e, x, y);
 #elif defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     return Hit88o(x, y);
 #else
@@ -306,6 +320,10 @@ void ShowSetupMenu(Editor& e)
     const int base_8850[] = {128, 256, 256, 256, 256, 256, 256, 256, 256}; // units of 128
     opts = base_8850;
 #endif
+#ifdef NUKED_SC55_DEVICE_LA
+    const int base_la[] = {32, 64, 64, 64, 64, 64, 64, 64, 64}; // units of 32
+    opts = base_la;
+#endif
 
     HMENU m = CreatePopupMenu();
     AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Max. polyphony", L"Max. Polyphonie"));
@@ -317,17 +335,21 @@ void ShowSetupMenu(Editor& e)
         if (i > 0 && v == std::min(opts[i - 1], maxs)) break; // no duplicates
 #endif
         wchar_t s[128];
+#ifdef NUKED_SC55_DEVICE_LA
+        const wchar_t* dflt = units == 1 ? T(L", default", L", Standard") : L""; // one unit, like the device
+#else
+        const wchar_t* dflt = L"";
+#endif
         if (IsGerman())
-            swprintf(s, 128, L"   %d Stimmen\t(%d %ls, %d Partials)", v, units,
-                     units == 1 ? L"Einheit" : L"Einheiten", units * cap);
+            swprintf(s, 128, L"   %d Stimmen\t(%d %ls, %d Partials%ls)", v, units,
+                     units == 1 ? L"Einheit" : L"Einheiten", units * cap, dflt);
         else
-            swprintf(s, 128, L"   %d voices\t(%d %ls, %d partials)", v, units,
-                     units == 1 ? L"unit" : L"units", units * cap);
+            swprintf(s, 128, L"   %d voices\t(%d %ls, %d partials%ls)", v, units,
+                     units == 1 ? L"unit" : L"units", units * cap, dflt);
         const bool checked = (cur + cap - 1) / cap == units;
         AppendMenuW(m, MF_STRING | (checked ? MF_CHECKED : 0), 100 + v, s);
     }
-#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88) && \
-    !defined(NUKED_SC55_DEVICE_8820)
+#ifdef NUKED_SC55_DEVICE_88PRO
     {
         const int tm = p.tone_map.load();
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
@@ -376,6 +398,24 @@ void ShowSetupMenu(Editor& e)
                     T(L"   SC-88 Map\t(default)", L"   SC-88 Map\t(Standard)"));
     }
 #endif
+#ifdef NUKED_SC55_DEVICE_LA
+    {   // device (issue #69): the units are booted again as the chosen one; the panel follows.
+        // The version is the firmware the plugin was built with; devices without ROMs are greyed.
+        const int dev = p.la_device.load();
+        AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Device", L"Ger\u00e4t"));
+        const wchar_t* names[NukedSc55::kLaDevices] = {T(L"MT-32 (old", L"MT-32 (alt"), T(L"MT-32 (new", L"MT-32 (neu"),
+                                                       L"CM-32L ("};
+        for (int d = 0; d < NukedSc55::kLaDevices; ++d) {
+            wchar_t s[96];
+            const bool have = p.LaAvailable(d);
+            std::swprintf(s, 96, L"   %ls%ls%hs)%ls", names[d], have ? (d == 2 ? L"v" : L", v") : L"", p.LaVersion(d),
+                          d == 2 ? T(L"\t(default)", L"\t(Standard)") : L"");
+            if (!have && d == 2) std::swprintf(s, 96, L"   CM-32L%ls", T(L"\t(default)", L"\t(Standard)"));
+            AppendMenuW(m, MF_STRING | (dev == d ? MF_CHECKED : 0) | (have ? 0 : MF_GRAYED), 30 + d, s);
+        }
+    }
+#endif
 #if defined(NUKED_SC55_DEVICE_8820) || defined(NUKED_SC55_DEVICE_8850)
     {   // PREVIEW (right click on the VOLUME knob / PREVIEW knob) plays this note, as on the SC-88 Pro
         wchar_t pl[96];
@@ -387,6 +427,12 @@ void ShowSetupMenu(Editor& e)
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     // "Send Reset": choosing an entry sends that reset at once (no mark, nothing stored)
     HMENU rt_menu = CreatePopupMenu();
+#ifdef NUKED_SC55_DEVICE_LA
+    {   // MT-32 / CM-32L: the firmware's "All parameters reset" (as after power-on)
+        AppendMenuW(rt_menu, MF_STRING, 11, T(L"All parameters reset", L"Alle Parameter zur\u00fccksetzen"));
+        AppendMenuW(m, MF_POPUP, (UINT_PTR)rt_menu, T(L"Send Reset", L"Reset senden"));
+    }
+#else
     {
         AppendMenuW(rt_menu, MF_STRING, 10, L"MT-32");
         AppendMenuW(rt_menu, MF_STRING, 6, L"GM");
@@ -394,6 +440,7 @@ void ShowSetupMenu(Editor& e)
         if (p.HasGm2()) AppendMenuW(rt_menu, MF_STRING, 7, L"GM2");
         AppendMenuW(m, MF_POPUP, (UINT_PTR)rt_menu, T(L"Send Reset", L"Reset senden"));
     }
+#endif
     if (p.HasSystemMode()) { // SC-88 / SC-88 Pro: System Mode Set (default Mode 1 = factory setting)
         HMENU sm_menu = CreatePopupMenu();
         const int sm  = p.system_mode.load();
@@ -423,6 +470,9 @@ void ShowSetupMenu(Editor& e)
 #elif defined(NUKED_SC55_DEVICE_8820)
     const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTALIGN | TPM_BOTTOMALIGN,
                                    r.left + Setup20(e).right, r.top + Setup20(e).top - 2, 0, e.hwnd, nullptr);
+#elif defined(NUKED_SC55_DEVICE_LA)
+    const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTALIGN | TPM_BOTTOMALIGN,
+                                   r.left + ELA_SETUP.right, r.top + ELA_SETUP.top - 2, 0, e.hwnd, nullptr);
 #elif defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_BOTTOMALIGN,
                                    r.left + E88O_SETUP.left, r.top + E88O_SETUP.top - 2, 0, e.hwnd, nullptr);
@@ -444,8 +494,13 @@ void ShowSetupMenu(Editor& e)
     } else if (cmd >= 100) {
         p.SetMaxVoices(cmd - 100); // stored in the plugin state by the host
         p.NotifyStateChanged();
-    } else if (cmd == 1 || cmd == 2 || cmd == 6 || cmd == 7 || cmd == 10) { // all notes off, resets, MT-32
+    } else if (cmd == 1 || cmd == 2 || cmd == 6 || cmd == 7 || cmd == 10 || cmd == 11) { // all notes off, resets
         p.ui_command = cmd;
+#ifdef NUKED_SC55_DEVICE_LA
+    } else if (cmd >= 30 && cmd < 30 + NukedSc55::kLaDevices) { // device, stored in the state
+        p.la_device = cmd - 30;
+        p.NotifyStateChanged();
+#endif
 #ifdef NUKED_SC55_DEVICE_8820
     } else if (cmd == 20 || cmd == 21) { // interface style, stored in the state
         p.ui_style = cmd - 20;
@@ -476,6 +531,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 #endif
 #ifdef NUKED_SC55_DEVICE_8820
     if (e && Mouse8820(*e, hwnd, msg, wp, lp)) return 0;
+#endif
+#ifdef NUKED_SC55_DEVICE_LA
+    if (e && MouseMt32(*e, hwnd, msg, wp, lp)) return 0;
 #endif
 #if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     if (e && Mouse88o(*e, hwnd, msg, wp, lp)) return 0;
@@ -588,6 +646,9 @@ void* Create(NukedSc55* plugin, const char* display_name)
 #ifdef NUKED_SC55_DEVICE_8820
     e->f_pro   = MakeFont(17, FW_BOLD, "Arial");
 #endif
+#ifdef NUKED_SC55_DEVICE_LA
+    e->f_lcd   = MakeFont(14, FW_BOLD, "Consolas");
+#endif
     return e;
 }
 
@@ -626,6 +687,9 @@ void Destroy(void* ed)
         if (f) DeleteObject(f);
 #ifdef NUKED_SC55_DEVICE_8820
     if (e->f_pro) DeleteObject(e->f_pro);
+#endif
+#ifdef NUKED_SC55_DEVICE_LA
+    if (e->f_lcd) DeleteObject(e->f_lcd);
 #endif
     if (e->bg_dc) {
         SelectObject(e->bg_dc, e->bg_old);

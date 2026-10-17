@@ -244,6 +244,8 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 	}
 #if defined(NUKED_SC55_DEVICE_8850)
 	partials_per_instance = 128; // SC-8850: 128 voices per unit (two XP tone generators)
+#elif defined(NUKED_SC55_DEVICE_LA)
+	partials_per_instance = 32;  // MT-32 / CM-32L: 32 partials per unit
 #elif defined(NUKED_SC55_ENGINE_88PRO)
 	partials_per_instance = 64; // SC-88 Pro: 64 voices per unit
 #else
@@ -259,6 +261,12 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 	if (const auto env = get_env_var("NUKED_SC55_POLY_DYNAMIC"); env == "0") {
 		dynamic_instances = false;
 	}
+#ifdef NUKED_SC55_DEVICE_LA
+	// MT-32 / CM-32L: all units run from the start and get every message. A sleeping unit would
+	// have to be woken by replaying the SysEx state at MIDI wire speed (issue #69: faster corrupts
+	// the patch memory), which takes seconds; one unit costs little CPU.
+	dynamic_instances = false;
+#endif
 	if (const auto env = get_env_var("NUKED_SC55_POLY_MIN_ACTIVE"); !env.empty()) {
 		min_active = std::atoi(env.c_str());
 	}
@@ -273,7 +281,31 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 	router.Init(num_instances);
 	router.SetCapacity(partials_per_instance);
 	{
-#ifdef NUKED_SC55_EMBED_ROMS
+#if defined(NUKED_SC55_EMBED_ROMS) && defined(NUKED_SC55_DEVICE_LA)
+		// Single-file build: one ROM set per LA device (location 0 = MT-32 old, 1 = MT-32 new,
+		// 2 = CM-32L), each as written by p256_builder.la_blob(): "NKLA1" header, version text,
+		// sizes, then control, wave and reverb. Devices without a set stay unavailable.
+		for (int k = 0; k < g_embedded_rom_count; ++k) {
+			const auto& r = g_embedded_roms[k];
+			const size_t n = static_cast<size_t>(r.end - r.begin);
+			if (r.location >= kLaDevices || n < 40 || std::memcmp(r.begin, "NKLA1\0\0\0", 8) != 0) continue;
+			uint32_t sz[3];
+			std::memcpy(sz, r.begin + 24, sizeof(sz));
+			if (40ull + sz[0] + sz[1] + sz[2] > n) continue;
+			const uint8_t* ctl = r.begin + 40;
+			if (emu88_set_la_rom_images(kLaDeviceIds[r.location], ctl, sz[0], ctl + sz[0], sz[1],
+			                            ctl + sz[0] + sz[1], sz[2]) != EMU88_RC_OK) {
+				log("88emu: embedded LA ROM set %d invalid", r.location);
+				continue;
+			}
+			la_have[r.location] = true;
+			std::memcpy(la_version[r.location], r.begin + 8, 15);
+		}
+		if (!la_have[0] && !la_have[1] && !la_have[2]) {
+			instances.clear();
+			return false;
+		}
+#elif defined(NUKED_SC55_EMBED_ROMS)
 		// Single-file build: the normalized ROM set is linked into the binary
 		// (locations 0..3 = control, wave A, wave B, wave C; SC-8850: internal, program,
 		// data, wave; SC-88: control and the four wave chips as dumped); no file access.
@@ -309,12 +341,22 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 			emu88_add_rom_path((base / "SC-8850").string().c_str());
 			emu88_add_rom_path((base / "SC-88").string().c_str());
 			emu88_add_rom_path((base / "SC-8820").string().c_str());
+			emu88_add_rom_path((base / "MT-32").string().c_str());
 			emu88_add_rom_path(base.string().c_str());
 		}
+#ifdef NUKED_SC55_DEVICE_LA
+		for (int d = 0; d < kLaDevices; ++d) {
+			la_have[d] = emu88_is_device_available(kLaDeviceIds[d]) != 0;
+			std::snprintf(la_version[d], sizeof(la_version[d]), "%s", la_have[d] ? "?" : "");
+		}
+#endif
 #endif
 	}
 	emu_ok     = true;
 	max_voices = MaxSelectableVoices();
+#ifdef NUKED_SC55_DEVICE_LA
+	max_voices = partials_per_instance; // default 32 voices = one unit, like the device
+#endif
 	{
 		const int hw = static_cast<int>(std::thread::hardware_concurrency());
 		const int threads = std::clamp(std::min(num_instances, hw - 1) - 1, 0, num_instances - 1);
@@ -589,6 +631,18 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	// background, in parallel. Waking or warming a unit waits until it has booted.
 	JoinBootThreads();
 	for (auto& inst : instances) inst.booted->store(false, std::memory_order_relaxed);
+#ifdef NUKED_SC55_DEVICE_LA
+	{   // the device chosen in the SETUP menu; without its ROM set the first one that is there
+		last_sample_rate = requested_sample_rate;
+		last_max_frames  = max_frame_count;
+		int dev = std::clamp(la_device.load(), 0, kLaDevices - 1);
+		for (const int d : {dev, 2, 1, 0})
+			if (la_have[d]) { dev = d; break; }
+		la_device = dev;
+		la_active = dev;
+		applied_buttons = 0;
+	}
+#endif
 #ifdef NUKED_SC55_EMBED_ROMS
 	// (only units that sleep may boot in the background: awake ones are rendered right away)
 	const bool background_boot = get_env_var("NUKED_SC55_NO_BGBOOT") != "1" && dynamic_instances;
@@ -808,6 +862,9 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	assert(process->audio_outputs_count == 1);
 	assert(process->audio_inputs_count == 0);
 
+#ifdef NUKED_SC55_DEVICE_LA
+	if (la_device.load() != la_active.load()) LaSwitchDevice(); // SETUP menu "Device"
+#endif
 	const uint32_t num_frames = process->frames_count;
 	const uint32_t num_events = process->in_events->size(process->in_events);
 	log("--- num_frames: %d, num_events: %d", num_frames, num_events);
@@ -851,6 +908,10 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	// Pro interface: edits from the part display / buttons to all units, part parameters for the display
 	E8820SendUiMidi();
 	if (ui_style.load(std::memory_order_relaxed) == 1) E8820ReadParts();
+#endif
+#ifdef NUKED_SC55_DEVICE_LA
+	// MT-32 switches and SELECT from the GUI: pressed on all units alike (they stay identical)
+	LaPanelInput();
 #endif
 #ifdef NUKED_SC55_DEVICE_88PRO
 	// Front panel of unit 0: edits of the last block passed on, GUI input
@@ -992,7 +1053,11 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 		for (int i = 0; i < NumInstances(); ++i)
 			if (instances[i].awake) mask |= uint64_t{1} << i;
 		ui_awake_mask.store(mask, std::memory_order_relaxed);
+#ifdef NUKED_SC55_DEVICE_LA
+		ui_awake.store(std::min(NumAwake(), router.Allowed()), std::memory_order_relaxed); // all run; shown: in use
+#else
 		ui_awake.store(NumAwake(), std::memory_order_relaxed);
+#endif
 		for (int ch = 0; ch < kNumParts; ++ch) {
 			ui_parts[ch].rhythm.store(router.IsRhythm(ch), std::memory_order_relaxed);
 		}
@@ -1084,6 +1149,9 @@ int NukedSc55::StateString(char* buf, const size_t size) const
 	// INST MAP (all parts) is the one panel setting; synchronised on all units, kept here
 	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d", max_voices.load(),
 	                      tone_map.load(), static_cast<int>(std::lround(gain_db.load() * 10.0f)));
+#elif defined(NUKED_SC55_DEVICE_LA)
+	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d dev=%d", max_voices.load(),
+	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)), la_device.load());
 #elif defined(NUKED_SC55_DEVICE_88)
 	// the tone map for all parts (SETUP menu) is kept here; the panel's own settings live in the firmware
 	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d", max_voices.load(),
@@ -1119,6 +1187,11 @@ bool NukedSc55::ParseState(const char* buf)
 	if (const char* m = std::strstr(buf, "pnote="); m) preview_note = std::clamp(std::atoi(m + 6), 0, 127);
 #ifdef NUKED_SC55_DEVICE_8820
 	if (const char* m = std::strstr(buf, "style="); m) ui_style = std::clamp(std::atoi(m + 6), 0, 1); // else Basic
+#endif
+#ifdef NUKED_SC55_DEVICE_LA
+	// device: switched (units booted again) at the next block; without its ROMs the default applies
+	if (const char* m = std::strstr(buf, "dev="); m && m[4] >= '0' && m[4] < '0' + kLaDevices && la_have[m[4] - '0'])
+		la_device = m[4] - '0';
 #endif
 #else
 	if (const char* m = std::strstr(buf, "gain="); m) // older states: no GAIN = 0 dB
@@ -1995,6 +2068,20 @@ void NukedSc55::HandleUiCommands()
 		return;
 	}
 #endif
+#ifdef NUKED_SC55_DEVICE_LA
+	if (cmd == 1 || cmd == 11) {
+		// MT-32 / CM-32L: "All notes off" (the firmware ignores All Sound Off: notes released, hold
+		// pedal off, the queued MIDI dropped) and "Send Reset" (All parameters reset, as the
+		// firmware's own power-on initialization)
+		for (auto& inst : instances)
+			if (inst.ctx) (cmd == 1) ? emu88_play_silence(inst.ctx) : emu88_play_device_reset(inst.ctx);
+		if (cmd == 11) {
+			UiResetParts();
+			hold_until = render_frame_count + static_cast<uint64_t>(render_sample_rate_hz * 0.3);
+		}
+		return;
+	}
+#endif
 	if (cmd == 1) { // all sound off + all notes off + reset controllers
 		for (uint8_t port = 0; port < kNumPorts; ++port) {
 			for (uint8_t ch = 0; ch < 16; ++ch) {
@@ -2083,6 +2170,7 @@ const char* NukedSc55::ModelName() const
 	case Model::Sc8850: return "SC-8850";
 	case Model::Sc88: return "SC-88";
 	case Model::Sc8820: return "SC-8820";
+	case Model::Mt32: return "MT-32 / CM-32L";
 #endif
 	default: return "SC-55mk2 v1.01";
 	}
@@ -2141,10 +2229,15 @@ bool NukedSc55::E88BootUnit(const int i)
 		emu88_select_device(inst.ctx, EMU88_DEVICE_SC8820);
 #elif defined(NUKED_SC55_DEVICE_88)
 		emu88_select_device(inst.ctx, EMU88_DEVICE_SC88);
+#elif defined(NUKED_SC55_DEVICE_LA)
+		emu88_select_device(inst.ctx, kLaDeviceIds[std::clamp(la_active.load(), 0, kLaDevices - 1)]);
 #else
 		emu88_select_device(inst.ctx, EMU88_DEVICE_SC88PRO);
 #endif
 		emu88_set_stereo_output_samplerate(inst.ctx, 0); // device rate (32 kHz)
+#if defined(NUKED_SC55_DEVICE_LA)
+		emu88_set_fast_boot_seconds(inst.ctx, kLaBootSeconds);
+#endif
 		if (emu88_open_synth(inst.ctx) != EMU88_RC_OK) {
 			log("%s: open_synth failed (ROMs?)", ModelName());
 			emu88_free_context(inst.ctx);
@@ -2159,7 +2252,9 @@ bool NukedSc55::E88BootUnit(const int i)
 		inst.buf_l.reserve(1 << 16);
 		inst.buf_r.reserve(1 << 16);
 		inst.seq_len     = 0;
-#if defined(NUKED_SC55_DEVICE_8820) || defined(NUKED_SC55_DEVICE_8850)
+#if defined(NUKED_SC55_DEVICE_LA)
+		inst.applied_map = 0; // no tone maps
+#elif defined(NUKED_SC55_DEVICE_8820) || defined(NUKED_SC55_DEVICE_8850)
 		inst.applied_map = 3; // boots with its own map (SC-8820 / SC-8850)
 #elif defined(NUKED_SC55_DEVICE_88)
 		inst.applied_map = 1; // boots with the SC-88 map
@@ -2362,8 +2457,14 @@ uint32_t NukedSc55::PanelLeds() const
 {
 	std::unique_lock lock(units_mx, std::try_to_lock);
 	if (!lock.owns_lock() || !lcd_ready.load() || instances.empty() || !instances[0].ctx) return 0;
-#ifdef NUKED_SC55_DEVICE_8820
+#if defined(NUKED_SC55_DEVICE_8820)
 	return ui_leds8820.load(std::memory_order_relaxed); // multiplexed: ORed over a short window
+#elif defined(NUKED_SC55_DEVICE_LA)
+	uint32_t leds = 0; // MIDI MESSAGE: every unit only lights for the notes it plays
+	for (int i = 0; i < NumInstances(); ++i)
+		if (instances[i].ctx && instances[i].booted->load(std::memory_order_acquire))
+			leds |= emu88_get_panel_leds(instances[i].ctx);
+	return leds;
 #else
 	return emu88_get_panel_leds(instances[0].ctx);
 #endif
@@ -3628,5 +3729,55 @@ int NukedSc55::E8820ShownMap(const uint32_t leds)
 	case 0x8: return 3; // 8820
 	default: return -1;
 	}
+}
+#endif
+
+#ifdef NUKED_SC55_DEVICE_LA
+//----------------------------------------------------------------------------
+// MT-32 / CM-32L (issue #69)
+//----------------------------------------------------------------------------
+bool NukedSc55::LaAvailable(const int d) const
+{
+	return d >= 0 && d < kLaDevices && la_have[d];
+}
+
+const char* NukedSc55::LaVersion(const int d) const
+{
+	return LaAvailable(d) ? la_version[d] : "";
+}
+
+// SETUP menu "Device": the units are created again as the chosen device, like swapping the module
+// (what the host sent before is gone; hosts and games send their setup at the start of a song).
+// Audio thread; Activate() boots the units in parallel.
+void NukedSc55::LaSwitchDevice()
+{
+	if (last_sample_rate <= 0.0) return; // not activated yet: Activate() takes the chosen device
+	log("MT-32: device %d -> %d", la_active.load(), la_device.load());
+	Activate(last_sample_rate, 1, last_max_frames);
+}
+
+// The MT-32's switches and SELECT (the device's knob) on all units. The knob is a potentiometer
+// (0..1023, starts at the top = "vol:100"); one SELECT detent moves it by kLaKnobStep.: they start identical and get
+// the same messages, so the same presses keep their parameters identical.
+void NukedSc55::LaPanelInput()
+{
+	const uint32_t buttons = ui_panel_buttons.load(std::memory_order_relaxed);
+	const int detents      = ui_encoder.exchange(0);
+	if (buttons == applied_buttons && detents == 0) return;
+	for (auto& inst : instances) {
+		if (!inst.ctx) continue;
+		if (buttons != applied_buttons) emu88_set_panel_buttons(inst.ctx, buttons);
+		if (detents != 0) emu88_turn_panel_encoder(inst.ctx, detents * kLaKnobStep);
+	}
+	applied_buttons = buttons;
+}
+
+bool NukedSc55::GetLaText(char* buf, const size_t size)
+{
+	std::unique_lock lock(units_mx, std::try_to_lock);
+	if (!lock.owns_lock() || !lcd_ready.load() || instances.empty() || !instances[0].ctx || size == 0) return false;
+	buf[0] = 0;
+	emu88_get_display_text(instances[0].ctx, 0, buf, size);
+	return true;
 }
 #endif
