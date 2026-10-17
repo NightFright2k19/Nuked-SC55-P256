@@ -9,6 +9,7 @@
 #include <array>
 #include <atomic>
 #include <condition_variable>
+#include <deque>
 #include <cstdint>
 #include <functional>
 #include <mutex>
@@ -136,8 +137,10 @@ private:
 		bool awake = true;               // dynamic instance management
 		uint64_t sleep_seq = 0;          // state-log position the instance is synced to
 		// background sync in progress (heap-allocated: keeps Instance movable)
-		std::shared_ptr<std::atomic<bool>> warming =
-		        std::make_shared<std::atomic<bool>>(false);
+		// (number of queued or running jobs; the SC-55 engines have at most one)
+		uint64_t sched_seq = 0;          // 88emu: log position after the jobs already handed to the warmer
+		std::shared_ptr<std::atomic<int>> warming =
+		        std::make_shared<std::atomic<int>>(0);
 		uint64_t silent_frames = 0;      // consecutive silent output
 		float last_peak = 0.0f;          // diag: last block peak (after DC)
 		double last_wake_ms = 0.0;       // diag: duration of last Wake()
@@ -172,8 +175,8 @@ private:
 	std::thread warmer_thread;
 	std::mutex warmer_mutex;
 	std::condition_variable warmer_cv;
-	WarmJob warmer_job;
-	bool warmer_has_job = false, warmer_quit = false;
+	std::deque<WarmJob> warmer_jobs; // (88emu: several may wait while a unit is still booting)
+	bool warmer_quit = false;
 	uint64_t warmer_next_frame = 0, render_frame_count = 0;
 	void StartWarmer();
 	void StopWarmer();

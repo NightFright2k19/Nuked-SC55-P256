@@ -704,7 +704,7 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	for (int i = 0; i < NumInstances(); ++i) {
 		instances[i].awake         = true;
 		instances[i].silent_frames = 0;
-		instances[i].warming->store(false);
+		instances[i].warming->store(0);
 		if (dynamic_instances && i >= min_active) {
 			Sleep(i);
 		}
@@ -3022,7 +3022,7 @@ void NukedSc55::StartWarmer()
 {
 	StopWarmer();
 	warmer_quit     = false;
-	warmer_has_job  = false;
+	warmer_jobs.clear();
 	warmer_thread   = std::thread([this] { WarmerLoop(); });
 }
 
@@ -3082,15 +3082,27 @@ void NukedSc55::WarmerLoop()
 		WarmJob job;
 		{
 			std::unique_lock lk(warmer_mutex);
-			warmer_cv.wait(lk, [&] { return warmer_quit || warmer_has_job; });
+			warmer_cv.wait(lk, [&] { return warmer_quit || !warmer_jobs.empty(); });
 			if (warmer_quit) return;
-			job = std::move(warmer_job);
-			warmer_has_job = false;
+			job = std::move(warmer_jobs.front());
+			warmer_jobs.pop_front();
 		}
 		auto& inst = instances[job.instance];
+#ifdef NUKED_SC55_ENGINE_88PRO
+		// A unit may still be booting in the background: wait for it here, not in the audio thread.
+		// The job (entries up to target_seq) was fixed when it was scheduled, so the result does not
+		// depend on how long the boot takes.
+		while (!inst.booted->load(std::memory_order_acquire)) {
+			{
+				std::lock_guard lk(warmer_mutex);
+				if (warmer_quit) return;
+			}
+			std::this_thread::sleep_for(std::chrono::microseconds(500));
+		}
+#endif
 		ReplayInto(inst, job.entries);
 		inst.sleep_seq = job.target_seq;
-		inst.warming->store(false, std::memory_order_release);
+		inst.warming->fetch_sub(1, std::memory_order_release);
 	}
 }
 
@@ -3110,17 +3122,22 @@ void NukedSc55::ScheduleWarming()
 		const auto& inst = instances[i];
 		if (inst.awake) continue;
 		++considered;
+#ifndef NUKED_SC55_ENGINE_88PRO
 		if (inst.warming->load(std::memory_order_acquire)) return; // one at a time
+#endif
 #ifdef NUKED_SC55_ENGINE_88PRO
-		// Still booting in the background: only if it needs warming now, wait for it, so the
-		// warming sequence (and therefore the output) is exactly that of a unit booted in
-		// Activate(). Before the first MIDI arrives nothing needs warming and nothing waits.
-		if (!inst.booted->load(std::memory_order_acquire)) {
-			if (inst.sleep_seq >= state_log.Seq()) continue;
-			while (!inst.booted->load(std::memory_order_acquire))
-				std::this_thread::sleep_for(std::chrono::microseconds(500));
-		}
-		if (inst.sleep_seq < state_log.Seq() || inst.applied_map != tone_map.load()) { cand = i; break; }
+		// Still booting in the background: if it needs warming now, the job is handed over all
+		// the same and the warmer waits for the boot (the audio thread never does), so the warming
+		// sequence (and therefore the output) is exactly that of a unit booted in Activate().
+		// Its map is set by the replay; until booted only the boot thread touches the unit.
+		// The decision uses sched_seq (what the jobs already handed over will have replayed), not
+		// the real progress of the warmer, so the schedule does not depend on how long a boot or
+		// a replay takes: it is the one a synchronous warmer would produce.
+		// (applied_map belongs to the boot thread / warmer while the unit boots or a job is waiting)
+		const bool map_stale = inst.booted->load(std::memory_order_acquire) &&
+		                       inst.warming->load(std::memory_order_acquire) == 0 &&
+		                       inst.applied_map != tone_map.load();
+		if (inst.sched_seq < state_log.Seq() || map_stale) { cand = i; break; }
 #else
 		if (inst.sleep_seq < state_log.Seq()) { cand = i; break; }
 #endif
@@ -3128,12 +3145,20 @@ void NukedSc55::ScheduleWarming()
 	if (cand < 0) return;
 
 	std::unique_lock lk(warmer_mutex, std::try_to_lock);
-	if (!lk.owns_lock() || warmer_has_job) return;
-	warmer_job.instance   = cand;
-	warmer_job.target_seq = state_log.Seq();
-	state_log.CopySince(instances[cand].sleep_seq, warmer_job.entries);
-	instances[cand].warming->store(true, std::memory_order_release);
-	warmer_has_job = true;
+	if (!lk.owns_lock()) return;
+#ifndef NUKED_SC55_ENGINE_88PRO
+	if (!warmer_jobs.empty()) return;
+#endif
+	WarmJob& job = warmer_jobs.emplace_back();
+	job.instance   = cand;
+	job.target_seq = state_log.Seq();
+#ifdef NUKED_SC55_ENGINE_88PRO
+	state_log.CopySince(instances[cand].sched_seq, job.entries);
+	instances[cand].sched_seq = job.target_seq;
+#else
+	state_log.CopySince(instances[cand].sleep_seq, job.entries);
+#endif
+	instances[cand].warming->fetch_add(1, std::memory_order_release);
 	lk.unlock();
 	warmer_cv.notify_one();
 }
@@ -3189,6 +3214,7 @@ void NukedSc55::Sleep(const int i)
 	auto& inst     = instances[i];
 	inst.awake     = false;
 	inst.sleep_seq = state_log.Seq();
+	inst.sched_seq = inst.sleep_seq;
 	inst.queue.clear(); // (bytes still waiting for its MIDI buffer stay: they are state, fed on waking)
 	inst.buf_l.clear();
 	inst.buf_r.clear();
@@ -3208,7 +3234,7 @@ void NukedSc55::Wake(const int i)
 	while (!inst.booted->load(std::memory_order_acquire)) { // still booting in the background
 		std::this_thread::sleep_for(std::chrono::microseconds(500));
 	}
-	while (inst.warming->load(std::memory_order_acquire)) {
+	while (inst.warming->load(std::memory_order_acquire) != 0) {
 		std::this_thread::yield();
 	}
 	inst.buf_l.clear();
@@ -3250,7 +3276,7 @@ void NukedSc55::Wake(const int i)
 	};
 
 	// A background sync may be running on this instance: let it finish.
-	while (inst.warming->load(std::memory_order_acquire)) {
+	while (inst.warming->load(std::memory_order_acquire) != 0) {
 		std::this_thread::yield();
 	}
 	inst.buf_l.clear();
