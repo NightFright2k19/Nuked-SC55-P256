@@ -414,6 +414,9 @@ public:
 	// Text on unit 0's 20-character display (GUI thread; false while the units are rebooted)
 	bool GetLaText(char* buf, size_t size);
 	std::atomic<int> ui_encoder{0};      // SELECT: knob detents (right-drag), passed on to all units
+	// Emulated seconds each unit runs at boot (88emu default: 10 s). All three LA devices are past their
+	// intro and take MIDI after 2 s (CM-32L not yet after 1 s); 3 s keeps a margin and boots 3x faster.
+	static constexpr float kLaBootSeconds = 3.0f;
 	static constexpr int kLaKnobStep = 4; // knob travel per detent (of 1023): 256 detents for the whole travel
 	std::atomic<uint32_t> ui_panel_buttons{0}; // MT-32 switches held in the GUI (EMU88_MT32_BUTTON_*)
 	uint32_t PanelLeds() const;          // lamps of all units ORed (bit 0 = MIDI MESSAGE)

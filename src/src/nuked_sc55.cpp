@@ -2235,6 +2235,9 @@ bool NukedSc55::E88BootUnit(const int i)
 		emu88_select_device(inst.ctx, EMU88_DEVICE_SC88PRO);
 #endif
 		emu88_set_stereo_output_samplerate(inst.ctx, 0); // device rate (32 kHz)
+#if defined(NUKED_SC55_DEVICE_LA)
+		emu88_set_fast_boot_seconds(inst.ctx, kLaBootSeconds);
+#endif
 		if (emu88_open_synth(inst.ctx) != EMU88_RC_OK) {
 			log("%s: open_synth failed (ROMs?)", ModelName());
 			emu88_free_context(inst.ctx);

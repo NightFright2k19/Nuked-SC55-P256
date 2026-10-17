@@ -200,7 +200,9 @@ For source builds with **external** ROMs, the layout of the original plug-in app
 
 The MT-32 plug-in uses the 88emu LA board (the 8095 / 8098 CPU with the original firmware, LA32 sound generator, reverb chip) in three variants (compile-time `NUKED_SC55_DEVICE_LA` on top of `NUKED_SC55_ENGINE_88PRO`, model index 10).
 
-- **Devices (SETUP > Device):** MT-32 (old board, 1.x firmware), MT-32 (new board, 2.x firmware) and CM-32L, default CM-32L. The menu shows the firmware version the plug-in was built with; devices whose ROM set was missing at build time are greyed out. Choosing a device boots the units again as that device (about 1 s, with a short dropout), like swapping the module: what the host sent before (patches, timbres) is gone. The panel follows the device. Stored in the state (`dev=0..2`).
+- **Devices (SETUP > Device):** MT-32 (old board, 1.x firmware), MT-32 (new board, 2.x firmware) and CM-32L, default CM-32L. The menu shows the firmware version the plug-in was built with; devices whose ROM set was missing at build time are greyed out. Choosing a device boots the units again as that device (about 0.3 s, with a short dropout), like swapping the module: what the host sent before (patches, timbres) is gone. The panel follows the device. Stored in the state (`dev=0..2`).
+
+- **Boot:** each unit runs the firmware for 3 emulated seconds at start instead of 88emu's usual 10 s (all three devices are past their intro and take MIDI after 2 s), so loading and a device switch take about 0.3 s instead of 1 s (Wine, 4 cores).
 - **Units:** 32 partials per unit, as the device. **One unit is the default** (32 voices); SETUP offers 64 voices (2 units). Unlike the Sound Canvas models, all units run from the start and receive every message: a sleeping unit would have to be brought up to date by replaying the SysEx state at MIDI speed (faster corrupts the firmware's patch memory), which would take seconds. One unit costs about 15 % of one core.
 - **MIDI:** one MIDI input (parts 1-8 on channels 2-9, rhythm on channel 10, as the device; channels can be changed by SysEx). The firmware takes MIDI in at wire speed (3125 bytes/s), as on the device. The old firmware needs pauses between large SysEx blocks ("Exc. Buffer overflow" on the LCD otherwise), as on a real MT-32.
 - **Voice counter:** a partial counts while its pitch is set and one of its envelope ramps is above zero (the firmware leaves the pitch of finished partials in place).
@@ -672,7 +674,7 @@ These are limits of the approach, or things that are not done yet.
 
 ### MT-32 / CM-32L
 
-- **Device switch:** booting the units again takes about 1 s in the audio thread (a short dropout); what the host sent before is gone, as after swapping the module.
+- **Device switch:** booting the units again takes about 0.3 s in the audio thread (a short dropout); what the host sent before is gone, as after swapping the module.
 - **Firmware choice:** per device the plug-in contains the one firmware the builder found first (MT-32 old: 1.07 before 1.06, 1.05, 1.04, Blue Ridge, M-9; MT-32 new: 2.04 before 2.07; CM-32L: 1.02 before LAPC-I 1.00). Other versions cannot be chosen in the plug-in.
 - **Units never sound sample-identical:** the LA32 phases run freely, so two units with the same memory differ slightly in phase. Whether they hold the same patches can only be compared through their memory (RQ1), not by their sound.
 

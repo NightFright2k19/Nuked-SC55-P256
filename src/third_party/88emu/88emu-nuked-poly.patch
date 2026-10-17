@@ -630,7 +630,7 @@ index 9f21044..57003c3 100644
  		xpLib::XP m_xp;
  		Lcd m_lcd;
 diff --git a/source/ronaldo/88emu/88lib/c_interface.cpp b/source/ronaldo/88emu/88lib/c_interface.cpp
-index 9ccf846..0406690 100644
+index 9ccf846..fc6335a 100644
 --- a/source/ronaldo/88emu/88lib/c_interface.cpp
 +++ b/source/ronaldo/88emu/88lib/c_interface.cpp
 @@ -1,3 +1,4 @@
@@ -638,7 +638,15 @@ index 9ccf846..0406690 100644
  #include "88lib/c_interface.h"
  
  #include "88lib/deviceModel.h"
-@@ -45,6 +46,9 @@ struct emu88_data
+@@ -31,6 +32,7 @@ struct emu88_data
+ 
+ 	emu88Lib::DeviceModel model = emu88Lib::DeviceModel::Sc88Pro;
+ 	unsigned bootFlags = EMU88_BOOT_DEFAULT;
++	float fastBootSeconds = 10.0f;
+ 	double outputSamplerate = 0.0;	// 0: the device's own rate
+ 
+ 	std::unique_ptr<emu88Lib::HardwareDevice> device;
+@@ -45,6 +47,9 @@ struct emu88_data
  	// Played since the last frame was rendered; goes to the device with the next one.
  	std::vector<synthLib::SMidiEvent> midiIn;
  	std::vector<synthLib::SMidiEvent> midiOut;
@@ -648,7 +656,7 @@ index 9ccf846..0406690 100644
  
  	std::unique_ptr<synthLib::Resampler> resampler;
  	std::vector<float> left, right;
-@@ -64,6 +68,20 @@ struct emu88_data
+@@ -64,6 +69,20 @@ struct emu88_data
  		const synthLib::TAudioInputs inputs{};
  		device->process(inputs, _outputs, _frames, midiIn, midiOut);
  		midiIn.clear();
@@ -669,7 +677,28 @@ index 9ccf846..0406690 100644
  	}
  
  	void updateResampler()
-@@ -515,3 +533,219 @@ void emu88_render_bit16s(const emu88_context _context, int16_t* _stream, const u
+@@ -264,6 +283,12 @@ void emu88_set_boot_flags(const emu88_context _context, const unsigned _flags)
+ 		_context->bootFlags = _flags;
+ }
+ 
++void emu88_set_fast_boot_seconds(const emu88_context _context, const float _seconds)
++{
++	if(_context && _seconds >= 0.0f)
++		_context->fastBootSeconds = _seconds;
++}
++
+ emu88_return_code emu88_set_pcm_card(const emu88_context _context, const uint8_t* _image, const size_t _length)
+ {
+ 	if(!_context || (!_image && _length))
+@@ -302,6 +327,7 @@ emu88_return_code emu88_open_synth(const emu88_context _context)
+ 	emu88Lib::BootOptions boot;
+ 	boot.factoryReset = (_context->bootFlags & EMU88_BOOT_FACTORY_RESET) != 0;
+ 	boot.fastBoot = (_context->bootFlags & EMU88_BOOT_SKIP_INTRO) != 0;
++	boot.fastBootSeconds = _context->fastBootSeconds;
+ 
+ 	auto device = std::make_unique<emu88Lib::HardwareDevice>(params, boot, _context->pcmCard);
+ 	if(!device->isValid())
+@@ -515,3 +541,219 @@ void emu88_render_bit16s(const emu88_context _context, int16_t* _stream, const u
  }
  
  } // extern "C"
@@ -890,10 +919,19 @@ index 9ccf846..0406690 100644
 +	if(context && context->device) context->device->setMidiInRate(bytesPerSecond);
 +}
 diff --git a/source/ronaldo/88emu/88lib/c_interface.h b/source/ronaldo/88emu/88lib/c_interface.h
-index 6c1f267..ca9af0f 100644
+index 6c1f267..5869dc2 100644
 --- a/source/ronaldo/88emu/88lib/c_interface.h
 +++ b/source/ronaldo/88emu/88lib/c_interface.h
-@@ -229,6 +229,62 @@ EMU88_EXPORT int emu88_is_display_on(emu88_context context, unsigned screen);
+@@ -162,6 +162,8 @@ EMU88_EXPORT void emu88_free_context(emu88_context context);
+ EMU88_EXPORT emu88_return_code emu88_select_device(emu88_context context, emu88_device_id device);
+ /* A combination of EMU88_BOOT_*; EMU88_BOOT_DEFAULT unless set. */
+ EMU88_EXPORT void emu88_set_boot_flags(emu88_context context, unsigned flags);
++/* Nuked SC-55 Poly: emulated seconds run at boot with EMU88_BOOT_SKIP_INTRO (default 10). */
++EMU88_EXPORT void emu88_set_fast_boot_seconds(emu88_context context, float seconds);
+ /* The PCM card in the slot of a device that has one, as a raw SN-U110 series card image of up to
+  * 512 KiB in either of the two dump byte orders; the image is copied. NULL or 0 empties the slot.
+  * Fails with EMU88_RC_INVALID_ARGUMENT when the image is not readable as a card. */
+@@ -229,6 +231,62 @@ EMU88_EXPORT int emu88_is_display_on(emu88_context context, unsigned screen);
   * closed synth produces silence. */
  EMU88_EXPORT void emu88_render_bit16s(emu88_context context, int16_t* stream, uint32_t length);
  EMU88_EXPORT void emu88_render_float(emu88_context context, float* stream, uint32_t length);
@@ -957,10 +995,19 @@ index 6c1f267..ca9af0f 100644
  #ifdef __cplusplus
  }
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.cpp b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-index 14e2422..ed2cca2 100644
+index 14e2422..07be20f 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-@@ -140,8 +140,17 @@ namespace emu88Lib
+@@ -27,8 +27,6 @@ namespace emu88Lib
+ 		// A press and its release must remain visible to firmware even when a very
+ 		// fast pointer click delivers both edges inside one host audio block.
+ 		constexpr uint64_t g_minimumPanelEdgeSamples = 64;
+-		// Longer than any supported board's power-on intro.
+-		constexpr float g_fastBootSeconds = 10.0f;
+ 
+ 		using Screen = HardwareDevice::DisplaySnapshot::Screen;
+ 
+@@ -140,8 +138,17 @@ namespace emu88Lib
  		}
  		case DeviceModel::Sc8820:
  		{
@@ -979,7 +1026,7 @@ index 14e2422..ed2cca2 100644
  			if(!inventory.read(cpu, RomDevice::Sc8820, RomSlot::Internal) ||
  				!inventory.read(program, RomDevice::Sc8820, RomSlot::Program) ||
  				!inventory.read(wave0, RomDevice::Sc8820, RomSlot::Wave, 0) ||
-@@ -151,6 +160,16 @@ namespace emu88Lib
+@@ -151,6 +158,16 @@ namespace emu88Lib
  		}
  		case DeviceModel::Sc8850:
  		{
@@ -996,7 +1043,7 @@ index 14e2422..ed2cca2 100644
  			auto roms = RomLoader::findSc8850RomSet();
  			auto waves = RomLoader::findSc8850WaveRomSet();
  			if(!roms.isValid() || !waves.isValid()) break;
-@@ -163,6 +182,12 @@ namespace emu88Lib
+@@ -163,6 +180,12 @@ namespace emu88Lib
  		case DeviceModel::Xpgs:
  		{
  			const auto model = m_model == DeviceModel::Sc88VL ? Model::Sc88VL : m_model == DeviceModel::Xpgs ? Model::Xpgs : Model::Sc88;
@@ -1009,7 +1056,16 @@ index 14e2422..ed2cca2 100644
  			auto rom = RomLoader::findROM(model);
  			if(!rom.isValid() || rom.model() != model) break;
  			auto waveData = m_model == DeviceModel::Xpgs
-@@ -513,6 +538,11 @@ namespace emu88Lib
+@@ -243,7 +266,7 @@ namespace emu88Lib
+ 		{
+ 			// What the board sends out meanwhile is dropped; its display is published so the panel
+ 			// starts on the screen the board is now showing.
+-			for(auto samples = static_cast<uint64_t>(g_fastBootSeconds * dacSamplerate()); samples > 0; --samples)
++			for(auto samples = static_cast<uint64_t>(_boot.fastBootSeconds * dacSamplerate()); samples > 0; --samples)
+ 				renderBoardFrame();
+ 			std::vector<synthLib::SMidiEvent> discarded;
+ 			readMidiOutFromBoard(discarded);
+@@ -513,6 +536,11 @@ namespace emu88Lib
  			else if(m_sc55) m_sc55->setButtons(buttons);
  			else if(m_la) m_la->setButtons(buttons);
  			else if(m_cm64) m_cm64->setButtons(buttons);
@@ -1021,7 +1077,7 @@ index 14e2422..ed2cca2 100644
  			m_nextPanelCommandSample = m_renderedSamples + g_minimumPanelEdgeSamples;
  		}
  		else if(command.type == PanelCommandType::Mv30Panel)
-@@ -620,6 +650,8 @@ namespace emu88Lib
+@@ -620,6 +648,8 @@ namespace emu88Lib
  			first.displayOn = (lcd.displayMode() & 0x0c) != 0;
  			lcd.renderMono(first.mono);
  		}
@@ -1030,7 +1086,7 @@ index 14e2422..ed2cca2 100644
  		if(m_mv30)
  			m_mv30->readParts(m_mv30PartsScratch);
  		std::unique_lock lock(m_displayMutex, std::try_to_lock);
-@@ -784,3 +816,52 @@ namespace emu88Lib
+@@ -784,3 +814,52 @@ namespace emu88Lib
  			m_activeChannels &= ~channelMask;
  	}
  }
@@ -1084,10 +1140,19 @@ index 14e2422..ed2cca2 100644
 +	}
 +}
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.h b/source/ronaldo/88emu/88lib/hardwareDevice.h
-index eb2b1bd..b600c3e 100644
+index eb2b1bd..c46d56d 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.h
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.h
-@@ -47,6 +47,15 @@ namespace emu88Lib
+@@ -39,6 +39,8 @@ namespace emu88Lib
+ 		bool factoryReset = true;
+ 		// Then keep the board running for another 10 s, so it starts past its power-on intro.
+ 		bool fastBoot = false;
++		// Nuked SC-55 Poly: length of that run in emulated seconds
++		float fastBootSeconds = 10.0f;
+ 		// Held switches at power-on; bypass automatic initialization and intro skipping.
+ 		uint32_t initialPanelButtons = 0;
+ 	};
+@@ -47,6 +49,15 @@ namespace emu88Lib
  	class HardwareDevice final : public synthLib::Device
  	{
  	public:
