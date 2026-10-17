@@ -181,13 +181,14 @@ def centred(box, text, font, fill):
     x0, y0, x1, y1 = box
     l, t, r_, b_ = d.textbbox((0, 0), text, font=font)
     d.text(((X(x0) + X(x1) - (r_ - l))/2 - l, (X(y0) + X(y1) - (b_ - t))/2 - t), text, font=font, fill=fill)
+LOGO_Y = 241                         # top of "Nuked-SC" (size 22): same height as the SC-55/88/8850 logos (issue #70)
 if not pro:
-    d.text((X(40), X(FRONT+22)), "Nuked-SC", font=F(22, "-Oblique"), fill=(150, 150, 150))
-    d.text((X(148), X(FRONT+20)), "8820", font=F(24, "-BoldOblique"), fill=(200, 200, 200))
+    d.text((X(40), X(LOGO_Y)), "Nuked-SC", font=F(22, "-Oblique"), fill=(150, 150, 150))
+    d.text((X(148), X(LOGO_Y-2)), "8820", font=F(24, "-BoldOblique"), fill=(200, 200, 200))
 else:
-    d.text((X(22), X(FRONT+24)), "Nuked-SC", font=F(20, "-Oblique"), fill=(150, 150, 150))
-    d.text((X(119), X(FRONT+22)), "8820", font=F(22, "-BoldOblique"), fill=(200, 200, 200))
-    d.text((X(187), X(FRONT+22)), "Pro", font=F(22, "-BoldOblique"), fill=OR)
+    d.text((X(22), X(LOGO_Y+2)), "Nuked-SC", font=F(20, "-Oblique"), fill=(150, 150, 150))
+    d.text((X(119), X(LOGO_Y)), "8820", font=F(22, "-BoldOblique"), fill=(200, 200, 200))
+    d.text((X(187), X(LOGO_Y)), "Pro", font=F(22, "-BoldOblique"), fill=OR)
 SB = (812, FRONT+44, 900, FRONT+68)  # same place in Basic and Pro (issue #67)
 d.rectangle(tuple(X(v) for v in SB), fill=(16, 16, 16))
 if not base: centred(SB, "SETUP  >", F(11, "-Bold"), OR)

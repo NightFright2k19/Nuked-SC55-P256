@@ -47,7 +47,9 @@ constexpr double E20_GX = 508.0, E20_GW = 11.4;           // first dot column, c
 constexpr int E20_ROW_A = 56, E20_ROW_B = 94;             // first dot row of PART A / PART B
 constexpr DWORD E20_MIN_HOLD_MS = 120;                    // a short click still reaches the switch scan
 constexpr uint32_t E20_BIT_INSTMAP = 1u, E20_BIT_PREVIEW = 2u;
-constexpr int E20_HIT_INSTMAP = 1, E20_HIT_KNOB = 2, E20_HIT_SETUP = 3;
+constexpr int E20_HIT_INSTMAP = 1, E20_HIT_KNOB = 2, E20_HIT_SETUP = 3, E20_HIT_LOGO = 4;
+// "Nuked-SC8820" / "Nuked-SC8820 Pro" logo: a left click switches to the other interface style (issue #70)
+constexpr RECT E20_LOGO[2] = {{36, 241, 219, 266}, {18, 241, 232, 266}};
 
 HDC g_lit20_dc[2] = {};
 
@@ -348,6 +350,7 @@ int Hit8820(const Editor& e, int x, int y)
     if (InCircle(E20_INSTMAP, E20_INSTMAP_R, x, y)) return E20_HIT_INSTMAP;
     if (InCircle(E20_KNOB, E20_KNOB_R, x, y)) return E20_HIT_KNOB;
     if (InRect(Setup20(e), x, y)) return E20_HIT_SETUP;
+    if (InRect(E20_LOGO[Style20(e)], x, y)) return E20_HIT_LOGO;
     if (Style20(e) == 1)
         if (const int b = Pill20(x, y)) return E20_HIT_PRO + b;
     return 0;
@@ -424,6 +427,9 @@ bool Mouse8820(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             SetCapture(hwnd);
         } else if (h == E20_HIT_SETUP) {
             ShowSetupMenu(e);
+        } else if (h == E20_HIT_LOGO) { // like SETUP > Interface Style, stored in the state
+            p.ui_style = 1 - Style20(e);
+            p.NotifyStateChanged();
         }
         return true;
     }
