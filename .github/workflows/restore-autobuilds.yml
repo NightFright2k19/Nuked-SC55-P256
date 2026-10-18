@@ -43,7 +43,11 @@ jobs:
           dry_run = os.environ['DRY_RUN'] == 'true'
 
           def gh(*args, capture=True):
-              r = subprocess.run(['gh', *args], check=True, text=True, capture_output=capture)
+              r = subprocess.run(['gh', *args], text=True, capture_output=capture)
+              if r.returncode:
+                  detail = ' '.join(((r.stderr or '') + (r.stdout or '')).split())[:900]
+                  print(f'::error::gh {" ".join(args[:3])} failed ({r.returncode}): {detail}')
+                  sys.exit(1)
               return r.stdout
 
           def api(path):
