@@ -9,6 +9,7 @@
 #   --v2      the MT-32 panel of the new MT-32 (v2.x ROMs): "v2" after the name (issue #79)
 #   --lit     example state (preview)                --all-on  every lamp lit (lamp sprites of the GUI)
 #   --base    GUI background: lamps off, LCD without characters or glass, knob without marker, boxes empty
+#   --name    only the name in the lower strip (NAME rectangle; with --v2 the GUI's patch for the new MT-32)
 #   --glass   MT-32: the glass over the LCD (premultiplied BGRA of the LCD rectangle, laid over the characters)
 #   .bgra: raw BGRA for gen_blob.py (918x280, --glass: the LCD rectangle), else PNG
 import sys, math, re, os
@@ -342,8 +343,13 @@ def build():
     return im
 
 
+NAME = (36, 214, 330, 264)       # --name: the name in the lower strip (editor_mt32.inc ELA_NAME), e.g. with --v2
 out = sys.argv[1]
-if glass:
+if '--name' in sys.argv:
+    im = build().crop(NAME)
+    if out.endswith('.bgra'): open(out, 'wb').write(im.convert('RGBA').tobytes('raw', 'BGRA'))
+    else: im.save(out)
+elif glass:
     ov = glass_overlay().resize((LX1 - LX0, LY1 - LY0), Image.LANCZOS)
     if out.endswith('.bgra'):
         px = bytearray()

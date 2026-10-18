@@ -1,4 +1,4 @@
-// MT-32-Test (Issue #69): spielt eine Eventliste durch das CLAP-Plugin Nuked-MT32, RMS je Sekunde,
+// MT-32-Test (Issue #69): spielt eine Eventliste durch das CLAP-Plugin Emu-MT32, RMS je Sekunde,
 // optional Geraetewechsel per State waehrend der Wiedergabe (Zeit des Blocks mit dem Neustart).
 // usage: mt32host <clap> <events.txt> <sekunden> [state] [t_wechsel state2]
 //   Kanaele der Eventliste werden auf die MT-32-Parts gelegt (1..9 -> 2..10, 10 bleibt Rhythmus, 11..16 entfallen),

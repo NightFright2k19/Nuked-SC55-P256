@@ -135,7 +135,7 @@ struct Editor {
     HFONT f_pro        = nullptr;
 #endif
 #ifdef NUKED_SC55_DEVICE_LA
-    char la_text[21]   = "                    "; // MT-32 LCD as last read
+    uint8_t la_dots[120 * 9] = {}; // MT-32 LCD dots as last read (NukedSc55::GetLaDots)
     bool drag_sel      = false;  // knob turned as the device's SELECT (right-drag)
     HFONT f_lcd        = nullptr;
 #endif

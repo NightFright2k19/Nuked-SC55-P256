@@ -413,6 +413,9 @@ public:
 	int LaActive() const { return la_active.load(); } // device the units run as (-1 while none)
 	// Text on unit 0's 20-character display (GUI thread; false while the units are rebooted)
 	bool GetLaText(char* buf, size_t size);
+	// Dots of unit 0's display as the LCD controller shows them, ROM and firmware-defined characters alike
+	// (120 x 9: 20 cells of 6 x 9, 5 x 8 used; GUI thread; false while the units are rebooted)
+	bool GetLaDots(uint8_t* dots, size_t size);
 	std::atomic<int> ui_encoder{0};      // SELECT: knob detents (right-drag), passed on to all units
 	// Emulated seconds each unit runs at boot (88emu default: 10 s). All three LA devices are past their
 	// intro and take MIDI after 2 s (CM-32L not yet after 1 s); 3 s keeps a margin and boots 3x faster.

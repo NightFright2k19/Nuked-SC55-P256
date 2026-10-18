@@ -15,15 +15,15 @@ constexpr auto NumPlugins = 6;
 
 // Product family in the plugin names (each build only contains its own family name)
 #if defined(NUKED_SC55_DEVICE_8850)
-#define NUKED_PLUGIN_FAMILY "Nuked SC-8850 P256"
+#define NUKED_PLUGIN_FAMILY "Emu SC-8850 P256"
 #elif defined(NUKED_SC55_DEVICE_8820)
-#define NUKED_PLUGIN_FAMILY "Nuked SC-8820 P256"
+#define NUKED_PLUGIN_FAMILY "Emu SC-8820 P256"
 #elif defined(NUKED_SC55_DEVICE_LA)
-#define NUKED_PLUGIN_FAMILY "Nuked MT-32 P256"
+#define NUKED_PLUGIN_FAMILY "Emu MT-32 P256"
 #elif defined(NUKED_SC55_DEVICE_88)
-#define NUKED_PLUGIN_FAMILY "Nuked SC-88 P256"
+#define NUKED_PLUGIN_FAMILY "Emu SC-88 P256"
 #elif defined(NUKED_SC55_ENGINE_88PRO)
-#define NUKED_PLUGIN_FAMILY "Nuked SC-88 P256"
+#define NUKED_PLUGIN_FAMILY "Emu SC-88 P256"
 #else
 #define NUKED_PLUGIN_FAMILY "Nuked SC-55 P256"
 #endif

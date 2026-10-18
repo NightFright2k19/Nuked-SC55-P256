@@ -1,4 +1,4 @@
-// Nuked SC-8850 Poly - front panel (included by editor_win32.cpp in
+// Emu SC-8850 Poly - front panel (included by editor_win32.cpp in
 // NUKED_SC55_DEVICE_8850 builds, after editor_sc88.inc).
 //
 // Background: the 88emu SC-8850 panel art (The Usual Suspects, GPLv3), prepared

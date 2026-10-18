@@ -91,7 +91,7 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 
 ### Identification
 
-- Internal name **"Nuked SC-55 P256"** / **"Nuked SC-88 P256"** (CLAP plug-in names, VST2 vendor, Windows version info, editor window class). Plug-in IDs stay on `net.nuked_sc55_poly_clap.*` so existing DAW projects keep working.
+- Internal name **"Nuked SC-55 P256"** for the SC-55 models (Nuked core) and **"Emu SC-88 P256"**, **"Emu SC-8820 P256"**, **"Emu SC-8850 P256"**, **"Emu MT-32 P256"** for the models on the 88emu core (CLAP plug-in names, VST2 vendor, Windows version info). Plug-in IDs stay on `net.nuked_sc55_poly_clap.*` so existing DAW projects keep working.
 - **Version number = build date** (`YYYY.MM.DD`) in the Windows version info.
 
 ---
@@ -179,17 +179,17 @@ For source builds with **external** ROMs, the layout of the original plug-in app
 
 | Display name | File name (`.clap` / `.dll`) | Core | CLAP ID | VST2 ID | Default max voices |
 | --- | --- | --- | --- | --- | --- |
-| Nuked-MT32 | `Nuked-MT32` | 88emu | `net.nuked_sc55_poly_clap.mt32` | `MT32` (0x4D543332) | 32 (of 64) |
+| Emu-MT32 | `Emu-MT32` | 88emu | `net.nuked_sc55_poly_clap.mt32` | `MT32` (0x4D543332) | 32 (of 64) |
 | Nuked-SC55 v1.21 | `Nuked-SC55_v121` | Nuked SC-55 | `net.nuked_sc55_poly_clap.sc55_v1_21` | `S5P3` (0x53355033) | 264 |
 | Nuked-SC55 MkII | `Nuked-SC55_MkII` | Nuked SC-55 | `net.nuked_sc55_poly_clap.sc55mk2_v1_01` | `S5PM` (0x5335504D) | 280 |
-| Nuked-SC88 | `Nuked-SC88` | 88emu | `net.nuked_sc55_poly_clap.sc88` | `S888` (0x53383838) | 256 |
-| Nuked-SC88 Pro | `Nuked-SC88_Pro` | 88emu | `net.nuked_sc55_poly_clap.sc88pro` | `S8PP` (0x53385050) | 256 |
-| Nuked-SC8820 | `Nuked-SC8820` | 88emu | `net.nuked_sc55_poly_clap.sc8820` | `S820` (0x53383230) | 256 |
-| Nuked-SC8850 | `Nuked-SC8850` | 88emu | `net.nuked_sc55_poly_clap.sc8850` | `S885` (0x53383835) | 256 |
+| Emu-SC88 | `Emu-SC88` | 88emu | `net.nuked_sc55_poly_clap.sc88` | `S888` (0x53383838) | 256 |
+| Emu-SC88 Pro | `Emu-SC88_Pro` | 88emu | `net.nuked_sc55_poly_clap.sc88pro` | `S8PP` (0x53385050) | 256 |
+| Emu-SC8820 | `Emu-SC8820` | 88emu | `net.nuked_sc55_poly_clap.sc8820` | `S820` (0x53383230) | 256 |
+| Emu-SC8850 | `Emu-SC8850` | 88emu | `net.nuked_sc55_poly_clap.sc8850` | `S885` (0x53383835) | 256 |
 
-- The file names contain no spaces or dots (some hosts and drivers dislike them); the display names in the host stay "Nuked-SC55 v1.21", "Nuked-SC55 MkII" and "Nuked-SC88 Pro".
+- The file names contain no spaces or dots (some hosts and drivers dislike them); the display names in the host stay "Nuked-SC55 v1.21", "Nuked-SC55 MkII" and "Emu-SC88 Pro". The SC-55 models keep the name "Nuked" (Nuked core); all models on the 88emu core are named "Emu" (since issue #79; before: "Nuked-SC88" etc., same plug-in IDs).
 - Both formats are the **same file** with two entry points (`clap_entry` and `VSTPluginMain`). The builder writes it twice, once as `.clap` and once as `.dll`.
-- Category: instrument/synth; flags: editor, replacing, program chunks. VST2 vendor `Nuked MT-32 P256` (MT-32 / CM-32L), `Nuked SC-55 P256` (SC-55; SC-88 and SC-88 Pro: `Nuked SC-88 P256`, SC-8820: `Nuked SC-8820 P256`, SC-8850: `Nuked SC-8850 P256`).
+- Category: instrument/synth; flags: editor, replacing, program chunks. VST2 vendor `Emu MT-32 P256` (MT-32 / CM-32L), `Nuked SC-55 P256` (SC-55; SC-88 and SC-88 Pro: `Emu SC-88 P256`, SC-8820: `Emu SC-8820 P256`, SC-8850: `Emu SC-8850 P256`).
 - The IDs of the plug-ins never changed since the first version, so projects stay compatible. Hosts may show a new vendor after a rescan.
 - Windows version info: product name, description and internal name are the display name; file and product version are the build date (`2026.10.07` is stored as `2026,10,7,0` numerically, which Windows shows as `2026.10.7.0`).
 - A DLL with ROMs is large: about 10 MB for the MT-32 / CM-32L (2.4 MB ROMs for all three devices, 4 MB panel graphics), about 14 MB for the SC-88 (8.5 MB ROMs), about 27 MB for the SC-88 Pro (21 MB ROMs, 1 MB panel graphics), about 35 MB for the SC-8820 (26 MB ROMs, 4 MB panel graphics for both interfaces), about 42 MB for the SC-8850 (35 MB ROMs).
@@ -214,9 +214,9 @@ The MT-32 plug-in uses the 88emu LA board (the 8095 / 8098 CPU with the original
 
 ### MT-32 / CM-32L panels (918 x 280 px)
 
-- **Graphics:** drawn from scratch by `tools/make_la_panel.py` after photos of the devices (no photo or third-party art is used); the maker's logos are replaced by the plug-in's own branding. VOICES (count, bar) and UNITS on the left, the name and SETUP (bottom right) in the strip below, as on the other panels.
-- **MT-32:** the dark front with the display window: the 20-character LCD (a dot matrix of 5 x 8 dots per character with the character ROM of the LCD controller, unlit dots faintly visible, glass) shows unit 0's display text, the MIDI MESSAGE lamp lights for notes of any unit. PART 1-5, RHYTHM, SOUND GROUP, VOLUME, SOUND and MASTER VOLUME are the device's switches, pressed on all units alike (held while the mouse button is down, at least 120 ms; a right click holds a switch until the next left-click switch, for key combinations). The knob is labelled SELECT/GAIN: left-drag or mouse wheel = GAIN (0.1 dB per notch, double-click = 0 dB), right-drag or Shift + wheel = the device's own knob (SELECT, for example in the SOUND menu; in play mode it is the device's master volume, starting at "vol:100").
-- **CM-32L:** the cream front with the grey knob (GAIN) in the ribbed recess, the GAIN value above it, and the MIDI MESSAGE (green) and POWER (red) lamps across the full height of the ribbed strip.
+- **Graphics:** drawn from scratch by `tools/make_la_panel.py` after photos of the devices (no photo or third-party art is used); the maker's logos are replaced by the plug-in's own branding. VOICES (count, bar) and UNITS on the left, the name ("Emu-MT32", "Emu-MT32 v2" for the new MT-32, "Emu-CM32L") and SETUP (bottom right) in the strip below, as on the other panels. **A left click on the name switches the device** in the order CM-32L, MT-32 (old), MT-32 (new), CM-32L (devices without ROMs are skipped); like SETUP > Device, the units boot again as that device.
+- **MT-32:** the dark front with the display window: the 20-character LCD modelled on the MT-32's display (vivid green, square dots of 5 x 8 per character with the character ROM of the LCD controller, bold, unlit dots and the cursor line visible, glass) shows unit 0's display text (a part that plays shows a block, as on the device); the MIDI MESSAGE lamp (green, right of the LCD) lights for notes of any unit. PART 1-5, RHYTHM, SOUND GROUP, VOLUME, SOUND and MASTER VOLUME are the device's switches, pressed on all units alike (held while the mouse button is down, at least 120 ms; a right click holds a switch until the next left-click switch, for key combinations). The knob is labelled SELECT/GAIN: left-drag or mouse wheel = GAIN (0.1 dB per notch, double-click = 0 dB), right-drag or Shift + wheel = the device's own knob (SELECT, for example in the SOUND menu; in play mode it is the device's master volume, starting at "vol:100").
+- **CM-32L:** the aged ivory front with "Emu CM-32L / LA SOUND MODULE" in the device's squared lettering, the dark knob (GAIN) above a ribbed column cut into the ribbed strip, the GAIN value above it, the MIDI MESSAGE (green) and POWER (red) lamps across the full height of the ribbed strip and the grey power switch.
 
 ---
 
@@ -294,7 +294,7 @@ The SC-88 plug-in uses the same 88emu core with the firmware of the first SC-88 
 
 ### SC-88 panel (918 x 280 px)
 
-- **Graphics:** the 88emu SC-88 panel art (GPLv3, The Usual Suspects) by `tools/make_sc88orig_panel.py`. Only the branding ("Nuked SC-88"), the playlist header (VOICES) and the VOLUME label (GAIN) are replaced; everything else is unchanged. Switches, rockers, LEDs, PREVIEW and the GAIN knob are rendered from the player's own vector graphics at the positions of its skin (`tools/make_sc88orig_sprites.py`, with the pressed tint).
+- **Graphics:** the 88emu SC-88 panel art (GPLv3, The Usual Suspects) by `tools/make_sc88orig_panel.py`. Only the branding ("Emu-SC88"), the playlist header (VOICES) and the VOLUME label (GAIN) are replaced; everything else is unchanged. Switches, rockers, LEDs, PREVIEW and the GAIN knob are rendered from the player's own vector graphics at the positions of its skin (`tools/make_sc88orig_sprites.py`, with the pressed tint).
 - **LCD:** the firmware's character LCD on the panel's glass, rendered like on the SC-88 Pro.
 - **Controls:** every switch is held while the mouse button is down (at least 80 ms), so holding a rocker repeats like on the device. A right click holds a switch until the next left-click switch is let go, for the key combinations of the manual (SELECT + ..., USER INST + ..., ALL + ...). GAIN: drag, wheel (0.1 dB per notch), double-click = 0 dB.
 - **VOICES / UNITS** as on the other 88emu panels. **SETUP** (bottom, between the logo and the EFX lamp; same place on the SC-88 Pro): max polyphony 64 / 128 / 192 / 256, tone map (SC-55 / SC-88), Send Reset (MT-32 / GM / GS), System Mode (Mode 1 / Mode 2), all notes off.
@@ -343,14 +343,14 @@ The SC-8820 plug-in uses the 88emu core with the SC-8820 firmware (compile-time 
 
 ### SC-8820 Pro interface
 
-The SETUP menu entry **Interface Style** switches the panel of `Nuked-SC8820` between **Basic** (default, the device's front) and **Pro** (both drawn by `tools/make_sc8820_panel.py`, Pro with `--pro`). The device has no display and almost no controls; the Pro interface adds them, inspired by the part view of Sound Canvas VA. It is **customized and less faithful to the original**: everything the panel shows or changes goes through normal MIDI messages, the firmware and the sound are the same in both styles. A left click on the logo in the lower strip ("Nuked-SC8820" or "Nuked-SC8820 Pro") switches to the other style in the same way. The choice is stored in the state (`style=0..1`) and switches the panel at once.
+The SETUP menu entry **Interface Style** switches the panel of `Emu-SC8820` between **Basic** (default, the device's front) and **Pro** (both drawn by `tools/make_sc8820_panel.py`, Pro with `--pro`). The device has no display and almost no controls; the Pro interface adds them, inspired by the part view of Sound Canvas VA. It is **customized and less faithful to the original**: everything the panel shows or changes goes through normal MIDI messages, the firmware and the sound are the same in both styles. A left click on the logo in the lower strip ("Nuked-SC8820" or "Nuked-SC8820 Pro") switches to the other style in the same way. The choice is stored in the state (`style=0..1`) and switches the panel at once.
 
 | | Basic | Pro |
 | --- | --- | --- |
 | Panel | as on the device | device front plus a part display and edit buttons in the lower strip |
 | Display window | POWER, USB, PART A / B lamps, INST MAP | the same, plus a 16-part level display (POWER and USB smaller, at the bottom of the window) |
 | Part settings | MIDI only | shown and editable per part (A01-B16) |
-| Name (logo, left click = switch style) | `Nuked-SC8820` | `Nuked-SC8820` with an orange "Pro" |
+| Name (logo, left click = switch style) | `Emu-SC8820` | `Emu-SC8820` with an orange "Pro" |
 | INST MAP, GAIN, PREVIEW (right click), SETUP | identical | identical |
 
 - **16-part level display:** 16 columns x 8 dots in the style of the device's lamps, for the 16 parts of the port (A or B) the selected part belongs to. The levels come from the notes (velocity x volume x expression, like the SC-55 / SC-88 bar display). Clicking a column selects that part; the marker under the columns shows the selected part.
@@ -373,7 +373,7 @@ The SC-8850 plug-in uses the same 88emu core with the SC-8850 firmware (compile-
 
 ### SC-8850 panel (918 x 280 px)
 
-- **Graphics:** the 88emu SC-8850 panel art (GPLv3, The Usual Suspects), halved by `tools/make_sc8850_panel.py`. Only the branding ("Nuked SC-8850"), the playlist header (VOICES) and the VOLUME label (GAIN) are replaced; everything else is unchanged. The switches, LEDs, PREVIEW, VALUE encoder (4 knurl phases) and the GAIN knob are the player's sprites at the positions of its skin (`tools/make_sc8850_sprites.py`, with half-pixel phases and the pressed tint).
+- **Graphics:** the 88emu SC-8850 panel art (GPLv3, The Usual Suspects), halved by `tools/make_sc8850_panel.py`. Only the branding ("Emu-SC8850"), the playlist header (VOICES) and the VOLUME label (GAIN) are replaced; everything else is unchanged. The switches, LEDs, PREVIEW, VALUE encoder (4 knurl phases) and the GAIN knob are the player's sprites at the positions of its skin (`tools/make_sc8850_sprites.py`, with half-pixel phases and the pressed tint).
 - **LCD:** the 160 x 64 dots of the firmware's graphic LCD, black on the orange glass like in the player, area-averaged to 262 x 105 px.
 - **SysEx display messages:** text messages (`45 10 00 xx`) are shown by the firmware itself. The SC-8850 firmware ignores the 16 x 16 bitmaps (`45 10 01 00` … `45 10 05 7F`, pages 1-10, page select `45 10 20 00`), so the plug-in keeps the pages and lays the shown one over the level meters of the play screen for 3.2 s after the last update, as on the SC-55 / SC-88 (one bar = one column, two dots per row). Menus are left alone. The panel size does not change. The SC-8850's own 160 x 64 bitmap messages (`45 20 0x 00`) are drawn by the firmware.
 - **Display SysEx** goes to unit 0 only and is paced, as on all models (see [Display SysEx](#display-sysex)).
@@ -397,7 +397,7 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 
 ### SC-88 Pro panel (918 x 280 px)
 
-- **Same panel code as the SC-88** (`editor_sc88orig.inc`): the 88emu SC-88 Pro panel art (GPLv3, The Usual Suspects) by `tools/make_sc88orig_panel.py --pro`, branding "Nuked SC-88 Pro". All controls of the device are real switches: PART < >, INSTRUMENT, LEVEL, PAN, REVERB, CHORUS, KEY SHIFT and MIDI CH rockers, ALL, the bottom row EFX ON/OFF (USER INST / SELECT), EFX TYPE, EFX PARAM, EFX VALUE, and the EFX lamp (green / red / amber like on the device).
+- **Same panel code as the SC-88** (`editor_sc88orig.inc`): the 88emu SC-88 Pro panel art (GPLv3, The Usual Suspects) by `tools/make_sc88orig_panel.py --pro`, branding "Emu-SC88 Pro". All controls of the device are real switches: PART < >, INSTRUMENT, LEVEL, PAN, REVERB, CHORUS, KEY SHIFT and MIDI CH rockers, ALL, the bottom row EFX ON/OFF (USER INST / SELECT), EFX TYPE, EFX PARAM, EFX VALUE, and the EFX lamp (green / red / amber like on the device).
 - **Firmware panel:** these switches go to unit 0. The SC-88 Pro firmware keeps the same panel edit log as the SC-88; the plug-in forwards every edit as GS DT1 to the other units and into the state log, so all units (also those that wake later) play the same sounds. ALL + INSTRUMENT and ALL + MIDI CH have no GS equivalent and are disabled. Initialize GM / CM-64, Set Mode 1 / 2 and MASTER TUNE reach all units as on the SC-88. Checked by `tools/test/panel88p.cpp` (30 panel steps, ALL mode, tone map change, key repeat; parameter memory of all units compared, with a negative control).
 - **Handled by the plug-in:** the tone map keys SC-55 / SC-88 (lamp = active map, both off = SC-88 Pro; also in the SETUP menu), MUTE per part (note ons dropped, CC 120 on muting; not stored in the state, like on the device) and PREVIEW (note on while pressed, on the shown part, note from the menu "Prevw Note").
 - **GAIN, VOICES / UNITS, SETUP:** as on the SC-88, SETUP between the logo and the EFX lamp.
@@ -416,7 +416,7 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 | Entry | Meaning |
 | --- | --- |
 | Max polyphony (MT-32) | 32 (1 unit, default) / 64 (2 units) |
-| Device (MT-32) | MT-32 (old, v1.xx) / MT-32 (new, v2.xx) / CM-32L (v1.xx, default): boots the units again as that device; stored in the state (`dev=0..2`). Devices without ROMs are greyed out |
+| Device (MT-32) | MT-32 (old, v1.xx) / MT-32 (new, v2.xx) / CM-32L (v1.xx, default): boots the units again as that device; stored in the state (`dev=0..2`). Devices without ROMs are greyed out. A left click on the name in the panel switches too |
 | Send Reset (MT-32) | All parameters reset |
 | Max polyphony | 24 / 48 / 64 / 96 / 128 / 160 / 192 / 224 / 256 (SC-55mk2: 28 / 56 / ...) |
 | Send Reset | submenu MT-32 / GM / GS / GM2 (SC-8850, SC-8820), MT-32 / GM / GS (others): clicking an entry sends that reset to all units (nothing is marked or stored) |
@@ -511,7 +511,7 @@ python p256_builder.py
 ```
 
 ```
-Nuked MT-32 / SC-55 / SC-88 / SC-8820 / SC-8850 P256 - Plugin Builder
+Nuked SC-55 / Emu SC-88 / SC-8820 / SC-8850 / MT-32 P256 - Plugin Builder
 
 [--] MT-32 / CM-32L: no ROMs found
 [ok] SC-55 v1.21: output/CLAP/Nuked-SC55_v121.clap, output/VST2/Nuked-SC55_v121.dll

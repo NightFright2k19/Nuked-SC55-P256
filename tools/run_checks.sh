@@ -30,7 +30,7 @@ poly() {
 }
 sc88() {
   echo "== SC-88 Pro unter Wine (Name/ID S8PP, CTF-Test hoerbar ~0.0352 (Standard-Map SC-88 Pro seit #20), 256 Noten)"; stage
-  for m in 2 1; do timeout 250 $W64 $T/winbuild/vsthost.exe "$WSOLO\\Nuked-SC88_Pro.dll" $m 2>&1 | grep -E "Name|CTF|256"; done
+  for m in 2 1; do timeout 250 $W64 $T/winbuild/vsthost.exe "$WSOLO\\Emu-SC88_Pro.dll" $m 2>&1 | grep -E "Name|CTF|256"; done
   echo "== SC-88 Pro Linux: Map-Umschaltung + Einheiten (erwartet: Start SC-88 Pro; Verhaeltnisse ~1.38/1.73; alle Einheiten folgen)"
   cd $T/test && SOUNDCANVAS_ROM_PATH=$WB/rom88 timeout 250 ./map88 | grep -vE "^nach Umschalten"
 }
@@ -41,7 +41,7 @@ sc88poly() {
 lcd() {
   echo "== LCD (SysEx-Text/Bitmap) -> $WB/out/lcd_*.png (Erwartung: StarGame Bitmap-Animation + Pegel, 3X3EYES Text '3X3EYES'/'NIHON CREATE' + Bitmaps)"
   xvfb; stage; mkdir -p $WB/out
-  for f in "Nuked-SC55_v121:55" "Nuked-SC88_Pro:88"; do [ -f "$SOLO/${f%%:*}.dll" ] || continue
+  for f in "Nuked-SC55_v121:55" "Emu-SC88_Pro:88"; do [ -f "$SOLO/${f%%:*}.dll" ] || continue
     for m in StarGame:1.45,2.0,6.0,12.0 3X3EYES_mod:0.95,1.4,2.4,3.0; do n=${m%%:*}; [ -f $T/midi/lcd/$n.txt ] || continue; cp $T/midi/lcd/$n.txt /tmp/
       timeout 280 $W64 $T/winbuild/lcdhost.exe "$WSOLO\\${f%%:*}.dll" "Z:\\tmp\\$n.txt" "Z:\\tmp\\lcd${f##*:}_$n" $(echo ${m#*:} | tr , ' ') | grep -c Screenshot
       for b in /tmp/lcd${f##*:}_${n}_*.bmp; do python3 -c "from PIL import Image; Image.open('$b').save('$WB/out/'+'$(basename $b .bmp)'+'.png')"; done
