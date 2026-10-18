@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Bereitet die 88emu-Panelgrafik des SC-8850 (sc8850_panel.png, GPLv3, The Usual Suspects) fuer das
-# Nuked-SC8850-Poly-Panel auf: halbe Groesse des 3x-Exports (918x280 = 612x187 dp x 1,5), Branding
+# Emu-SC8850-Poly-Panel auf: halbe Groesse des 3x-Exports (918x280 = 612x187 dp x 1,5), Branding
 # ersetzt, Playlist-Kopf -> VOICES, VOLUME -> GAIN; alles andere bleibt unveraendert.
 # Ausgabe: rohe BGRA-Pixel (918*280*4 Byte) fuer .incbin.
 # usage: make_sc8850_panel.py <sc8850_panel.png> <out.bgra> [preview.png]
@@ -82,15 +82,15 @@ def center_text(cx, y, t, f, fill):
 # Branding oben auf dem LCD-Rahmen ("TheUsualSuspects", weiss kursiv) -> Produktname, gleicher Stil
 hgrad_fill((408, 6, 571, 30), 406, 572)
 f1, f2 = font(15), font(15, "-Bold")
-w = d.textlength("Nuked", font=f1) + d.textlength("SC-8850", font=f2)
+w = d.textlength("Emu-", font=f1) + d.textlength("SC8850", font=f2)
 x = 566 - w
-x += oblique_text(x, 9, "Nuked", f1, (236, 238, 240))
-oblique_text(x, 9, "SC-8850", f2, (236, 238, 240))
+x += oblique_text(x, 9, "Emu-", f1, (236, 238, 240))
+oblique_text(x, 9, "SC8850", f2, (236, 238, 240))
 # Logo unten links ("88Emu50" + Pfeil): Struktur aus der leeren Flaeche rechts daneben (gleiche Zeilen)
 # (Vorlage zwischen den Bohrungen von F1 und F2, gespiegelt gekachelt)
 texture_fill((30, 234, 226, 274), (298, 328))
 f1, f2 = font(22), font(22, "-Bold")
-x = 40 + oblique_text(40, 239, "Nuked-SC", f1, (22, 22, 22))
+x = 40 + oblique_text(40, 239, "Emu-SC", f1, (22, 22, 22))
 oblique_text(x, 239, "8850", f2, (22, 22, 22))
 # Playlist-Kopf -> "VOICES" (Ordnersymbol entfernt), Spalten-Verlauf bleibt
 inpaint_text((32, 13, 141, 34), (40, 135))
