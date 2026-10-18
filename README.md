@@ -5,11 +5,11 @@
 <img width="918" height="280" alt="cm32l" src="docs/images/cm32l_panel.png" />
 <img width="918" height="280" alt="sc55" src="https://github.com/user-attachments/assets/b166fa58-a380-4987-9cbe-c36dcb0e3541" />
 <img width="918" height="280" alt="sc55_mk2" src="https://github.com/user-attachments/assets/2ad02a8b-aef4-44f3-b5ed-8b1a7bf05e6b" />
-<img width="918" height="281" alt="sc_88" src="https://github.com/user-attachments/assets/4c4cf183-b4d8-4177-b115-526d5754561c" />
-<img width="918" height="280" alt="sc_88pro" src="https://github.com/user-attachments/assets/efe4a79e-5ba9-4abf-b199-a00c968ba4c7" />
+<img width="918" height="280" alt="sc_88" src="docs/images/sc88_panel.png" />
+<img width="918" height="280" alt="sc_88pro" src="docs/images/sc88pro_panel.png" />
 <img width="918" height="280" alt="sc8820" src="docs/images/sc8820_panel.png" />
 <img width="918" height="280" alt="sc8820pro" src="docs/images/sc8820pro_panel.png" />
-<img width="918" height="279" alt="sc_8850" src="https://github.com/user-attachments/assets/853f8c54-9bf6-4ff2-bf91-a5d85f23c303" />
+<img width="918" height="280" alt="sc_8850" src="docs/images/sc8850_panel.png" />
 </p>
 
 Single-file **CLAP** and **VST2** plug-ins (Windows x64) for the Roland **MT-32 / CM-32L**, **SC-55 (v1.21)**, **SC-55mk2 (v1.01, with Capital Tone Fallback)**, **SC-88**, **SC-88 Pro**, **SC-8820** and **SC-8850**, built on the low-level emulation of [Nuked SC-55](https://github.com/nukeykt/Nuked-SC55) and [88emu](https://github.com/dsp56300/gearmulator). The original modules stop at 32 (MT-32, CM-32L), 24 (SC-55), 28 (SC-55mk2), 64 (SC-88, SC-88 Pro and SC-8820) or 128 (SC-8850) simultaneous voices. These plug-ins run several bit-identical emulator instances side by side and distribute the MIDI notes among them, which raises the limit to **64 voices** (MT-32 / CM-32L), **264 voices** (SC-55), **280 voices** (SC-55mk2), **256 voices** (SC-88, SC-88 Pro, SC-8820 and SC-8850) without changing how a single module sounds.
