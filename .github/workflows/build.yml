@@ -141,7 +141,8 @@ jobs:
         with:
           tag: ${{ needs.version.outputs.tag }}
           name: Autobuild r${{ needs.version.outputs.revision }}
-          prerelease: true
+          prerelease: false
+          makeLatest: true
           artifacts: assets/*
           artifactErrorsFailBuild: true
           body: |
@@ -168,13 +169,13 @@ jobs:
             - The files are not signed: Windows SmartScreen and macOS Gatekeeper warn on the first start. See README.md ("The patcher") for how to start it anyway.
             - The generated plugins contain your ROMs. Do not share them.
 
-      - name: Remove the Pre-release label from older Autobuild releases
+      - name: Remove the Pre-release label from older Autobuild releases (left over from earlier workflow versions)
         uses: actions/github-script@v8
         env:
           CURRENT_REVISION: ${{ needs.version.outputs.revision }}
         with:
           script: |
-            // Older Autobuilds stay for regression tests; only the newest one is a pre-release.
+            // Older Autobuilds stay for regression tests without any label; only the newest one is "Latest".
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const currentRevision = parseInt(process.env.CURRENT_REVISION, 10);

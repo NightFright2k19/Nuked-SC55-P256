@@ -102,7 +102,7 @@ There are two ways to get the plug-ins. The first needs nothing but your ROM fil
 
 ### Option A: the patcher (no compiler, no Python)
 
-1. Download the **patcher** for your system from the [Releases](https://github.com/NightFright2k19/Nuked-SC55-P256/releases) page (Windows, Linux, macOS Apple Silicon or macOS Intel). The newest Autobuild is at the top and marked **Pre-release**; older Autobuilds stay available for comparison and regression tests.
+1. Download the **patcher** for your system from the [Releases](https://github.com/NightFright2k19/Nuked-SC55-P256/releases) page (Windows, Linux, macOS Apple Silicon or macOS Intel). The newest Autobuild is at the top and marked **Latest**; older Autobuilds stay available for comparison and regression tests.
 2. Put it in a folder together with your ROM files (subfolders are searched, file names do not matter, see [Supported models](#supported-models-and-rom-sets)).
 3. Start it, check the list of found models and click **Patch**.
 4. Copy the results from `Plugins/CLAP/*.clap` and/or `Plugins/VST2/*.dll` to your plug-in folders (see [Using the plug-ins](#using-the-plug-ins)).
