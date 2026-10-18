@@ -3,7 +3,9 @@ name: Restore deleted Autobuild releases
 # One-off maintenance: older Autobuild releases used to be deleted when a new one was published.
 # The patchers of those runs are still stored as workflow artifacts (until they expire), so this
 # workflow publishes them again as releases with their original revision number, commit and
-# release notes. Releases that already exist are skipped, so it can be run more than once.
+# release notes. It needs the repository secret RESTORE_TOKEN (a token with contents and workflows
+# write access), because the default token may not tag old commits that contain workflow files.
+# Releases that already exist are skipped, so it can be run more than once.
 
 on:
   workflow_dispatch:
@@ -31,7 +33,7 @@ jobs:
 
       - name: Restore releases from workflow artifacts
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RESTORE_TOKEN }}
           REPO: ${{ github.repository }}
           DRY_RUN: ${{ inputs.dry_run }}
         shell: python3 {0}
@@ -43,7 +45,11 @@ jobs:
           dry_run = os.environ['DRY_RUN'] == 'true'
 
           def gh(*args, capture=True):
-              r = subprocess.run(['gh', *args], check=True, text=True, capture_output=capture)
+              r = subprocess.run(['gh', *args], text=True, capture_output=capture, env={**os.environ, 'GH_DEBUG': 'api'})
+              if r.returncode:
+                  detail = ' '.join(((r.stderr or '') + (r.stdout or '')).split())[-900:]
+                  print(f'::error::gh {" ".join(args[:3])} failed ({r.returncode}): {detail}')
+                  sys.exit(1)
               return r.stdout
 
           def api(path):
@@ -94,8 +100,10 @@ jobs:
                   notes = os.path.join(work, 'notes.md')
                   with open(notes, 'w') as f:
                       f.write(release_notes(sha))
-                  gh('release', 'create', tag, *files, '-R', repo, '--target', sha,
-                     '--title', f'Autobuild r{revision}', '--notes-file', notes, '--latest=false', capture=False)
+                  # Tag the original commit first (a release created with --target is refused for old commits).
+                  gh('api', f'repos/{repo}/git/refs', '-f', f'ref=refs/tags/{tag}', '-f', f'sha={sha}')
+                  gh('release', 'create', tag, *files, '-R', repo,
+                     '--title', f'Autobuild r{revision}', '--notes-file', notes, '--latest=false')
                   existing.add(tag)
                   restored += 1
 
