@@ -1,4 +1,4 @@
-// Nuked SC-8820 Poly - front panel (included by editor_win32.cpp in NUKED_SC55_DEVICE_8820 builds,
+// Emu SC-8820 Poly - front panel (included by editor_win32.cpp in NUKED_SC55_DEVICE_8820 builds,
 // after editor_sc88.inc).
 //
 // Background and lamp art: tools/make_sc8820_panel.py, drawn from scratch after photos of the
@@ -48,8 +48,8 @@ constexpr int E20_ROW_A = 56, E20_ROW_B = 94;             // first dot row of PA
 constexpr DWORD E20_MIN_HOLD_MS = 120;                    // a short click still reaches the switch scan
 constexpr uint32_t E20_BIT_INSTMAP = 1u, E20_BIT_PREVIEW = 2u;
 constexpr int E20_HIT_INSTMAP = 1, E20_HIT_KNOB = 2, E20_HIT_SETUP = 3, E20_HIT_LOGO = 4;
-// "Nuked-SC8820" / "Nuked-SC8820 Pro" logo: a left click switches to the other interface style (issue #70)
-constexpr RECT E20_LOGO[2] = {{36, 241, 219, 266}, {18, 241, 232, 266}};
+// "Emu-SC8820" / "Emu-SC8820 Pro" logo: a left click switches to the other interface style (issue #70)
+constexpr RECT E20_LOGO[2] = {{36, 241, 198, 266}, {18, 241, 216, 266}};
 
 HDC g_lit20_dc[2] = {};
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Nuked SC-55 / SC-88 / SC-8820 / SC-8850 / MT-32 P256 - Plugin Builder
+Nuked SC-55 / Emu SC-88 / SC-8820 / SC-8850 / MT-32 P256 - Plugin Builder
 
 Creates the single-file plugins (CLAP + VST2, Windows x64) from the ROM-less templates in
 "templates" (without ROMs and without space reserved for them; the script inserts the ROMs)
@@ -10,11 +10,11 @@ filenames do not matter - identification is based on the contents via SHA-256).
 
   SC-55 v1.21        -> output/CLAP/Nuked-SC55_v121.clap, output/VST2/Nuked-SC55_v121.dll
   SC-55mk2 v1.01     -> output/.../Nuked-SC55_MkII.*   (always with CTF, see below)
-  SC-88              -> output/.../Nuked-SC88.*
-  SC-88 Pro          -> output/.../Nuked-SC88_Pro.*
-  SC-8820            -> output/.../Nuked-SC8820.*  (interface Basic / Pro in the SETUP menu)
-  SC-8850            -> output/.../Nuked-SC8850.*
-  MT-32 / CM-32L     -> output/.../Nuked-MT32.*    (MT-32 old, MT-32 new and CM-32L in one plugin,
+  SC-88              -> output/.../Emu-SC88.*
+  SC-88 Pro          -> output/.../Emu-SC88_Pro.*
+  SC-8820            -> output/.../Emu-SC8820.*    (interface Basic / Pro in the SETUP menu)
+  SC-8850            -> output/.../Emu-SC8850.*
+  MT-32 / CM-32L     -> output/.../Emu-MT32.*      (MT-32 old, MT-32 new and CM-32L in one plugin,
                                                     device chosen in the SETUP menu; built when at
                                                     least one of the three ROM sets is complete)
 
@@ -117,12 +117,12 @@ CTF_PATCH = "eNrl2HdPU1EYx/Fve2kLChVliowCRcsGLYoVKSEOXNHg3nvHhMS9qyYm7r0XKu4VY4y
 MODELS = [
     ("v121", "Nuked-SC55_v121", "SC-55 v1.21", [(0, "rom1"), (1, "rom2"), (3, "wave1"), (4, "wave2"), (5, "wave3")]),
     ("mk2", "Nuked-SC55_MkII", "SC-55mk2 v1.01 (CTF)", [(0, "rom1"), (1, "rom2"), (2, "rom_sm"), (3, "wave1"), (4, "wave2")]),
-    ("88", "Nuked-SC88", "SC-88", [(0, "control"), (1, "wave0"), (2, "wave1"), (3, "wave2"), (4, "wave3")]),
-    ("88pro", "Nuked-SC88_Pro", "SC-88 Pro", [(0, "control"), (1, "wave0"), (2, "wave1"), (3, "wave2")]),
-    ("8820", "Nuked-SC8820", "SC-8820", [(0, "internal"), (1, "program"), (2, "wave0"), (3, "wave1")]),
-    ("8850", "Nuked-SC8850", "SC-8850", [(0, "internal"), (1, "program"), (2, "data"), (3, "wave")]),
+    ("88", "Emu-SC88", "SC-88", [(0, "control"), (1, "wave0"), (2, "wave1"), (3, "wave2"), (4, "wave3")]),
+    ("88pro", "Emu-SC88_Pro", "SC-88 Pro", [(0, "control"), (1, "wave0"), (2, "wave1"), (3, "wave2")]),
+    ("8820", "Emu-SC8820", "SC-8820", [(0, "internal"), (1, "program"), (2, "wave0"), (3, "wave1")]),
+    ("8850", "Emu-SC8850", "SC-8850", [(0, "internal"), (1, "program"), (2, "data"), (3, "wave")]),
     # MT-32 / CM-32L: one ROM set per device (slot 0 = MT-32 old, 1 = MT-32 new, 2 = CM-32L), see la_sets()
-    ("la", "Nuked-MT32", "MT-32 / CM-32L", [(0, "MT-32 old"), (1, "MT-32 new"), (2, "CM-32L")]),
+    ("la", "Emu-MT32", "MT-32 / CM-32L", [(0, "MT-32 old"), (1, "MT-32 new"), (2, "CM-32L")]),
 ]
 # Firmware per LA device, preferred first (the plugin shows the version it was built with)
 LA_FIRMWARE = {
@@ -307,7 +307,7 @@ def build_model(item, templates: Path = TEMPLATES, output: Path = OUTPUT):
 
 
 def main() -> int:
-    print("Nuked SC-55 / SC-88 / SC-8820 / SC-8850 / MT-32 P256 - Plugin Builder\n")
+    print("Nuked SC-55 / Emu SC-88 / SC-8820 / SC-8850 / MT-32 P256 - Plugin Builder\n")
     if not ROMS.is_dir():
         print(f"Folder missing: {ROMS}\n-> Put your ROM files there (subfolders are allowed).")
         return 1

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Draws the Nuked-SC8820 panel from scratch, modelled on photos of the SC-8820 front (champagne
+# Draws the Emu-SC8820 panel from scratch, modelled on photos of the SC-8820 front (champagne
 # metal front, smoked display window, 12 x 3 level dots per part group: columns 1-8 green, 9 yellow,
 # 10-12 red with blends in columns 7, 8, 10, 11; red POWER and amber USB symbols). Nothing is copied from the photos; all shapes and text are
 # drawn here, and the maker's logos and product names are replaced by the plugin's own branding.
@@ -91,8 +91,8 @@ else:
 d.text((X(428), X(52)), "PART A", font=F(14, "-Bold"), fill=PR)
 d.text((X(428), X(90)), "PART B", font=F(14, "-Bold"), fill=PR)
 if not pro:
-    d.text((X(290), X(114)), "Nuked", font=F(17, "-Oblique"), fill=PR)
-    d.text((X(348), X(113)), "P256", font=F(18, "-BoldOblique"), fill=PR)
+    d.text((X(298), X(114)), "Emu", font=F(17, "-Oblique"), fill=PR)
+    d.text((X(298) + d.textlength("Emu ", font=F(17, "-Oblique")), X(113)), "P256", font=F(18, "-BoldOblique"), fill=PR)
 # map labels under PART B, one per 3-column segment
 GX, GW = 508, 11.4                                    # first dot column, column pitch
 labels = ["55", "88", "88Pro", "8820"]
@@ -181,14 +181,17 @@ def centred(box, text, font, fill):
     x0, y0, x1, y1 = box
     l, t, r_, b_ = d.textbbox((0, 0), text, font=font)
     d.text(((X(x0) + X(x1) - (r_ - l))/2 - l, (X(y0) + X(y1) - (b_ - t))/2 - t), text, font=font, fill=fill)
-LOGO_Y = 241                         # top of "Nuked-SC" (size 22): same height as the SC-55/88/8850 logos (issue #70)
+LOGO_Y = 241                         # top of "Emu-SC" (size 22): same height as the SC-55/88/8850 logos (issue #70)
 if not pro:
-    d.text((X(40), X(LOGO_Y)), "Nuked-SC", font=F(22, "-Oblique"), fill=(150, 150, 150))
-    d.text((X(148), X(LOGO_Y-2)), "8820", font=F(24, "-BoldOblique"), fill=(200, 200, 200))
+    d.text((X(40), X(LOGO_Y)), "Emu-SC", font=F(22, "-Oblique"), fill=(150, 150, 150))
+    x = X(40) + d.textlength("Emu-SC", font=F(22, "-Oblique")) + X(1)
+    d.text((x, X(LOGO_Y-2)), "8820", font=F(24, "-BoldOblique"), fill=(200, 200, 200))
 else:
-    d.text((X(22), X(LOGO_Y+2)), "Nuked-SC", font=F(20, "-Oblique"), fill=(150, 150, 150))
-    d.text((X(119), X(LOGO_Y)), "8820", font=F(22, "-BoldOblique"), fill=(200, 200, 200))
-    d.text((X(187), X(LOGO_Y)), "Pro", font=F(22, "-BoldOblique"), fill=OR)
+    d.text((X(22), X(LOGO_Y+2)), "Emu-SC", font=F(20, "-Oblique"), fill=(150, 150, 150))
+    x = X(22) + d.textlength("Emu-SC", font=F(20, "-Oblique")) + X(1)
+    d.text((x, X(LOGO_Y)), "8820", font=F(22, "-BoldOblique"), fill=(200, 200, 200))
+    x += d.textlength("8820 ", font=F(22, "-BoldOblique"))
+    d.text((x, X(LOGO_Y)), "Pro", font=F(22, "-BoldOblique"), fill=OR)
 SB = (812, FRONT+44, 900, FRONT+68)  # same place in Basic and Pro (issue #67)
 d.rectangle(tuple(X(v) for v in SB), fill=(16, 16, 16))
 if not base: centred(SB, "SETUP  >", F(11, "-Bold"), OR)

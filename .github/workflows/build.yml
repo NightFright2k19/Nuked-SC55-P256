@@ -146,10 +146,10 @@ jobs:
           artifacts: assets/*
           artifactErrorsFailBuild: true
           body: |
-            The **Nuked SC-55 P256 Patcher** creates the **Nuked-MT32/SC55/88** CLAP/VST2 plugins (Windows x64) from your own ROM files. The templates are built in; no Python needed.
+            The **Nuked SC-55 P256 Patcher** creates the **Emu-MT32**, **Nuked-SC55** and **Emu-SC88/SC8820/SC8850** CLAP/VST2 plugins (Windows x64) from your own ROM files. The templates are built in; no Python needed.
 
             **SUPPORTED ROMS**
-            - MT-32 (old 1.x, new 2.x) and CM-32L (one plugin, device chosen in the SETUP menu; built when at least one of the three sets is complete)
+            - MT-32 (old 1.x, new 2.x) and CM-32L (one plugin, device chosen in the SETUP menu or by clicking the name; built when at least one of the three sets is complete)
             - SC-55 v1.21
             - SC-55mk2 v1.01 (CTF is applied automatically)
             - SC-88

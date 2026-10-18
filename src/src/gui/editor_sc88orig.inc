@@ -1,4 +1,4 @@
-// Nuked SC-88 Poly / Nuked SC-88 Pro Poly - front panel (included by editor_win32.cpp in
+// Emu SC-88 Poly / Emu SC-88 Pro Poly - front panel (included by editor_win32.cpp in
 // NUKED_SC55_DEVICE_88 and NUKED_SC55_DEVICE_88PRO builds, after editor_sc88.inc).
 //
 // Background: the 88emu SC-88 / SC-88 Pro panel art (The Usual Suspects, GPLv3), prepared at

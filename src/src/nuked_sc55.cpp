@@ -3780,4 +3780,14 @@ bool NukedSc55::GetLaText(char* buf, const size_t size)
 	emu88_get_display_text(instances[0].ctx, 0, buf, size);
 	return true;
 }
+
+bool NukedSc55::GetLaDots(uint8_t* dots, const size_t size)
+{
+	std::unique_lock lock(units_mx, std::try_to_lock);
+	if (!lock.owns_lock() || !lcd_ready.load() || instances.empty() || !instances[0].ctx) return false;
+	int w = 0, h = 0, on = 0;
+	if (!emu88_get_display_pixels(instances[0].ctx, 0, dots, size, &w, &h, &on) || w != 120 || h < 8) return false;
+	if (!on) std::memset(dots, 0, size);
+	return true;
+}
 #endif

@@ -58,7 +58,10 @@ const char* NoteName88(int n, char* buf, size_t len) // Roland: C-1 = 0, C4 = 60
 }
 
 // Voices window (the player's playlist) and the UNITS slot under it
-void DrawVoices88(Editor& e, HDC dc, const RECT& win, const RECT& units_box)
+// Vertical layout of the VOICES window (offsets from its top): count, "of N", meter and its height
+struct Voices88Layout { int count_dy, of_dy, meter_dy, meter_h; };
+
+void DrawVoices88(Editor& e, HDC dc, const RECT& win, const RECT& units_box, const Voices88Layout& lo = {8, 44, 66, 22})
 {
     NukedSc55& p = *e.plugin;
     char v[32];
@@ -71,18 +74,18 @@ void DrawVoices88(Editor& e, HDC dc, const RECT& win, const RECT& units_box)
     else if (e.peak_hold > 0) --e.peak_hold;
     else e.peak = std::max((float)voices, e.peak - 1.5f);
     std::snprintf(v, sizeof(v), "%03d", voices);
-    Text(dc, e.f_big, C88_LED, win.left, win.top + 8, v, DT_CENTER, win.right - win.left, 34);
+    Text(dc, e.f_big, C88_LED, win.left, win.top + lo.count_dy, v, DT_CENTER, win.right - win.left, 34);
     std::snprintf(v, sizeof(v), "of %d", capacity);
-    Text(dc, e.f_tiny, RGB(0x9a, 0x9e, 0xa6), win.left, win.top + 44, v, DT_CENTER, win.right - win.left, 14);
+    Text(dc, e.f_tiny, RGB(0x9a, 0x9e, 0xa6), win.left, win.top + lo.of_dy, v, DT_CENTER, win.right - win.left, 14);
     {   // vertical-ish meter: 20 segments across the window
-        const int segs = 20, mx = win.left + 8, my = win.top + 66, sw = 4, sg = 1;
+        const int segs = 20, mx = win.left + 8, my = win.top + lo.meter_dy, sw = 4, sg = 1;
         const int lit  = std::min(segs, (int)std::ceil(voices * (float)segs / std::max(1, capacity)));
         const int pk   = std::min(segs - 1, (int)(e.peak * segs / std::max(1, capacity)));
         for (int s = 0; s < segs; ++s) {
             COLORREF c = C88_LED_DIM;
             if (s < lit) c = (s >= segs * 9 / 10) ? RGB(0xff, 0x58, 0x30) : C88_LED;
             if (s == pk && e.peak > 0) c = RGB(0xff, 0x58, 0x30);
-            Fill(dc, mx + s * (sw + sg), my, sw, 22, c);
+            Fill(dc, mx + s * (sw + sg), my, sw, lo.meter_h, c);
         }
     }
     const int awake = p.ui_awake.load();
