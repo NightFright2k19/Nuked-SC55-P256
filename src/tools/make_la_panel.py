@@ -305,7 +305,7 @@ def build():
         ribs(cx - r, cx + r, cy, GY1, [x for x in range(cx - 48, cx + 48, 4) if cx - r <= x and x + 3 <= cx + r])
         sh = Image.new('RGBA', im.size, (0, 0, 0, 0)); sd = ImageDraw.Draw(sh)                              # soft shadow, the ribs show through
         for k in range(8, 0, -1):
-            sd.ellipse((X(cx - r + 1 + k * 0.4), X(cy - r + 3 + k * 0.6), X(cx + r + 3 + k * 0.4), X(cy + r + 5 + k * 0.6)), fill=(60, 50, 30, 14))
+            sd.ellipse((X(cx - r + 1 + k * 0.4), X(cy - r + 3 + k * 0.6), X(cx + r + 3 + k * 0.4), X(cy + r + 5 + k * 0.6)), fill=(50, 40, 22, 34))
         im.paste(Image.alpha_composite(im.convert('RGBA'), sh).convert('RGB')); d = ImageDraw.Draw(im)
         d.ellipse((X(cx - r), X(cy - r + 3), X(cx + r), X(cy + r + 3)), fill=(46, 48, 50))                   # skirt (cylinder side)
         for k in range(X(r), 0, -1):                                                                         # charcoal cap, lit from the top left
