@@ -62,7 +62,7 @@ def lcd_dots(im, txt):
                     nb = [(c, r), (c + 1, r)] if yy % 2 == 0 else [(c, r), (c, r + 1)] if xx % 2 == 0 else \
                          [(c, r), (c + 1, r), (c, r + 1), (c + 1, r + 1)]
                     k = sum(on(*q) for q in nb)
-                    col = INK_LCD if k == len(nb) else lerp(gr, INK_LCD, 0.45 * k / len(nb))    # lit between lit dots, a glow next to one
+                    col = INK_LCD if k else gr    # bold: a lit dot also lights its gaps (issue #79, readable at 918 px)
                 px[x0 + xx, y0 + yy] = col
         for xx in range(9):    # cursor line
             px[x0 + xx, y0 + ULINE_DY] = lerp(un, lcd_ground(y0 + ULINE_DY), 0.3 if xx % 2 == 0 else 0.6)
@@ -303,9 +303,10 @@ def build():
         tl, tr = cx - r - 8, cx + r + 8                         # the face reaches down into the strip (U-shaped notch)
         # below the knob (issue #79 mockup): a ribbed column as wide as the knob, from its centre down into the strip
         ribs(cx - r, cx + r, cy, GY1, [x for x in range(cx - 48, cx + 48, 4) if cx - r <= x and x + 3 <= cx + r])
-        for k in range(8, 0, -1):                                                                            # soft shadow
-            d.ellipse((X(cx - r + 1 + k * 0.4), X(cy - r + 3 + k * 0.6), X(cx + r + 3 + k * 0.4), X(cy + r + 5 + k * 0.6)),
-                      fill=lerp(lerp(top, low, 0.6), (120, 112, 88), (9 - k) / 9))
+        sh = Image.new('RGBA', im.size, (0, 0, 0, 0)); sd = ImageDraw.Draw(sh)                              # soft shadow, the ribs show through
+        for k in range(8, 0, -1):
+            sd.ellipse((X(cx - r + 1 + k * 0.4), X(cy - r + 3 + k * 0.6), X(cx + r + 3 + k * 0.4), X(cy + r + 5 + k * 0.6)), fill=(60, 50, 30, 14))
+        im.paste(Image.alpha_composite(im.convert('RGBA'), sh).convert('RGB')); d = ImageDraw.Draw(im)
         d.ellipse((X(cx - r), X(cy - r + 3), X(cx + r), X(cy + r + 3)), fill=(46, 48, 50))                   # skirt (cylinder side)
         for k in range(X(r), 0, -1):                                                                         # charcoal cap, lit from the top left
             t = k / X(r); o = X(3) * (1 - t)
