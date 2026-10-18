@@ -98,7 +98,9 @@ jobs:
                   notes = os.path.join(work, 'notes.md')
                   with open(notes, 'w') as f:
                       f.write(release_notes(sha))
-                  gh('release', 'create', tag, *files, '-R', repo, '--target', sha,
+                  # Tag the original commit first (a release created with --target is refused for old commits).
+                  gh('api', f'repos/{repo}/git/refs', '-f', f'ref=refs/tags/{tag}', '-f', f'sha={sha}')
+                  gh('release', 'create', tag, *files, '-R', repo,
                      '--title', f'Autobuild r{revision}', '--notes-file', notes, '--latest=false')
                   existing.add(tag)
                   restored += 1
