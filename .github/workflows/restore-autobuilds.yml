@@ -3,7 +3,9 @@ name: Restore deleted Autobuild releases
 # One-off maintenance: older Autobuild releases used to be deleted when a new one was published.
 # The patchers of those runs are still stored as workflow artifacts (until they expire), so this
 # workflow publishes them again as releases with their original revision number, commit and
-# release notes. Releases that already exist are skipped, so it can be run more than once.
+# release notes. It needs the repository secret RESTORE_TOKEN (a token with contents and workflows
+# write access), because the default token may not tag old commits that contain workflow files.
+# Releases that already exist are skipped, so it can be run more than once.
 
 on:
   workflow_dispatch:
@@ -31,7 +33,7 @@ jobs:
 
       - name: Restore releases from workflow artifacts
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RESTORE_TOKEN }}
           REPO: ${{ github.repository }}
           DRY_RUN: ${{ inputs.dry_run }}
         shell: python3 {0}
