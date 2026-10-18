@@ -99,7 +99,7 @@ jobs:
                   with open(notes, 'w') as f:
                       f.write(release_notes(sha))
                   gh('release', 'create', tag, *files, '-R', repo, '--target', sha,
-                     '--title', f'Autobuild r{revision}', '--notes-file', notes, '--latest=false', capture=False)
+                     '--title', f'Autobuild r{revision}', '--notes-file', notes, '--latest=false')
                   existing.add(tag)
                   restored += 1
 
