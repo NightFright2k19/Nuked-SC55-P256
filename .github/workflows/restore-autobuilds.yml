@@ -1,0 +1,102 @@
+name: Restore deleted Autobuild releases
+
+# One-off maintenance: older Autobuild releases used to be deleted when a new one was published.
+# The patchers of those runs are still stored as workflow artifacts (until they expire), so this
+# workflow publishes them again as releases with their original revision number, commit and
+# release notes. Releases that already exist are skipped, so it can be run more than once.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only list what would be restored'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: nuked-sc55-p256-autobuild
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    name: Restore releases
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install PyYAML
+        run: python3 -m pip install --user pyyaml
+
+      - name: Restore releases from workflow artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        shell: python3 {0}
+        run: |
+          import base64, glob, json, os, re, subprocess, sys, tempfile
+          import yaml
+
+          repo = os.environ['REPO']
+          dry_run = os.environ['DRY_RUN'] == 'true'
+
+          def gh(*args, capture=True):
+              r = subprocess.run(['gh', *args], check=True, text=True, capture_output=capture)
+              return r.stdout
+
+          def api(path):
+              return json.loads(gh('api', '--paginate', '--slurp', path))
+
+          existing = {r['tag_name'] for page in api(f'repos/{repo}/releases?per_page=100') for r in page}
+          runs = [r for page in api(f'repos/{repo}/actions/workflows/build.yml/runs?status=success&per_page=100')
+                  for r in page['workflow_runs']]
+
+          candidates = []
+          for run in runs:
+              artifacts = [a for page in api(f'repos/{repo}/actions/runs/{run["id"]}/artifacts?per_page=100')
+                           for a in page['artifacts'] if a['name'].startswith('patcher-') and not a['expired']]
+              if artifacts:
+                  candidates.append((run, artifacts))
+
+          def release_notes(sha):
+              # Release notes as they were in build.yml at that commit.
+              try:
+                  content = json.loads(gh('api', f'repos/{repo}/contents/.github/workflows/build.yml?ref={sha}'))
+                  workflow = yaml.safe_load(base64.b64decode(content['content']))
+                  for step in workflow['jobs']['release']['steps']:
+                      if 'release-action' in step.get('uses', ''):
+                          return step['with']['body']
+              except Exception as error:
+                  print(f'  release notes of {sha[:7]} not found: {error}')
+              return 'Nuked SC-55 P256 Patcher (restored Autobuild).'
+
+          restored = 0
+          for run, artifacts in sorted(candidates, key=lambda c: c[0]['run_number']):
+              sha = run['head_sha']
+              with tempfile.TemporaryDirectory() as work:
+                  gh('run', 'download', str(run['id']), '-R', repo, '-D', work, '-p', 'patcher-*')
+                  files = sorted(glob.glob(f'{work}/**/Nuked-SC55-P256-Patcher-r*', recursive=True))
+                  revisions = {re.search(r'Patcher-r(\d+)-', os.path.basename(f)).group(1) for f in files}
+                  if len(revisions) != 1:
+                      print(f'Run {run["id"]} ({sha[:7]}): unexpected files {files}, skipped.')
+                      continue
+                  revision = revisions.pop()
+                  tag = f'autobuild-r{revision}'
+                  if tag in existing:
+                      print(f'{tag} ({sha[:7]}) exists, skipped.')
+                      continue
+                  print(f'{tag} ({sha[:7]}, {run["created_at"]}): {len(files)} files'
+                        + (' (dry run)' if dry_run else ''))
+                  if dry_run:
+                      continue
+                  notes = os.path.join(work, 'notes.md')
+                  with open(notes, 'w') as f:
+                      f.write(release_notes(sha))
+                  gh('release', 'create', tag, *files, '-R', repo, '--target', sha,
+                     '--title', f'Autobuild r{revision}', '--notes-file', notes, '--latest=false', capture=False)
+                  existing.add(tag)
+                  restored += 1
+
+          print(f'Restored releases: {restored}')
