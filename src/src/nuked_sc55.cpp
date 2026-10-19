@@ -3461,8 +3461,53 @@ void WorkerPool::Drain()
 	}
 }
 
+// The audio thread waits for the workers at the end of every block, so a worker must not be preempted by
+// other programs' threads: with normal priority one could lose a scheduler time slice while the audio
+// thread (high priority in a host) waits for it, and the block missed its deadline (measured under CPU
+// load with tools/polybench: SC-55, SC-88 Pro, SC-8850). On Windows the workers therefore join the
+// "Pro Audio" MMCSS class like a host's audio thread, or run at THREAD_PRIORITY_HIGHEST where MMCSS is
+// not available. They only run while units render; between blocks they wait.
+namespace {
+class WorkerPriority {
+public:
+	WorkerPriority()
+	{
+#ifdef _WIN32
+		if (HMODULE av = LoadLibraryA("avrt.dll")) {
+			using SetFn = HANDLE(WINAPI*)(LPCWSTR, LPDWORD);
+			const auto set = reinterpret_cast<SetFn>(reinterpret_cast<void*>(GetProcAddress(av, "AvSetMmThreadCharacteristicsW")));
+			revert = reinterpret_cast<RevertFn>(reinterpret_cast<void*>(GetProcAddress(av, "AvRevertMmThreadCharacteristics")));
+			DWORD task = 0;
+			if (set) mmcss = set(L"Pro Audio", &task);
+			if (mmcss) lib = av;
+			else FreeLibrary(av);
+		}
+		if (!mmcss) SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+#endif
+	}
+	~WorkerPriority()
+	{
+#ifdef _WIN32
+		if (mmcss && revert) revert(mmcss);
+		if (lib) FreeLibrary(lib);
+#endif
+	}
+	WorkerPriority(const WorkerPriority&)            = delete;
+	WorkerPriority& operator=(const WorkerPriority&) = delete;
+
+private:
+#ifdef _WIN32
+	using RevertFn = BOOL(WINAPI*)(HANDLE);
+	HANDLE mmcss    = nullptr;
+	HMODULE lib     = nullptr;
+	RevertFn revert = nullptr;
+#endif
+};
+} // namespace
+
 void WorkerPool::WorkerLoop()
 {
+	const WorkerPriority priority;
 	uint64_t seen = 0;
 	for (;;) {
 		{
