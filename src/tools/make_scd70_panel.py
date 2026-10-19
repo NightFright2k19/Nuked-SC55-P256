@@ -132,7 +132,7 @@ def knob(cx, cy, r, ang=None):
         d.line([(X(cx + ri * 0.45 * math.cos(ra)), X(cy + ri * 0.45 * math.sin(ra))),
                 (X(cx + ri * 0.92 * math.cos(ra)), X(cy + ri * 0.92 * math.sin(ra)))], fill=(30, 30, 32), width=int(2.4 * S))
 knob(*KNOB_VOL); txt(826, 52, "VOLUME", F(9, "-Bold"), INK, "mm")      # VOLUME and INPUT GAIN = GAIN (marker: GUI)
-knob(*KNOB_IN); knob(*KNOB_INST, -76); knob(*KNOB_USB, -100); knob(*KNOB_MON, -100)
+knob(*KNOB_IN); knob(*KNOB_INST, -90); knob(*KNOB_USB, -90); knob(*KNOB_MON, -90)   # no function: 12 o'clock
 for (cx, _, _), nm in ((KNOB_IN, "INPUT GAIN"), (KNOB_INST, "INST LEVEL"), (KNOB_USB, "USB AUDIO LEVEL"), (KNOB_MON, "INPUT MONITOR")):
     txt(cx, 257, nm, F(7.6, "-Bold"), INK, "mm")
 txt(KNOB_INST[0], 266, "PREVIEW (RMB)", F(6.2), INK, "mm")
