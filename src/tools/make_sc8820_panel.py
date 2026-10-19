@@ -24,7 +24,7 @@ PILLS = [(640, 202, "PART"), (736, 202, "PROGRAM"), (640, 238, "BANK MSB"), (736
 lit = '--lit' in sys.argv
 all_on = '--all-on' in sys.argv
 base = '--base' in sys.argv
-pro = '--pro' in sys.argv
+pro = True   # issue #87: the Basic panel was removed, only the layout with the part display is left (--pro is accepted and ignored)
 im = Image.new('RGB', (W*S, H*S)); d = ImageDraw.Draw(im)
 DJ = "/usr/share/fonts/truetype/dejavu/DejaVuSans"
 def F(sz, st=""): return ImageFont.truetype(DJ + st + ".ttf", int(sz*S))
@@ -182,16 +182,10 @@ def centred(box, text, font, fill):
     l, t, r_, b_ = d.textbbox((0, 0), text, font=font)
     d.text(((X(x0) + X(x1) - (r_ - l))/2 - l, (X(y0) + X(y1) - (b_ - t))/2 - t), text, font=font, fill=fill)
 LOGO_Y = 241                         # top of "Emu-SC" (size 22): same height as the SC-55/88/8850 logos (issue #70)
-if not pro:
-    d.text((X(40), X(LOGO_Y)), "Emu-SC", font=F(22, "-Oblique"), fill=(150, 150, 150))
-    x = X(40) + d.textlength("Emu-SC", font=F(22, "-Oblique")) + X(1)
-    d.text((x, X(LOGO_Y-2)), "8820", font=F(24, "-BoldOblique"), fill=(200, 200, 200))
-else:
-    d.text((X(22), X(LOGO_Y+2)), "Emu-SC", font=F(20, "-Oblique"), fill=(150, 150, 150))
-    x = X(22) + d.textlength("Emu-SC", font=F(20, "-Oblique")) + X(1)
-    d.text((x, X(LOGO_Y)), "8820", font=F(22, "-BoldOblique"), fill=(200, 200, 200))
-    x += d.textlength("8820 ", font=F(22, "-BoldOblique"))
-    d.text((x, X(LOGO_Y)), "Pro", font=F(22, "-BoldOblique"), fill=OR)
+# logo "Emu-SC8820" (issue #87: the former Basic logo, also on the panel with the part display)
+d.text((X(40), X(LOGO_Y)), "Emu-SC", font=F(22, "-Oblique"), fill=(150, 150, 150))
+x = X(40) + d.textlength("Emu-SC", font=F(22, "-Oblique")) + X(1)
+d.text((x, X(LOGO_Y-2)), "8820", font=F(24, "-BoldOblique"), fill=(200, 200, 200))
 SB = (812, FRONT+44, 900, FRONT+68)  # same place in Basic and Pro (issue #67)
 d.rectangle(tuple(X(v) for v in SB), fill=(16, 16, 16))
 if not base: centred(SB, "SETUP  >", F(11, "-Bold"), OR)

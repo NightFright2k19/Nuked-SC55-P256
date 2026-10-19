@@ -461,9 +461,8 @@ void ShowSetupMenu(Editor& e)
         const int st = p.ui_style.load();
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Interface Style", L"Oberfl\u00e4chen-Stil"));
-        AppendMenuW(m, MF_STRING | (st == 0 ? MF_CHECKED : 0), 20,
-                    T(L"   Basic\t(default)", L"   Basic\t(Standard)"));
-        AppendMenuW(m, MF_STRING | (st == 1 ? MF_CHECKED : 0), 21, L"   Pro");
+        AppendMenuW(m, MF_STRING | (st != 2 ? MF_CHECKED : 0), 21,
+                    T(L"   SC-8820\t(default)", L"   SC-8820\t(Standard)")); // issue #87: Basic removed, Pro renamed
         AppendMenuW(m, MF_STRING | (st == 2 ? MF_CHECKED : 0), 22, L"   SC-D70");
     }
 #endif
@@ -514,7 +513,7 @@ void ShowSetupMenu(Editor& e)
         p.NotifyStateChanged();
 #endif
 #ifdef NUKED_SC55_DEVICE_8820
-    } else if (cmd >= 20 && cmd < 20 + NukedSc55::kNumStyles8820) { // interface style, stored in the state
+    } else if (cmd >= 21 && cmd < 20 + NukedSc55::kNumStyles8820) { // interface style (1 SC-8820, 2 SC-D70), stored in the state
         p.ui_style = cmd - 20;
         p.NotifyStateChanged();
 #endif

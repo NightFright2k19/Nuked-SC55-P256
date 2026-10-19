@@ -8,7 +8,6 @@
 <img width="918" height="280" alt="sc_88" src="docs/images/sc88_panel.png" />
 <img width="918" height="280" alt="sc_88pro" src="docs/images/sc88pro_panel.png" />
 <img width="918" height="280" alt="sc8820" src="docs/images/sc8820_panel.png" />
-<img width="918" height="280" alt="sc8820pro" src="docs/images/sc8820pro_panel.png" />
 <img width="918" height="280" alt="sc8820d70" src="docs/images/sc8820d70_panel.png" />
 <img width="918" height="280" alt="sc_8850" src="docs/images/sc8850_panel.png" />
 </p>
@@ -30,7 +29,7 @@ Single-file **CLAP** and **VST2** plug-ins (Windows x64) for the Roland **MT-32 
 - [SC-88 Pro engine (88emu)](#sc-88-pro-engine-88emu)
 - [SC-88 engine (88emu)](#sc-88-engine-88emu)
 - [SC-8820 engine (88emu)](#sc-8820-engine-88emu)
-  - [SC-8820 Pro interface](#sc-8820-pro-interface)
+  - [SC-8820 part display](#sc-8820-part-display)
   - [SC-D70 interface](#sc-d70-interface)
 - [SC-8850 engine (88emu)](#sc-8850-engine-88emu)
 - [Panels and controls](#panels-and-controls)
@@ -68,7 +67,7 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 - **SC-88:** the 88emu engine with the firmware of the first SC-88, 32 parts on two MIDI inputs like the SC-88 Pro, the original front panel driven by the firmware, and GAIN. See [SC-88 engine](#sc-88-engine-88emu).
 - **SC-88 Pro:** a second engine based on the 88emu core from the Gearmulator project, with the SC-55 / SC-88 / SC-88 Pro tone map switch of the hardware, gain, mute and preview, and both MIDI inputs (32 parts A01-A16 / B01-B16: port select `F5 01` / `F5 02`, or the second CLAP note port "MIDI IN B"). The SC-55 code is untouched by this (audio compared byte by byte).
 - **SC-8820:** the same 88emu engine with the SC-8820 firmware, 32 parts on two MIDI inputs (A, B), a front panel drawn after the device (lamps from the firmware, INST MAP, GAIN knob, PREVIEW on a right click). See [SC-8820 engine](#sc-8820-engine-88emu).
-- **SC-8820 Pro interface:** the SC-8820 plug-in has a second panel, chosen in the SETUP menu ("Interface Style": Basic / Pro / SC-D70): a 16-part level display, a part display (program, instrument, bank MSB / LSB, level, pan, reverb, chorus) and buttons to change them. It is customized, with more features and less faithful to the device; the sound engine is the same. See [SC-8820 Pro interface](#sc-8820-pro-interface).
+- **SC-8820 part display:** the SC-8820 panel adds what the device lacks: a 16-part level display and, in the lower strip, a part display (program, instrument, bank MSB / LSB, level, pan, reverb, chorus) with edit buttons. A second panel after the SC-D70 can be chosen in the SETUP menu ("Interface Style": SC-8820 / SC-D70). See [SC-8820 part display](#sc-8820-part-display).
 - **SC-D70 interface:** a third panel for the SC-8820 plug-in, after the Roland SC-D70, which has the same sound engine: part, instrument and variation on a 7-segment display with PART / INST / DEC / INC, GS / GM and MIDI lamps, output level meters; the audio interface parts of the device are drawn without a function. See [SC-D70 interface](#sc-d70-interface).
 - **SC-8850:** the same 88emu engine with the SC-8850 firmware, 64 parts on four MIDI inputs (A-D), the original front panel with graphic LCD driven by the firmware, and GAIN. See [SC-8850 engine](#sc-8850-engine-88emu).
 
@@ -339,34 +338,26 @@ The SC-8820 plug-in uses the 88emu core with the SC-8820 firmware (compile-time 
 
 ### SC-8820 panel (918 x 280 px)
 
-- **Graphics:** drawn from scratch by `tools/make_sc8820_panel.py` after photos of the device (no photo or third-party art is used): the champagne metal front, the smoked display window with the POWER (red) and USB (amber) symbols, the PART A / PART B level indicators (12 x 3 dots each, green through yellow and orange to red, each dot in a fixed colour), the map labels, the INST MAP button and the knob (labelled GAIN). The maker's logos are replaced by the plug-in's own branding. VOICES (count, bar) and UNITS sit left of INST MAP as on the other panels, the GAIN value under the knob; the strip below holds the name and SETUP.
+- **Graphics:** drawn from scratch by `tools/make_sc8820_panel.py` after photos of the device (no photo or third-party art is used): the champagne metal front, the smoked display window with the POWER (red) and USB (amber) symbols, the PART A / PART B level indicators (12 x 3 dots each, green through yellow and orange to red, each dot in a fixed colour), the map labels, the INST MAP button and the knob (labelled GAIN). The maker's logos are replaced by the plug-in's own branding. VOICES (count, bar) and UNITS sit left of INST MAP as on the other panels, the GAIN value under the knob; the strip below holds the name, the [part display](#sc-8820-part-display) and SETUP.
 - **Lamps:** from unit 0's firmware. It lights the level indicators in 4 blocks of 3 columns per part group and multiplexes them, so the panel combines them over 40 ms. After INST MAP the PART B block above the chosen map lights, as on the device. POWER and USB are always lit (the emulation has no USB host; the firmware would blink USB).
-- **Controls:** INST MAP is the device's button (held while the mouse button is down, at least 120 ms). The knob in place of the device's VOLUME turns GAIN (left-button drag, mouse wheel = 0.1 dB per notch, double-click = 0 dB; its marker follows GAIN), always silently. **Deviation from the device:** there pushing the knob plays the PREVIEW note, but here the left button is needed for turning, so PREVIEW is a **right click** on the knob (held while the button is down). It plays the note chosen in the SETUP menu ("Prevw Note", default C4) on part A01 (Issue #51). A left click on the "Emu-SC8820" logo switches to the next interface style, Basic -> [Pro](#sc-8820-pro-interface) -> [SC-D70](#sc-d70-interface) -> Basic (the same as SETUP > Interface Style).
-- **SETUP:** max polyphony, tone map for all parts (SC-55 / SC-88 / SC-88 Pro / SC-8820, default SC-8820; the same setting as the INST MAP button), Send Reset (MT-32 / GM / GS / GM2, see [MT-32 reset](#mt-32-reset)), all notes off, and below them Interface Style (Basic / Pro / SC-D70, default Basic, stored in the state).
+- **Controls:** INST MAP is the device's button (held while the mouse button is down, at least 120 ms). The knob in place of the device's VOLUME turns GAIN (left-button drag, mouse wheel = 0.1 dB per notch, double-click = 0 dB; its marker follows GAIN), always silently. **Deviation from the device:** there pushing the knob plays the PREVIEW note, but here the left button is needed for turning, so PREVIEW is a **right click** on the knob (held while the button is down). It plays the note chosen in the SETUP menu ("Prevw Note", default C4) on part A01 (Issue #51). A left click on the "Emu-SC8820" logo switches to the [SC-D70 interface](#sc-d70-interface) and back (the same as SETUP > Interface Style).
+- **SETUP:** max polyphony, tone map for all parts (SC-55 / SC-88 / SC-88 Pro / SC-8820, default SC-8820; the same setting as the INST MAP button), Send Reset (MT-32 / GM / GS / GM2, see [MT-32 reset](#mt-32-reset)), all notes off, and below them Interface Style (SC-8820 / SC-D70, default SC-8820, stored in the state).
 
-### SC-8820 Pro interface
+### SC-8820 part display
 
-The SETUP menu entry **Interface Style** switches the panel of `Emu-SC8820` between **Basic** (default, the device's front), **Pro** (both drawn by `tools/make_sc8820_panel.py`, Pro with `--pro`) and **SC-D70** (see [SC-D70 interface](#sc-d70-interface)). The device has no display and almost no controls; the Pro interface adds them, inspired by the part view of Sound Canvas VA. It is **customized and less faithful to the original**: everything the panel shows or changes goes through normal MIDI messages, the firmware and the sound are the same in both styles. A left click on the logo in the lower strip ("Nuked-SC8820" or "Nuked-SC8820 Pro") switches to the next style in the same way (Basic -> Pro -> SC-D70 -> Basic). The choice is stored in the state (`style=0..2`) and switches the panel at once.
-
-| | Basic | Pro |
-| --- | --- | --- |
-| Panel | as on the device | device front plus a part display and edit buttons in the lower strip |
-| Display window | POWER, USB, PART A / B lamps, INST MAP | the same, plus a 16-part level display (POWER and USB smaller, at the bottom of the window) |
-| Part settings | MIDI only | shown and editable per part (A01-B16) |
-| Name (logo, left click = switch style) | `Emu-SC8820` | `Emu-SC8820` with an orange "Pro" |
-| INST MAP, GAIN, PREVIEW (right click), SETUP | identical | identical |
+The device has no display and almost no controls; the SC-8820 panel adds them in the display window and the lower strip, inspired by the part view of Sound Canvas VA. This is **customized and less faithful to the original**: everything the panel shows or changes goes through normal MIDI messages, the firmware and the sound are not affected. Until issue #87 there were two styles, **Basic** (only the device's front) and **Pro** (this panel); Basic was removed and Pro is now the SC-8820 interface. A project saved with Basic (`style=0`) opens with it.
 
 - **16-part level display:** 16 columns x 8 dots in the style of the device's lamps, for the 16 parts of the port (A or B) the selected part belongs to. The levels come from the notes (velocity x volume x expression, like the SC-55 / SC-88 bar display). Clicking a column selects that part; the marker under the columns shows the selected part.
 - **Part display:** PART, PROG (001-128), INSTRUMENT (the tone name, or the drum set name on a rhythm part), MSB and LSB (bank select; LSB 0 = the INST MAP map, 1-4 = SC-55, SC-88, SC-88Pro, SC-8820), LEVEL, PAN (L63-0-R63, RND), REVERB and CHORUS. The values are read about 30 times a second from unit 0's work RAM, so they also follow SysEx, resets and the host's own messages.
 - **Edit buttons:** PART, PROGRAM, BANK MSB and BANK LSB (held = repeat). The mouse wheel changes the value under the pointer (also PART and INSTRUMENT); LEVEL, PAN, REVERB and CHORUS also follow a vertical drag. A change of program, MSB or LSB sends CC#0, CC#32 and the program change of the part; the others send CC#7, CC#10, CC#91 and CC#93. They go to all units like the host's messages (sleeping units get them when they wake).
-- **State:** only the interface style; the selected part is not stored.
+- **State:** only the interface style (`style=1` SC-8820, `style=2` SC-D70); the selected part is not stored.
 
 ### SC-D70 interface
 
-The Roland SC-D70 has the sound engine of the SC-8820 and adds an audio interface (USB audio, digital and analog inputs). **SC-D70** in SETUP > Interface Style (or a left click on the logo) shows the `Emu-SC8820` plug-in with a panel after the SC-D70, drawn from scratch by `tools/make_scd70_panel.py` after photos and the owner's manual (silver front, smoked display window, no maker's logos). Firmware and sound are the same as with Basic and Pro.
+The Roland SC-D70 has the sound engine of the SC-8820 and adds an audio interface (USB audio, digital and analog inputs). **SC-D70** in SETUP > Interface Style (or a left click on the logo) shows the `Emu-SC8820` plug-in with a panel after the SC-D70, drawn from scratch by `tools/make_scd70_panel.py` after photos and the owner's manual (silver front, smoked display window, no maker's logos). Firmware and sound are the same as with the SC-8820 interface.
 
 - **Display and buttons:** the 7-segment display shows the part (A01-A16, b01-b16), the instrument (001-128) or its variation (bank MSB, 000-127); the PART and INST lamps show which. PART selects the part view, INST the instrument view; DEC / INC (held = repeat) and the mouse wheel over the display change the shown value. A change of instrument or variation sends CC#0, CC#32 and the program change of the part, as on the Pro interface. **Deviation from the device:** there DEC and INC pressed together show the variation; here a second press on INST does (INST blinks), a click on the display switches between part and instrument.
-- **Lamps:** GS or GM shows the last reset received (GM On / GM2 On = GM; GS Reset, System Mode Set or GM Off = GS; GS at start), MIDI lights when the host sends MIDI, USB is always lit (as on the Basic panel). Of the recording source lamps INST+WAVE is lit: the sound generator is the only source in the plug-in.
+- **Lamps:** GS or GM shows the last reset received (GM On / GM2 On = GM; GS Reset, System Mode Set or GM Off = GS; GS at start), MIDI lights when the host sends MIDI, USB is always lit (as on the SC-8820 panel). Of the recording source lamps INST+WAVE is lit: the sound generator is the only source in the plug-in.
 - **Level meters:** USB REC LEVEL and OUTPUT LEVEL both show the plug-in's output (after GAIN), left and right, 9 segments up to OL.
 - **Knobs:** VOLUME and INPUT GAIN both turn the plug-in's GAIN (-12 to +12 dB; left-button drag, mouse wheel = 0.1 dB per notch, double-click = 0 dB), their markers move together and the value is shown under INPUT GAIN. A right click on INST LEVEL plays the PREVIEW note (held while the button is down), as the knob's push does on the device.
 - **Without a function:** POWER, the MIC/GUITAR jack and switch, REC SOURCE, USB AUDIO LEVEL, SAMPLE RATES, INPUT MONITOR and the headphone jack (the plug-in has no audio inputs or USB audio).
@@ -440,7 +431,7 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 | Tone map (SC-88 Pro) | SC-55 / SC-88 / SC-88 Pro |
 | Tone map (SC-8850) | SC-55 / SC-88 / SC-88 Pro / SC-8850 (default SC-8850) for all parts: sends Bank Select LSB (CC#32) and the part's bank and program again to every part; stored in the state (`map=0..3`), a GS / GM reset returns to the SC-8850 map. The panel's INST MAP still sets it per part |
 | Prevw Note (SC-88 Pro, SC-8820, SC-8850) | submenu per octave |
-| Interface Style (SC-8820) | Basic (default) / Pro: the device's panel or the [Pro interface](#sc-8820-pro-interface); last entry of the menu, stored in the state (`style=0..1`); a left click on the logo switches too |
+| Interface Style (SC-8820) | SC-8820 (default) / SC-D70: the [SC-8820 panel](#sc-8820-part-display) or the [SC-D70 interface](#sc-d70-interface); last entry of the menu, stored in the state (`style=1..2`, a former `style=0` opens as SC-8820); a left click on the logo switches too |
 
 After a reset from the menu, the plug-in holds back the host's next MIDI events for 100 ms (System Mode: 200 ms) and then plays them in their original order, so that the firmware has finished the reset (measured with `tools/test/reset26.cpp`: notes sound exactly as after boot from 50-100 ms after GM / GS / GM2 and from 150 ms after a System Mode Set on the SC-88 Pro). Resets that come from the host or a MIDI file are passed on unchanged, as before.
 
@@ -461,7 +452,7 @@ NSC55P1 max_voices=<n> gain=<-120..120> dev=<0..2>                      MT-32 (d
 NSC55P1 max_voices=<n> gain=<-120..120>                                 SC-55 plug-ins (gain in 0.1 dB)
 NSC55P1 max_voices=<n> map=<0..1> gain=<-120..120> smode=<0..1>          SC-88 (map: 0 SC-55, 1 SC-88)
 NSC55P1 max_voices=<n> map=<0..2> gain=<-120..120> pnote=<0..127> smode=<0..1>    SC-88 Pro
-NSC55P1 max_voices=<n> map=<0..3> gain=<-120..120> style=<0..1>         SC-8820 (map: INST MAP, 0 SC-55 ... 3 SC-8820; style: 0 Basic, 1 Pro)
+NSC55P1 max_voices=<n> map=<0..3> gain=<-120..120> style=<1..2>         SC-8820 (map: INST MAP, 0 SC-55 ... 3 SC-8820; style: 1 SC-8820, 2 SC-D70)
 NSC55P1 max_voices=<n> gain=<-120..120>                                 SC-8850
 ```
 
@@ -701,7 +692,7 @@ These are limits of the approach, or things that are not done yet.
 
 - **CPU ROM:** the file `7f3be975fc9ada3d` is the original dump R02015367. The earlier reconstruction (MD5 `b03dc0c5…`) still boots as in 88emu; rare firmware paths may behave differently from the device with it.
 - **Level indicators:** the emulation gives the firmware's lamps in four blocks per part group (3 columns each); finer steps that the device may show are not available.
-- **SC-8820 Pro interface, part display:** the work RAM addresses it reads belong to the accepted program ROM (2000-11-28). Some tone names end in a marker character of the firmware (for example `Violin    :`).
+- **SC-8820 part display:** the work RAM addresses it reads belong to the accepted program ROM (2000-11-28). Some tone names end in a marker character of the firmware (for example `Violin    :`).
 
 ### SC-8850
 

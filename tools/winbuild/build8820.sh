@@ -9,16 +9,12 @@ build8820() {
      0=$ROM8820/sc8820_internal.bin 1=$ROM8820/sc8820_program.bin 2=$ROM8820/sc8820_wave0.bin 3=$ROM8820/sc8820_wave1.bin; fi
   O="${OUTDIR:-out2}"; mkdir -p "$O"
   # Panel: ohne Fotos/Fremdgrafik von Grund auf gezeichnet (Hintergrund + alle Lampen an)
-  python3 $S/tools/make_sc8820_panel.py gen/panel8820.bgra --base
-  python3 $S/tools/make_sc8820_panel.py gen/lit8820.bgra --all-on
   # Pro-Oberflaeche (Issue #49/#67, SETUP-Menue "Interface Style"): zweites Panel im selben Plugin
   python3 $S/tools/make_sc8820_panel.py gen/panel8820p.bgra --base --pro
   python3 $S/tools/make_sc8820_panel.py gen/lit8820p.bgra --all-on --pro
   # SC-D70-Oberflaeche (Issue #86, SETUP-Menue "Interface Style"): drittes Panel im selben Plugin
   python3 $S/tools/make_scd70_panel.py gen/panel8820d.bgra --base
   python3 $S/tools/make_scd70_panel.py gen/lit8820d.bgra --all-on
-  python3 $S/tools/gen_blob.py gen/panel8820.cpp nk_panel8820 gen/panel8820.bgra
-  python3 $S/tools/gen_blob.py gen/lit8820.cpp nk_lit8820 gen/lit8820.bgra
   python3 $S/tools/gen_blob.py gen/panel8820p.cpp nk_panel8820p gen/panel8820p.bgra
   python3 $S/tools/gen_blob.py gen/lit8820p.cpp nk_lit8820p gen/lit8820p.bgra
   python3 $S/tools/gen_blob.py gen/panel8820d.cpp nk_panel8820d gen/panel8820d.bgra
@@ -32,7 +28,7 @@ build8820() {
     -ffunction-sections -fdata-sections -I$S/include -I$S/src -I. -Iinc -I$GM/source/ronaldo/88emu/88lib \
     $S/src/nuked-sc55/backend/*.cpp $S/src/nuked-sc55/common/*.cpp \
     $S/src/nuked_sc55.cpp $S/src/plugin.cpp $S/src/vst2/vst2_entry.cpp $S/src/gui/editor_win32.cpp \
-    gen/roms_8820.cpp gen/panel8820.cpp gen/lit8820.cpp gen/panel8820p.cpp gen/lit8820p.cpp gen/panel8820d.cpp gen/lit8820d.cpp gen/ver_8820.o resample.o sha.o $LIBW \
+    gen/roms_8820.cpp gen/panel8820p.cpp gen/lit8820p.cpp gen/panel8820d.cpp gen/lit8820d.cpp gen/ver_8820.o resample.o sha.o $LIBW \
     -O3 -flto -shared -o "$O/$F.dll" -static -static-libgcc -static-libstdc++ -Wl,--gc-sections -s \
     -lgdi32 -luser32 -lmsimg32 -lshlwapi -lole32 -luuid -lshell32 -lwinmm 2>&1 | grep -E "error|undefined" | head -20
   cp "$O/$F.dll" "$O/$F.clap"

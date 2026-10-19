@@ -1197,7 +1197,7 @@ bool NukedSc55::ParseState(const char* buf)
 	}
 	if (const char* m = std::strstr(buf, "pnote="); m) preview_note = std::clamp(std::atoi(m + 6), 0, 127);
 #ifdef NUKED_SC55_DEVICE_8820
-	if (const char* m = std::strstr(buf, "style="); m) ui_style = std::clamp(std::atoi(m + 6), 0, kNumStyles8820 - 1); // else Basic
+	if (const char* m = std::strstr(buf, "style="); m) ui_style = std::clamp(std::atoi(m + 6), 1, kNumStyles8820 - 1); // 0 (Basic, issue #87) -> SC-8820
 #endif
 #ifdef NUKED_SC55_DEVICE_LA
 	// device: switched (units booted again) at the next block; without its ROMs the default applies

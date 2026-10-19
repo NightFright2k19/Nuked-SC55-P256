@@ -11,7 +11,7 @@
 // needs the left button (issue #48). VOICES / UNITS sit left of INST MAP like on the other panels; the
 // GAIN value is printed under the knob.
 //
-// Pro interface (issue #49; SETUP menu "Interface Style", issue #67, NukedSc55::ui_style = 1): the same
+// SC-8820 interface (issue #49, formerly "Pro"; the only SC-8820 panel since issue #87, NukedSc55::ui_style = 1): the
 // panel drawn with make_sc8820_panel.py --pro: a 16-part level display in the window (the port of the selected part, click = select a
 // part), and in the lower strip a part display (part, program, instrument or drum set, bank MSB /
 // LSB, level, pan, reverb, chorus; read from unit 0's work RAM by NukedSc55::PartInfo) with edit
@@ -28,10 +28,6 @@
 // double-click 0 dB), a right click on INST LEVEL is PREVIEW. The audio interface parts of the device
 // (inputs, REC SOURCE, USB AUDIO LEVEL, SAMPLE RATES, INPUT MONITOR) are drawn without a function.
 
-extern "C" const unsigned char nk_panel8820_b[] asm("nk_panel8820_b");
-extern "C" const unsigned char nk_panel8820_e[] asm("nk_panel8820_e");
-extern "C" const unsigned char nk_lit8820_b[] asm("nk_lit8820_b");
-extern "C" const unsigned char nk_lit8820_e[] asm("nk_lit8820_e");
 extern "C" const unsigned char nk_panel8820p_b[] asm("nk_panel8820p_b"); // Pro interface
 extern "C" const unsigned char nk_panel8820p_e[] asm("nk_panel8820p_e");
 extern "C" const unsigned char nk_lit8820p_b[] asm("nk_lit8820p_b");
@@ -53,22 +49,22 @@ constexpr int E20_KNOB_R = 24;
 constexpr RECT E20_VOICES = {33, 37, 149, 132}, E20_UNITS = {36, 140, 146, 160}; // DrawVoices88 window
 constexpr RECT E20_GAIN = {682, 146, 742, 160};                                     // value under the knob
 constexpr COLORREF E20_INK = RGB(0x30, 0x2e, 0x2c);                                 // front print
-// [0] Basic, [1] Pro, [2] SC-D70 interface
-constexpr RECT E20_SETUP[3] = {{812, 240, 900, 264}, {812, 240, 900, 264}, {652, 31, 744, 54}}; // Basic / Pro: same place (issue #67)
-constexpr RECT E20_POWER[2] = {{309, 70, 338, 99}, {322, 125, 347, 149}};
-constexpr RECT E20_USB[2]   = {{368, 72, 401, 96}, {376, 127, 405, 147}};
+// [1] SC-8820, [2] SC-D70 interface; [0] was the Basic panel (removed in issue #87, never used)
+constexpr RECT E20_SETUP[3] = {{812, 240, 900, 264}, {812, 240, 900, 264}, {652, 31, 744, 54}};
+constexpr RECT E20_POWER[2] = {{322, 125, 347, 149}, {322, 125, 347, 149}};
+constexpr RECT E20_USB[2]   = {{376, 127, 405, 147}, {376, 127, 405, 147}};
 constexpr double E20_GX = 508.0, E20_GW = 11.4;           // first dot column, column pitch
 constexpr int E20_ROW_A = 56, E20_ROW_B = 94;             // first dot row of PART A / PART B
 constexpr DWORD E20_MIN_HOLD_MS = 120;                    // a short click still reaches the switch scan
 constexpr uint32_t E20_BIT_INSTMAP = 1u, E20_BIT_PREVIEW = 2u;
 constexpr int E20_HIT_INSTMAP = 1, E20_HIT_KNOB = 2, E20_HIT_SETUP = 3, E20_HIT_LOGO = 4;
-// "Emu-SC8820" / "Emu-SC8820 Pro" / "Emu P256" (SC-D70) logo: a left click switches to the next interface
-// style, Basic -> Pro -> SC-D70 -> Basic (issues #70, #86)
-constexpr RECT E20_LOGO[3] = {{36, 241, 198, 266}, {18, 241, 216, 266}, {34, 40, 142, 72}};
+// "Emu-SC8820" / "Emu P256" (SC-D70) logo: a left click switches to the other interface style, SC-8820 <-> SC-D70
+// (issues #70, #86, #87)
+constexpr RECT E20_LOGO[3] = {{36, 241, 198, 266}, {36, 241, 198, 266}, {34, 40, 142, 72}};
 
 HDC g_lit20_dc[3] = {};
 
-int Style20(const Editor& e) { return std::clamp(e.plugin->ui_style.load(), 0, NukedSc55::kNumStyles8820 - 1); }
+int Style20(const Editor& e) { return std::clamp(e.plugin->ui_style.load(), 1, NukedSc55::kNumStyles8820 - 1); }
 const RECT& Setup20(const Editor& e) { return E20_SETUP[Style20(e)]; }
 
 HDC Dib20(const unsigned char* b, const unsigned char* e, HBITMAP* bmp_out, HGDIOBJ* old_out)
@@ -100,10 +96,11 @@ void BuildBackground8820(Editor& e, int style)
         DeleteObject(e.bg_bmp);
         DeleteDC(e.bg_dc);
     }
-    static const unsigned char* const bg_b[3]  = {nk_panel8820_b, nk_panel8820p_b, nk_panel8820d_b};
-    static const unsigned char* const bg_e[3]  = {nk_panel8820_e, nk_panel8820p_e, nk_panel8820d_e};
-    static const unsigned char* const lit_b[3] = {nk_lit8820_b, nk_lit8820p_b, nk_lit8820d_b};
-    static const unsigned char* const lit_e[3] = {nk_lit8820_e, nk_lit8820p_e, nk_lit8820d_e};
+    // [0] (former Basic, issue #87) is never selected; it points at the SC-8820 panel
+    static const unsigned char* const bg_b[3]  = {nk_panel8820p_b, nk_panel8820p_b, nk_panel8820d_b};
+    static const unsigned char* const bg_e[3]  = {nk_panel8820p_e, nk_panel8820p_e, nk_panel8820d_e};
+    static const unsigned char* const lit_b[3] = {nk_lit8820p_b, nk_lit8820p_b, nk_lit8820d_b};
+    static const unsigned char* const lit_e[3] = {nk_lit8820p_e, nk_lit8820p_e, nk_lit8820d_e};
     e.bg_dc    = Dib20(bg_b[style], bg_e[style], &e.bg_bmp, &e.bg_old);
     e.bg_style = style;
     if (!g_lit20_dc[style]) g_lit20_dc[style] = Dib20(lit_b[style], lit_e[style], nullptr, nullptr); // kept for the process
@@ -483,7 +480,7 @@ void DrawD70(Editor& e, HDC dc)
     const float gain = p.gain_db.load();
     GainMarker70(dc, E70_VOL, E70_VOL_R, gain, 4);
     GainMarker70(dc, E70_IN, E70_SMALL_R, gain, 3);
-    {   // GAIN value under INPUT GAIN, as under the knob of the Basic / Pro panels
+    {   // GAIN value under INPUT GAIN, as under the knob of the SC-8820 panel
         char g[16];
         std::snprintf(g, sizeof(g), "%+.1f dB", std::fabs(gain) < 0.05f ? 0.0f : gain);
         Text(dc, e.f_tiny, E20_INK, E70_IN.x - 30, E70_GAIN_Y, g, DT_CENTER, 60, 12);
@@ -533,8 +530,8 @@ bool MouseD70(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return true;
         }
         if (InRect(E20_SETUP[2], x, y)) { ShowSetupMenu(e); return true; }
-        if (InRect(E20_LOGO[2], x, y)) { // next interface style: Basic
-            p.ui_style = 0;
+        if (InRect(E20_LOGO[2], x, y)) { // other interface style: SC-8820
+            p.ui_style = 1;
             p.NotifyStateChanged();
             return true;
         }
@@ -673,7 +670,7 @@ bool Mouse8820(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         } else if (h == E20_HIT_SETUP) {
             ShowSetupMenu(e);
         } else if (h == E20_HIT_LOGO) { // like SETUP > Interface Style, stored in the state
-            p.ui_style = (Style20(e) + 1) % NukedSc55::kNumStyles8820; // Basic -> Pro -> SC-D70
+            p.ui_style = 2; // other interface style: SC-D70
             p.NotifyStateChanged();
         }
         return true;
