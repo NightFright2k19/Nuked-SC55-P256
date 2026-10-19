@@ -115,14 +115,14 @@ CTF_PATCH = "eNrl2HdPU1EYx/Fve2kLChVliowCRcsGLYoVKSEOXNHg3nvHhMS9qyYm7r0XKu4VY4y
 
 # Models: template, display name, (ROM slot in plugin, role)
 MODELS = [
+    # MT-32 / CM-32L: one ROM set per device (slot 0 = MT-32 old, 1 = MT-32 new, 2 = CM-32L), see la_sets()
+    ("la", "Emu-MT32", "MT-32 / CM-32L", [(0, "MT-32 old"), (1, "MT-32 new"), (2, "CM-32L")]),
     ("v121", "Nuked-SC55_v121", "SC-55 v1.21", [(0, "rom1"), (1, "rom2"), (3, "wave1"), (4, "wave2"), (5, "wave3")]),
     ("mk2", "Nuked-SC55_MkII", "SC-55mk2 v1.01 (CTF)", [(0, "rom1"), (1, "rom2"), (2, "rom_sm"), (3, "wave1"), (4, "wave2")]),
     ("88", "Emu-SC88", "SC-88", [(0, "control"), (1, "wave0"), (2, "wave1"), (3, "wave2"), (4, "wave3")]),
     ("88pro", "Emu-SC88_Pro", "SC-88 Pro", [(0, "control"), (1, "wave0"), (2, "wave1"), (3, "wave2")]),
     ("8820", "Emu-SC8820", "SC-8820", [(0, "internal"), (1, "program"), (2, "wave0"), (3, "wave1")]),
     ("8850", "Emu-SC8850", "SC-8850", [(0, "internal"), (1, "program"), (2, "data"), (3, "wave")]),
-    # MT-32 / CM-32L: one ROM set per device (slot 0 = MT-32 old, 1 = MT-32 new, 2 = CM-32L), see la_sets()
-    ("la", "Emu-MT32", "MT-32 / CM-32L", [(0, "MT-32 old"), (1, "MT-32 new"), (2, "CM-32L")]),
 ]
 # Firmware per LA device, preferred first (the plugin shows the version it was built with)
 LA_FIRMWARE = {

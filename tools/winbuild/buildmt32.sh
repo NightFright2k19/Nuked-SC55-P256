@@ -10,7 +10,7 @@ buildmt32() {
     # ein Satz je Geraet (0 = MT-32 alt, 1 = MT-32 neu, 2 = CM-32L), wie ihn der Builder einsetzt
     python3 -I -c "import sys; sys.path.insert(0, sys.argv[1]); import p256_builder as b; from pathlib import Path
 s = b.la_sets(b.scan_roms(Path(sys.argv[2])))[0]
-for loc, (_, r) in enumerate(b.MODELS[-1][3]):
+for loc, (_, r) in enumerate(next(m for m in b.MODELS if m[0] == 'la')[3]):
     if r in s: open(f'gen/la_{loc}.bin', 'wb').write(b.la_blob(*s[r])); print(f'{loc}=gen/la_{loc}.bin')" \
       "${P256:-$S/..}" "$ROMLA" > gen/la_list.txt
     python3 $S/tools/gen_embedded_roms.py gen/roms_mt32.cpp 0 "MT-32 / CM-32L (embedded)" $(cat gen/la_list.txt)

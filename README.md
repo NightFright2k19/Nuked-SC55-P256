@@ -107,7 +107,7 @@ There are two ways to get the plug-ins. The first needs nothing but your ROM fil
 3. Start it, check the list of found models and click **Patch**.
 4. Copy the results from `Plugins/CLAP/*.clap` and/or `Plugins/VST2/*.dll` to your plug-in folders (see [Using the plug-ins](#using-the-plug-ins)).
 
-Everything for which a complete ROM set is found is built (SC-55 v1.21, SC-55mk2 v1.01, SC-88, SC-88 Pro, SC-8820, SC-8850, MT-32 / CM-32L). More in [The patcher](#the-patcher).
+Everything for which a complete ROM set is found is built (MT-32 / CM-32L, SC-55 v1.21, SC-55mk2 v1.01, SC-88, SC-88 Pro, SC-8820, SC-8850). More in [The patcher](#the-patcher).
 
 ### Option B: build from source
 
@@ -735,6 +735,7 @@ The development workbench contains the source, the complete patch series (`patch
 - **dsp56300** - [Gearmulator](https://github.com/dsp56300/gearmulator), including the 88emu core used for the MT-32, CM-32L, SC-88, SC-88 Pro, SC-8820 and SC-8850
 - **shingo45endo** - [SC55MK2-CTF-Patcher](https://github.com/shingo45endo/sc55mk2-ctf-patcher), tool to modify the SC-55mkII firmware for CTF support
 - **Falcosoft** - Falcosoft MIDI Player and Falcosoft VST MIDI Driver ([falcosoft.hu](https://falcosoft.hu/))
+- **Magnific** - the patcher icon is a VST icon from [magnific.com/icons/vst](https://www.magnific.com/icons/vst)
 - **Roland** - [Roland](https://www.roland.com), the MT-32, the CM-32L and the SC-55, SC-55mk2, SC-88, SC-88 Pro, SC-8820 and SC-8850 sound modules
 
 ### License

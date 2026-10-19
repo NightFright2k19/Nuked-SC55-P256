@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - 'templates/**'
+      - 'icons/**'
       - 'p256_builder.py'
       - 'patcher.py'
       - 'patcher_i18n.py'
@@ -89,9 +90,16 @@ jobs:
         run: |
           set -euo pipefail
           echo "VERSION = '$REVISION'" > patcher_version.py
+          ICON=()   # file icon of the executable / app: Windows .ico, macOS .icns (Linux has none; the window icon is set in patcher.py)
+          case "${{ runner.os }}" in
+            Windows) ICON=(--icon icons/patcher.ico) ;;
+            macOS)   ICON=(--icon icons/patcher.icns) ;;
+          esac
           python -m PyInstaller --onefile --windowed --noconfirm --clean \
             --name Nuked-SC55-P256-Patcher \
             --add-data "templates:templates" \
+            --add-data "icons:icons" \
+            ${ICON[@]+"${ICON[@]}"} \
             --hidden-import p256_builder --hidden-import patcher_i18n --hidden-import patcher_version \
             patcher.py
           ls -la dist

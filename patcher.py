@@ -25,6 +25,8 @@ except ImportError:
     VERSION = 'dev'
 
 TEMPLATES = CODE / 'templates'
+ICONS = CODE / 'icons'
+ICON_FILES = ('patcher_16.png', 'patcher_32.png', 'patcher.png')   # window icon (Tk picks the best size)
 PLUGINS = HERE / 'Plugins'
 NAME = 'Nuked SC-55 P256 Patcher'
 
@@ -107,6 +109,8 @@ def selftest() -> int:
         data = builder.fill_template(tpl.read_bytes(), [(loc, b'\0' * 64) for loc, _ in parts], title)
         assert data.count(builder.MAGIC) == 1 and data[:2] == b'MZ', f'template broken: {tpl}'
     assert len(builder.apply_ctf(bytes(524288))) == 524288
+    for f in ICON_FILES:
+        assert (ICONS / f).is_file(), f'icon missing: {ICONS / f}'
     print('selftest ok', VERSION)
     return 0
 
@@ -140,6 +144,11 @@ def main_window():
     root = tk.Tk()
     root.title(f'{NAME} {VERSION}')
     root.resizable(False, False)
+    try:
+        root._icons = [tk.PhotoImage(file=str(ICONS / f)) for f in ICON_FILES]   # keep references
+        root.iconphoto(True, *root._icons)
+    except Exception:                       # a missing or unreadable icon must never stop the patcher
+        pass
     st = dict(lang=system_language(LANGUAGES), folder=HERE, items=[], busy=False, details=False,
               status=('scanning', {}), asked=False)
     q = queue.Queue()
