@@ -907,7 +907,7 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	E8820PanelInput();
 	// Pro interface: edits from the part display / buttons to all units, part parameters for the display
 	E8820SendUiMidi();
-	if (ui_style.load(std::memory_order_relaxed) == 1) E8820ReadParts();
+	if (ui_style.load(std::memory_order_relaxed) != 0) E8820ReadParts(); // Pro and SC-D70 show part data
 #endif
 #ifdef NUKED_SC55_DEVICE_LA
 	// MT-32 switches and SELECT from the GUI: pressed on all units alike (they stay identical)
@@ -1101,6 +1101,17 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 		}
 		applied_gain = target;
 	}
+#ifdef NUKED_SC55_DEVICE_8820
+	{   // SC-D70 panel: output level meters (the GUI takes the value and resets it)
+		float pl = 0.0f, pr = 0.0f;
+		for (uint32_t i = 0; i < num_frames; ++i) {
+			pl = std::max(pl, std::abs(out_left[i]));
+			pr = std::max(pr, std::abs(out_right[i]));
+		}
+		if (pl > ui_peak[0].load(std::memory_order_relaxed)) ui_peak[0].store(pl, std::memory_order_relaxed);
+		if (pr > ui_peak[1].load(std::memory_order_relaxed)) ui_peak[1].store(pr, std::memory_order_relaxed);
+	}
+#endif
 
 	return CLAP_PROCESS_CONTINUE;
 }
@@ -1186,7 +1197,7 @@ bool NukedSc55::ParseState(const char* buf)
 	}
 	if (const char* m = std::strstr(buf, "pnote="); m) preview_note = std::clamp(std::atoi(m + 6), 0, 127);
 #ifdef NUKED_SC55_DEVICE_8820
-	if (const char* m = std::strstr(buf, "style="); m) ui_style = std::clamp(std::atoi(m + 6), 0, 1); // else Basic
+	if (const char* m = std::strstr(buf, "style="); m) ui_style = std::clamp(std::atoi(m + 6), 0, kNumStyles8820 - 1); // else Basic
 #endif
 #ifdef NUKED_SC55_DEVICE_LA
 	// device: switched (units booted again) at the next block; without its ROMs the default applies
@@ -1335,6 +1346,9 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 			if (!injecting && (status == ControlChange || status == ProgramChange))
 				host_change[port * 16 + (midi_event->data[0] & 0x0f)] = render_frame_count + render_frame + 1;
 #endif
+#ifdef NUKED_SC55_DEVICE_8820
+			if (!injecting) ui_midi_in.fetch_add(1, std::memory_order_relaxed);
+#endif
 			state_log.AddShort(midi_event->data, port);
 			UiTrackShort(midi_event->data, port);
 			const auto mask = router.RouteShort(midi_event->data, port);
@@ -1367,6 +1381,10 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 			}
 #ifdef NUKED_SC55_DEVICE_8850
 			host_change[kNumParts] = render_frame_count + render_frame + 1;
+#endif
+#ifdef NUKED_SC55_DEVICE_8820
+			if (!injecting) ui_midi_in.fetch_add(1, std::memory_order_relaxed);
+			TrackGsGm(msg);
 #endif
 			state_log.AddSysEx(msg, port);
 			{
@@ -2117,6 +2135,9 @@ void NukedSc55::HandleUiCommands()
 			state_log.AddSysEx(msg, port);
 			QueueMidi(router.RouteSysEx(msg, port), msg.data(), msg.size(), 0, port);
 		}
+#ifdef NUKED_SC55_DEVICE_8820
+		TrackGsGm(msg);
+#endif
 		UiResetParts();
 #ifdef NUKED_SC55_DEVICE_8850
 		DotShow(false);
@@ -3644,6 +3665,19 @@ constexpr uint32_t kP20Msb = 0x00, kP20Prog = 0x01, kP20Index = 0x04, kP20Flags 
                    kP20Pan = 0x09, kP20Cho = 0x0e, kP20Rev = 0x0f, kP20Lsb = 0x70, kP20Name = 0xa8;
 constexpr uint8_t kP20Rhythm = 0x10, kP20RhythmMap2 = 0x40; // flags: rhythm part, rhythm map 2 (else 1)
 } // namespace
+
+// SC-D70 panel: GS / GM lamps follow GM On, GM2 On and GM Off (universal non-realtime 7E xx 09 01 / 03 / 02)
+// and GS Reset or System Mode Set (Roland DT1 40 00 7F / 00 00 7F)
+void NukedSc55::TrackGsGm(std::span<const uint8_t> m)
+{
+	if (m.size() >= 6 && m[1] == 0x7e && m[3] == 0x09) {
+		if (m[4] == 0x01 || m[4] == 0x03) ui_gm_mode = 1;
+		else if (m[4] == 0x02) ui_gm_mode = 0;
+	} else if (m.size() >= 10 && m[1] == 0x41 && m[3] == 0x42 && m[4] == 0x12 && m[6] == 0x00 && m[7] == 0x7f &&
+	           (m[5] == 0x40 || m[5] == 0x00)) {
+		ui_gm_mode = 0;
+	}
+}
 
 void NukedSc55::E8820ReadParts()
 {

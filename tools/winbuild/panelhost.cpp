@@ -49,6 +49,9 @@ int main(int argc,char**argv){
     while(ai<acts.size() && t1>=acts[ai].t){ const A& a=acts[ai++]; const LPARAM lp=MAKELPARAM(a.x,a.y);
       if(a.what=="shot"){ for(int k=0;k<6;k++){ pump(); Sleep(40);} InvalidateRect(ed,nullptr,FALSE); UpdateWindow(ed); pump();
         char fn[256]; sprintf(fn,"%s_%02d.bmp",argv[3],nshot++); Shot(ed,W,H,fn); printf("Screenshot t=%.2fs -> %s\n",a.t,fn); }
+      else if(a.what=="qshot"){ InvalidateRect(ed,nullptr,FALSE); UpdateWindow(ed); // sofort, ohne Wartezeit (kurz leuchtende Lampen)
+        char fn[256]; sprintf(fn,"%s_%02d.bmp",argv[3],nshot++); Shot(ed,W,H,fn); printf("Screenshot (sofort) t=%.2fs -> %s\n",a.t,fn); }
+      else if(a.what=="dbl"){ SendMessage(ed,WM_LBUTTONDOWN,MK_LBUTTON,lp); SendMessage(ed,WM_LBUTTONUP,0,lp); SendMessage(ed,WM_LBUTTONDBLCLK,MK_LBUTTON,lp); SendMessage(ed,WM_LBUTTONUP,0,lp); }
       else if(a.what=="down") SendMessage(ed,WM_LBUTTONDOWN,MK_LBUTTON,lp);
       else if(a.what=="up") SendMessage(ed,WM_LBUTTONUP,0,lp);
       else if(a.what=="rdown") SendMessage(ed,WM_RBUTTONDOWN,MK_RBUTTON,lp);

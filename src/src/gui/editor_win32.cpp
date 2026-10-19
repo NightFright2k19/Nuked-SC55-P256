@@ -133,6 +133,13 @@ struct Editor {
     int pend_val[32][7]     = {}; // values just sent (PROG, MSB, LSB, LEVEL, PAN, REVERB, CHORUS) ...
     DWORD pend_until[32][7] = {}; // ... shown and stepped from until the firmware's own values follow
     HFONT f_pro        = nullptr;
+    int d70_mode       = 0;    // SC-D70: display shows 0 part, 1 instrument, 2 variation
+    int d70_btn        = 0;    // SC-D70: PART / INST / DEC / INC held (1..4), DEC / INC auto-repeat
+    DWORD d70_btn_t    = 0;
+    uint32_t d70_midi  = 0;    // SC-D70: MIDI message count last seen, lamp lit until d70_midi_until
+    DWORD d70_midi_until = 0;
+    float d70_lv[2]    = {-120.0f, -120.0f}; // SC-D70: level meters (dBFS, falling)
+    HFONT f_d70v = nullptr, f_d70o = nullptr, f_d70u = nullptr, f_d70s = nullptr;
 #endif
 #ifdef NUKED_SC55_DEVICE_LA
     uint8_t la_dots[120 * 9] = {}; // MT-32 LCD dots as last read (NukedSc55::GetLaDots)
@@ -457,6 +464,7 @@ void ShowSetupMenu(Editor& e)
         AppendMenuW(m, MF_STRING | (st == 0 ? MF_CHECKED : 0), 20,
                     T(L"   Basic\t(default)", L"   Basic\t(Standard)"));
         AppendMenuW(m, MF_STRING | (st == 1 ? MF_CHECKED : 0), 21, L"   Pro");
+        AppendMenuW(m, MF_STRING | (st == 2 ? MF_CHECKED : 0), 22, L"   SC-D70");
     }
 #endif
 
@@ -468,8 +476,12 @@ void ShowSetupMenu(Editor& e)
     const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTALIGN | TPM_BOTTOMALIGN,
                                    r.left + E85_SETUP.right, r.top + E85_SETUP.top - 2, 0, e.hwnd, nullptr);
 #elif defined(NUKED_SC55_DEVICE_8820)
-    const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTALIGN | TPM_BOTTOMALIGN,
-                                   r.left + Setup20(e).right, r.top + Setup20(e).top - 2, 0, e.hwnd, nullptr);
+    // SC-D70: SETUP sits at the top of the panel, the menu opens downwards
+    const int cmd = Style20(e) == 2
+                            ? TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTALIGN | TPM_TOPALIGN, r.left + Setup20(e).right,
+                                             r.top + Setup20(e).bottom + 2, 0, e.hwnd, nullptr)
+                            : TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTALIGN | TPM_BOTTOMALIGN, r.left + Setup20(e).right,
+                                             r.top + Setup20(e).top - 2, 0, e.hwnd, nullptr);
 #elif defined(NUKED_SC55_DEVICE_LA)
     const int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTALIGN | TPM_BOTTOMALIGN,
                                    r.left + ELA_SETUP.right, r.top + ELA_SETUP.top - 2, 0, e.hwnd, nullptr);
@@ -502,7 +514,7 @@ void ShowSetupMenu(Editor& e)
         p.NotifyStateChanged();
 #endif
 #ifdef NUKED_SC55_DEVICE_8820
-    } else if (cmd == 20 || cmd == 21) { // interface style, stored in the state
+    } else if (cmd >= 20 && cmd < 20 + NukedSc55::kNumStyles8820) { // interface style, stored in the state
         p.ui_style = cmd - 20;
         p.NotifyStateChanged();
 #endif
@@ -645,6 +657,10 @@ void* Create(NukedSc55* plugin, const char* display_name)
     e->f_tiny  = MakeFont(10, FW_BOLD, "Arial");
 #ifdef NUKED_SC55_DEVICE_8820
     e->f_pro   = MakeFont(17, FW_BOLD, "Arial");
+    e->f_d70v  = MakeFont(17, FW_BOLD, "Arial");   // SC-D70: voice count, "of N", units, SETUP
+    e->f_d70o  = MakeFont(10, FW_NORMAL, "Arial");
+    e->f_d70u  = MakeFont(14, FW_BOLD, "Arial");
+    e->f_d70s  = MakeFont(12, FW_BOLD, "Arial");
 #endif
 #ifdef NUKED_SC55_DEVICE_LA
     e->f_lcd   = MakeFont(14, FW_BOLD, "Consolas");
@@ -687,6 +703,7 @@ void Destroy(void* ed)
         if (f) DeleteObject(f);
 #ifdef NUKED_SC55_DEVICE_8820
     if (e->f_pro) DeleteObject(e->f_pro);
+    for (HFONT f : {e->f_d70v, e->f_d70o, e->f_d70u, e->f_d70s}) if (f) DeleteObject(f);
 #endif
 #ifdef NUKED_SC55_DEVICE_LA
     if (e->f_lcd) DeleteObject(e->f_lcd);

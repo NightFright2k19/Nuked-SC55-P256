@@ -4,6 +4,7 @@
 #   sowie, falls 88emu gebaut ist (setup_wb.sh mit sc88pro.zip): Emu-SC88_Pro.clap/.dll
 #   und mit SC-8850-ROMs (setup_wb.sh, 4. Argument): Emu-SC8850.clap/.dll
 #   und mit SC-88-ROMs (setup_wb.sh, 5. Argument): Emu-SC88.clap/.dll
+#   und mit SC-8820-ROMs (setup_wb.sh, testdata/roms88/sc8820.zip): Emu-SC8820.clap/.dll
 #   und mit MT-32/CM-32L-ROMs (setup_wb.sh, mt32_roms.zip): Emu-MT32.clap/.dll
 set -e
 WB=/home/claude/wb; S=$WB/src; R=$WB/roms; CXX=x86_64-w64-mingw32-g++-posix
@@ -27,6 +28,11 @@ if [ -f $WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ] && [ -f
   echo "SC-88 (88emu):"
   export GM=$WB/gearmulator LIBW=$WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ROM88O=$WB/rom88sc
   . ./build88o.sh; build88o
+fi
+if [ -f $WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ] && [ -f $WB/rom8820/sc8820_wave1.bin ]; then
+  echo "SC-8820 (88emu):"
+  export GM=$WB/gearmulator LIBW=$WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ROM8820=$WB/rom8820
+  . ./build8820.sh; build8820
 fi
 if [ -f $WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ] && [ -d $WB/testdata/roms_la ]; then
   echo "MT-32 / CM-32L (88emu):"

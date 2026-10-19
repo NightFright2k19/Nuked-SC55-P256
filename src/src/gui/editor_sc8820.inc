@@ -17,6 +17,16 @@
 // LSB, level, pan, reverb, chorus; read from unit 0's work RAM by NukedSc55::PartInfo) with edit
 // buttons for PART, PROGRAM, BANK MSB and BANK LSB. The values also follow the mouse wheel, and
 // LEVEL / PAN / REVERB / CHORUS a vertical drag. Edits are sent as MIDI to all units.
+//
+// SC-D70 interface (issue #86, ui_style = 2): the panel of the SC-D70, which has the SC-8820's sound engine,
+// drawn with make_scd70_panel.py. PART / INST / DEC / INC and the 7-segment display select the part, the
+// instrument (program) and its variation (bank MSB) like on the device; the device shows the variation
+// after DEC + INC together, here after a second press on INST (INST blinks). The lamps: PART / INST
+// what the display shows, GS / GM the last reset (TrackGsGm), INST+WAVE (the sound generator is the
+// only recording source), USB (shown as connected), MIDI (host MIDI received); both level meters show
+// the output level. VOLUME and INPUT GAIN both turn the plugin's GAIN (left-drag, wheel 0.1 dB,
+// double-click 0 dB), a right click on INST LEVEL is PREVIEW. The audio interface parts of the device
+// (inputs, REC SOURCE, USB AUDIO LEVEL, SAMPLE RATES, INPUT MONITOR) are drawn without a function.
 
 extern "C" const unsigned char nk_panel8820_b[] asm("nk_panel8820_b");
 extern "C" const unsigned char nk_panel8820_e[] asm("nk_panel8820_e");
@@ -26,6 +36,10 @@ extern "C" const unsigned char nk_panel8820p_b[] asm("nk_panel8820p_b"); // Pro 
 extern "C" const unsigned char nk_panel8820p_e[] asm("nk_panel8820p_e");
 extern "C" const unsigned char nk_lit8820p_b[] asm("nk_lit8820p_b");
 extern "C" const unsigned char nk_lit8820p_e[] asm("nk_lit8820p_e");
+extern "C" const unsigned char nk_panel8820d_b[] asm("nk_panel8820d_b"); // SC-D70 interface
+extern "C" const unsigned char nk_panel8820d_e[] asm("nk_panel8820d_e");
+extern "C" const unsigned char nk_lit8820d_b[] asm("nk_lit8820d_b");
+extern "C" const unsigned char nk_lit8820d_e[] asm("nk_lit8820d_e");
 
 void ShowSetupMenu(Editor& e); // editor_win32.cpp
 
@@ -39,8 +53,8 @@ constexpr int E20_KNOB_R = 24;
 constexpr RECT E20_VOICES = {33, 37, 149, 132}, E20_UNITS = {36, 140, 146, 160}; // DrawVoices88 window
 constexpr RECT E20_GAIN = {682, 146, 742, 160};                                     // value under the knob
 constexpr COLORREF E20_INK = RGB(0x30, 0x2e, 0x2c);                                 // front print
-// [0] Basic, [1] Pro interface
-constexpr RECT E20_SETUP[2] = {{812, 240, 900, 264}, {812, 240, 900, 264}}; // same place (issue #67)
+// [0] Basic, [1] Pro, [2] SC-D70 interface
+constexpr RECT E20_SETUP[3] = {{812, 240, 900, 264}, {812, 240, 900, 264}, {652, 31, 744, 54}}; // Basic / Pro: same place (issue #67)
 constexpr RECT E20_POWER[2] = {{309, 70, 338, 99}, {322, 125, 347, 149}};
 constexpr RECT E20_USB[2]   = {{368, 72, 401, 96}, {376, 127, 405, 147}};
 constexpr double E20_GX = 508.0, E20_GW = 11.4;           // first dot column, column pitch
@@ -48,12 +62,13 @@ constexpr int E20_ROW_A = 56, E20_ROW_B = 94;             // first dot row of PA
 constexpr DWORD E20_MIN_HOLD_MS = 120;                    // a short click still reaches the switch scan
 constexpr uint32_t E20_BIT_INSTMAP = 1u, E20_BIT_PREVIEW = 2u;
 constexpr int E20_HIT_INSTMAP = 1, E20_HIT_KNOB = 2, E20_HIT_SETUP = 3, E20_HIT_LOGO = 4;
-// "Emu-SC8820" / "Emu-SC8820 Pro" logo: a left click switches to the other interface style (issue #70)
-constexpr RECT E20_LOGO[2] = {{36, 241, 198, 266}, {18, 241, 216, 266}};
+// "Emu-SC8820" / "Emu-SC8820 Pro" / "Emu P256" (SC-D70) logo: a left click switches to the next interface
+// style, Basic -> Pro -> SC-D70 -> Basic (issues #70, #86)
+constexpr RECT E20_LOGO[3] = {{36, 241, 198, 266}, {18, 241, 216, 266}, {34, 40, 142, 72}};
 
-HDC g_lit20_dc[2] = {};
+HDC g_lit20_dc[3] = {};
 
-int Style20(const Editor& e) { return e.plugin->ui_style.load() == 1 ? 1 : 0; }
+int Style20(const Editor& e) { return std::clamp(e.plugin->ui_style.load(), 0, NukedSc55::kNumStyles8820 - 1); }
 const RECT& Setup20(const Editor& e) { return E20_SETUP[Style20(e)]; }
 
 HDC Dib20(const unsigned char* b, const unsigned char* e, HBITMAP* bmp_out, HGDIOBJ* old_out)
@@ -85,12 +100,13 @@ void BuildBackground8820(Editor& e, int style)
         DeleteObject(e.bg_bmp);
         DeleteDC(e.bg_dc);
     }
-    e.bg_dc    = style ? Dib20(nk_panel8820p_b, nk_panel8820p_e, &e.bg_bmp, &e.bg_old)
-                       : Dib20(nk_panel8820_b, nk_panel8820_e, &e.bg_bmp, &e.bg_old);
+    static const unsigned char* const bg_b[3]  = {nk_panel8820_b, nk_panel8820p_b, nk_panel8820d_b};
+    static const unsigned char* const bg_e[3]  = {nk_panel8820_e, nk_panel8820p_e, nk_panel8820d_e};
+    static const unsigned char* const lit_b[3] = {nk_lit8820_b, nk_lit8820p_b, nk_lit8820d_b};
+    static const unsigned char* const lit_e[3] = {nk_lit8820_e, nk_lit8820p_e, nk_lit8820d_e};
+    e.bg_dc    = Dib20(bg_b[style], bg_e[style], &e.bg_bmp, &e.bg_old);
     e.bg_style = style;
-    if (!g_lit20_dc[style]) // kept for the process
-        g_lit20_dc[style] = style ? Dib20(nk_lit8820p_b, nk_lit8820p_e, nullptr, nullptr)
-                                  : Dib20(nk_lit8820_b, nk_lit8820_e, nullptr, nullptr);
+    if (!g_lit20_dc[style]) g_lit20_dc[style] = Dib20(lit_b[style], lit_e[style], nullptr, nullptr); // kept for the process
 }
 
 void Lit20(const Editor& e, HDC dc, const RECT& r)
@@ -345,6 +361,233 @@ bool MousePro20(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     return false;
 }
 
+// ---- SC-D70 interface (geometry: make_scd70_panel.py) -------------------------------------------------
+enum { B70_PART = 1, B70_INST, B70_DEC, B70_INC };
+constexpr RECT E70_BTN[5] = {{}, {37, 93, 81, 108}, {83, 93, 127, 108}, {37, 142, 81, 157}, {83, 142, 127, 157}};
+constexpr POINT E70_VOL = {826, 112}, E70_IN = {409, 222}, E70_INST = {503, 222};
+constexpr int E70_VOL_R = 50, E70_SMALL_R = 22;
+constexpr int E70_GAIN_Y = 262;                  // GAIN value under the INPUT GAIN label
+constexpr RECT E70_DISPLAY = {380, 94, 492, 142};
+constexpr double E70_SEG_X = 392, E70_SEG_Y = 102, E70_SEG_DX = 31, E70_SEG_W = 16, E70_SEG_H = 30, E70_SEG_T = 3;
+constexpr POINT E70_LAMP_SRC[4] = {{184, 98}, {184, 111}, {184, 124}, {184, 137}}; // INPUT .. INST+WAVE
+constexpr POINT E70_LAMP_GEN[4] = {{322, 98}, {322, 111}, {322, 124}, {322, 137}}; // PART, INST, GS, GM
+constexpr POINT E70_LAMP_USB = {398, 79}, E70_LAMP_MIDI = {452, 79};
+constexpr double E70_MET_X[2] = {520, 630}, E70_MET_DX = 10.5, E70_MET_W = 6.2;   // USB REC LEVEL, OUTPUT LEVEL
+constexpr int E70_MET_Y[2] = {94, 131}, E70_MET_N = 9;                              // rows L, R
+// segment k lights from this level (dBFS); the last one is OL
+constexpr float E70_MET_DB[E70_MET_N] = {-42.0f, -33.0f, -26.0f, -20.0f, -15.0f, -10.0f, -6.0f, -3.0f, -0.3f};
+constexpr RECT E70_VOICES = {451, 31, 481, 54};  // voice count, centred between "VOICES" and "of N"
+constexpr int E70_OF_X = 490, E70_UNITS_X = 582, E70_TEXT_Y = 42;
+constexpr COLORREF E70_LABEL = RGB(0xd6, 0xd6, 0xda);
+constexpr DWORD E70_MIDI_MS = 90;                // MIDI lamp: lit this long after a message
+
+RECT Lamp70(POINT c) { return {c.x - 6, c.y - 6, c.x + 7, c.y + 7}; }
+
+// 7-segment patterns (bits a..g = 0..6)
+uint8_t Seg70(char c)
+{
+    static const uint8_t digits[10] = {0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f};
+    if (c >= '0' && c <= '9') return digits[c - '0'];
+    if (c == 'A') return 0x77;
+    if (c == 'b') return 0x7c;
+    if (c == '-') return 0x40;
+    return 0;
+}
+
+void DrawSeg70(const Editor& e, HDC dc, int pos, char c)
+{
+    const double x = E70_SEG_X + pos * E70_SEG_DX, y = E70_SEG_Y, w = E70_SEG_W, h = E70_SEG_H, t = E70_SEG_T;
+    const double r[7][4] = {{x + t, y, x + w - t, y + t},                     {x + w - t, y + t, x + w, y + h / 2 - 1},
+                            {x + w - t, y + h / 2 + 1, x + w, y + h - t},     {x + t, y + h - t, x + w - t, y + h},
+                            {x, y + h / 2 + 1, x + t, y + h - t},             {x, y + t, x + t, y + h / 2 - 1},
+                            {x + t, y + h / 2 - t / 2, x + w - t, y + h / 2 + t / 2}};
+    const uint8_t on = Seg70(c);
+    for (int k = 0; k < 7; ++k)
+        if (on & (1u << k))
+            Lit20(e, dc, {static_cast<int>(std::floor(r[k][0])), static_cast<int>(std::floor(r[k][1])),
+                          static_cast<int>(std::ceil(r[k][2])) + 1, static_cast<int>(std::ceil(r[k][3])) + 1});
+}
+
+// one knob marker at the GAIN position: -135 deg (min) .. +135 deg (max), 0 dB at the top
+void GainMarker70(HDC dc, POINT c, int r, float gain, int width)
+{
+    const double t  = (gain - NukedSc55::kGainMinDb) / (NukedSc55::kGainMaxDb - NukedSc55::kGainMinDb);
+    const double a  = (-135.0 + 270.0 * std::clamp(t, 0.0, 1.0)) * 3.14159265358979 / 180.0;
+    const double ri = r * 0.80, sx = std::sin(a), sy = -std::cos(a);
+    HPEN pen = CreatePen(PS_SOLID, width, RGB(0x1e, 0x1e, 0x20));
+    HGDIOBJ op = SelectObject(dc, pen);
+    MoveToEx(dc, c.x + static_cast<int>(std::lround(sx * ri * 0.45)), c.y + static_cast<int>(std::lround(sy * ri * 0.45)), nullptr);
+    LineTo(dc, c.x + static_cast<int>(std::lround(sx * ri * 0.92)), c.y + static_cast<int>(std::lround(sy * ri * 0.92)));
+    SelectObject(dc, op);
+    DeleteObject(pen);
+}
+
+// the field DEC / INC change in the current display mode
+int Field70(const Editor& e) { return e.d70_mode == 0 ? F20_PART : (e.d70_mode == 1 ? F20_PROG : F20_MSB); }
+
+void Press70(Editor& e, int b)
+{
+    switch (b) {
+    case B70_PART: e.d70_mode = 0; break;
+    case B70_INST: e.d70_mode = (e.d70_mode == 1) ? 2 : 1; break; // again: variation (device: DEC + INC)
+    case B70_DEC: Step20(e, Field70(e), -1); break;
+    case B70_INC: Step20(e, Field70(e), 1); break;
+    }
+}
+
+int Btn70(int x, int y)
+{
+    for (int b = B70_PART; b <= B70_INC; ++b)
+        if (InRect(E70_BTN[b], x, y)) return b;
+    return 0;
+}
+
+void DrawD70(Editor& e, HDC dc)
+{
+    NukedSc55& p   = *e.plugin;
+    const DWORD now = GetTickCount();
+    // display: part (A01..b16), instrument (001..128) or variation (000..127)
+    char t[32];
+    const auto pi = p.PartInfo(e.part);
+    if (e.d70_mode == 0) std::snprintf(t, sizeof(t), "%c%02d", e.part >= 16 ? 'b' : 'A', e.part % 16 + 1);
+    else if (e.d70_mode == 1) std::snprintf(t, sizeof(t), "%03d", Value20(e, pi, F20_PROG) + 1);
+    else std::snprintf(t, sizeof(t), "%03d", Value20(e, pi, F20_MSB));
+    for (int k = 0; k < 3; ++k) DrawSeg70(e, dc, k, t[k]);
+    // lamps
+    Lit20(e, dc, Lamp70(E70_LAMP_SRC[3]));                                  // INST+WAVE: the only source
+    if (e.d70_mode == 0) Lit20(e, dc, Lamp70(E70_LAMP_GEN[0]));
+    if (e.d70_mode == 1 || (e.d70_mode == 2 && (now / 250) % 2 == 0)) Lit20(e, dc, Lamp70(E70_LAMP_GEN[1]));
+    Lit20(e, dc, Lamp70(E70_LAMP_GEN[p.ui_gm_mode.load() ? 3 : 2]));
+    Lit20(e, dc, Lamp70(E70_LAMP_USB));
+    const uint32_t midi = p.ui_midi_in.load(std::memory_order_relaxed);
+    if (midi != e.d70_midi) { e.d70_midi = midi; e.d70_midi_until = now + E70_MIDI_MS; }
+    if (now < e.d70_midi_until) Lit20(e, dc, Lamp70(E70_LAMP_MIDI));
+    // level meters: peak since the last frame, falling about 20 dB per second
+    for (int c = 0; c < 2; ++c) {
+        const float pk = p.ui_peak[c].exchange(0.0f, std::memory_order_relaxed);
+        const float db = pk > 1e-6f ? 20.0f * std::log10(pk) : -120.0f;
+        e.d70_lv[c]    = std::max(db, e.d70_lv[c] - 0.66f);
+        for (int m = 0; m < 2; ++m)
+            for (int k = 0; k < E70_MET_N && e.d70_lv[c] >= E70_MET_DB[k]; ++k) {
+                const double x = E70_MET_X[m] + k * E70_MET_DX;
+                Lit20(e, dc, {static_cast<int>(std::floor(x)), E70_MET_Y[c], static_cast<int>(std::ceil(x + E70_MET_W)) + 1,
+                              E70_MET_Y[c] + 14});
+            }
+    }
+    // held buttons: the cap goes in a little
+    if (e.d70_btn) {
+        const RECT& r = E70_BTN[e.d70_btn];
+        Fill(dc, r.left + 1, r.top + 2, r.right - r.left - 1, r.bottom - r.top - 2, RGB(0xae, 0xb0, 0xb4));
+    }
+    // VOLUME and INPUT GAIN: both the plugin's GAIN
+    const float gain = p.gain_db.load();
+    GainMarker70(dc, E70_VOL, E70_VOL_R, gain, 4);
+    GainMarker70(dc, E70_IN, E70_SMALL_R, gain, 3);
+    {   // GAIN value under INPUT GAIN, as under the knob of the Basic / Pro panels
+        char g[16];
+        std::snprintf(g, sizeof(g), "%+.1f dB", std::fabs(gain) < 0.05f ? 0.0f : gain);
+        Text(dc, e.f_tiny, E20_INK, E70_IN.x - 30, E70_GAIN_Y, g, DT_CENTER, 60, 12);
+    }
+    // VOICES, UNITS, SETUP
+    const int voices = p.ui_voices.load(), maxv = p.max_voices.load(), cap = p.PartialsPerInstance();
+    const int units = (maxv + cap - 1) / cap, awake = p.ui_awake.load();
+    std::snprintf(t, sizeof(t), "%03d", voices);
+    Text(dc, e.f_d70v, C88_LED, E70_VOICES.left, E70_VOICES.top, t, DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+         E70_VOICES.right - E70_VOICES.left, E70_VOICES.bottom - E70_VOICES.top);
+    std::snprintf(t, sizeof(t), "of %d", units * cap);
+    Text(dc, e.f_d70o, E70_LABEL, E70_OF_X, E70_TEXT_Y - 7, t, DT_LEFT, 60, 14);
+    if (awake > units) std::snprintf(t, sizeof(t), "%d->%d", awake, units);
+    else std::snprintf(t, sizeof(t), "%d/%d", awake, units);
+    Text(dc, e.f_d70u, C88_LED, E70_UNITS_X, E70_TEXT_Y - 9, t, DT_LEFT, 60, 18);
+    const RECT& su = E20_SETUP[2];
+    Text(dc, e.f_d70s, C88_LED, su.left, su.top, e.menu_open ? "SETUP  \x85" : "SETUP  >",
+         DT_CENTER | DT_VCENTER | DT_SINGLELINE, su.right - su.left, su.bottom - su.top);
+}
+
+// SC-D70 mouse handling; true = handled
+bool MouseD70(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    NukedSc55& p = *e.plugin;
+    switch (msg) {
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONDBLCLK: {
+        const int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
+        if (const int b = Btn70(x, y)) {
+            e.d70_btn   = b;
+            e.d70_btn_t = GetTickCount() + E20P_REPEAT_DELAY;
+            Press70(e, b);
+            SetCapture(hwnd);
+            return true;
+        }
+        if (InCircle(E70_VOL, E70_VOL_R, x, y) || InCircle(E70_IN, E70_SMALL_R, x, y)) {
+            if (msg == WM_LBUTTONDBLCLK) { // double-click: GAIN 0 dB
+                p.gain_db = 0.0f;
+                p.NotifyStateChanged();
+                return true;
+            }
+            e.drag_vol = true; // turned by the shared GAIN drag code
+            e.drag_x   = x;
+            e.drag_y   = y;
+            e.drag_v0  = p.gain_db.load();
+            SetCapture(hwnd);
+            return true;
+        }
+        if (InRect(E20_SETUP[2], x, y)) { ShowSetupMenu(e); return true; }
+        if (InRect(E20_LOGO[2], x, y)) { // next interface style: Basic
+            p.ui_style = 0;
+            p.NotifyStateChanged();
+            return true;
+        }
+        if (InRect(E70_DISPLAY, x, y)) { Press70(e, e.d70_mode == 0 ? B70_INST : B70_PART); return true; } // toggles PART / INST
+        return true;
+    }
+    case WM_RBUTTONDOWN: { // right click on INST LEVEL = PREVIEW, held while the button is down
+        const int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
+        if (InCircle(E70_INST, E70_SMALL_R, x, y) && !e.drag_vol) {
+            p.ui_preview_part = -1;
+            p.ui_preview      = 1;
+            e.preview_down    = true;
+            SetCapture(hwnd);
+        }
+        return true;
+    }
+    case WM_RBUTTONUP:
+        if (e.preview_down) {
+            e.preview_down = false;
+            p.ui_preview   = 2; // note off
+            ReleaseCapture();
+        }
+        return true;
+    case WM_LBUTTONUP:
+    case WM_CAPTURECHANGED:
+        if (e.d70_btn) {
+            e.d70_btn = 0;
+            if (msg == WM_LBUTTONUP) ReleaseCapture();
+            return true;
+        }
+        return false; // GAIN drag: shared code (releases the capture)
+    case WM_TIMER:
+        if ((e.d70_btn == B70_DEC || e.d70_btn == B70_INC) && GetTickCount() >= e.d70_btn_t) { // auto-repeat
+            e.d70_btn_t = GetTickCount() + E20P_REPEAT_MS;
+            Press70(e, e.d70_btn);
+        }
+        return false;
+    case WM_MOUSEWHEEL: {
+        POINT pt{(short)LOWORD(lp), (short)HIWORD(lp)};
+        ScreenToClient(hwnd, &pt);
+        const int dir = GET_WHEEL_DELTA_WPARAM(wp) > 0 ? 1 : -1;
+        if (InCircle(E70_VOL, E70_VOL_R, pt.x, pt.y) || InCircle(E70_IN, E70_SMALL_R, pt.x, pt.y)) { // 0.1 dB per notch
+            p.gain_db = GainWheelStep(p.gain_db.load(), dir);
+            p.NotifyStateChanged();
+        } else if (InRect(E70_DISPLAY, pt.x, pt.y) || Btn70(pt.x, pt.y) >= B70_DEC) {
+            Step20(e, Field70(e), dir);
+        }
+        return true;
+    }
+    }
+    return false;
+}
+
 int Hit8820(const Editor& e, int x, int y)
 {
     if (InCircle(E20_INSTMAP, E20_INSTMAP_R, x, y)) return E20_HIT_INSTMAP;
@@ -361,6 +604,7 @@ void Draw8820(Editor& e, HDC dc)
     NukedSc55& p = *e.plugin;
     if (!e.bg_dc || e.bg_style != Style20(e)) BuildBackground8820(e, Style20(e));
     BitBlt(dc, 0, 0, Width, Height, e.bg_dc, 0, 0, SRCCOPY);
+    if (e.bg_style == 2) { DrawD70(e, dc); return; }
 
     // lamps: bits 0-3 PART A, 4-7 PART B (level, or the map after INST MAP), POWER; USB shown as
     // connected (the emulation has no USB host, the firmware would blink it)
@@ -401,6 +645,7 @@ void Draw8820(Editor& e, HDC dc)
 bool Mouse8820(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     NukedSc55& p = *e.plugin;
+    if (Style20(e) == 2) return MouseD70(e, hwnd, msg, wp, lp);
     if (Style20(e) == 1 && MousePro20(e, hwnd, msg, wp, lp)) return true;
     const auto send = [&] { p.ui_panel_buttons = e.held85; };
     switch (msg) {
@@ -428,7 +673,7 @@ bool Mouse8820(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         } else if (h == E20_HIT_SETUP) {
             ShowSetupMenu(e);
         } else if (h == E20_HIT_LOGO) { // like SETUP > Interface Style, stored in the state
-            p.ui_style = 1 - Style20(e);
+            p.ui_style = (Style20(e) + 1) % NukedSc55::kNumStyles8820; // Basic -> Pro -> SC-D70
             p.NotifyStateChanged();
         }
         return true;

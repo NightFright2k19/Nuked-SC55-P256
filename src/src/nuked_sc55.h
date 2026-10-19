@@ -375,8 +375,17 @@ public:
 	uint64_t gui_map_until = 0; // render frame up to which a map shown on unit 0 is the user's choice
 	static int E8820ShownMap(uint32_t leds);
 	// Interface style (SETUP menu, issue #67): 0 = Basic (the device's panel), 1 = Pro (issue #49:
-	// level display, part display and edit buttons); stored in the state
+	// level display, part display and edit buttons), 2 = SC-D70 (issue #86: the panel of the SC-D70,
+	// which has the SC-8820's sound engine); stored in the state
 	std::atomic<int> ui_style{0};
+	static constexpr int kNumStyles8820 = 3;
+	// SC-D70 panel: MIDI lamp (host MIDI messages received), GS / GM lamps (last GM On / GM2 On / GM Off
+	// or GS Reset / System Mode Set seen; the device starts in GS mode) and the output level meters
+	// (peak after GAIN since the GUI last read it, left / right)
+	std::atomic<uint32_t> ui_midi_in{0};
+	std::atomic<int> ui_gm_mode{0};
+	std::array<std::atomic<float>, 2> ui_peak{};
+	void TrackGsGm(std::span<const uint8_t> m);
 	// Pro: part parameters read from unit 0's work RAM (the firmware's own state, so also after
 	// SysEx and resets) for the part display, and the GUI's edits sent as MIDI
 	struct PartInfo8820 {

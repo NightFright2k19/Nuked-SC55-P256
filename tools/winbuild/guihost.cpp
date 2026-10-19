@@ -49,7 +49,8 @@ int main(int,char**a){
   HWND ed=GetWindow(host,GW_CHILD); g_ed=ed; g_W=W; g_H=H;
   { void* o0=nullptr; int n0=(int)fx->dispatcher(fx,effGetChunk,0,0,&o0,0); printf("Chunk frische Instanz: %.*s\n",n0,(char*)o0); }
   // State chunk round-trip
-  const char* ch=getenv("INIT_CHUNK")?getenv("INIT_CHUNK"):"NSC55P1 max_voices=128"; // INIT_CHUNK: eigener Startzustand fx->dispatcher(fx,effSetChunk,0,(intptr_t)strlen(ch),(void*)ch,0);
+  const char* ch=getenv("INIT_CHUNK")?getenv("INIT_CHUNK"):"NSC55P1 max_voices=128"; // INIT_CHUNK: eigener Startzustand
+  fx->dispatcher(fx,effSetChunk,0,(intptr_t)strlen(ch),(void*)ch,0);
   void* out=nullptr; int n=(int)fx->dispatcher(fx,effGetChunk,0,0,&out,0); printf("Chunk: %.*s\n",n,(char*)out);
   std::vector<float> L(512),R(512); float* o[2]={L.data(),R.data()};
   int progs[16]={0,48,33,25,61,73,52,89,19,0,40,0,0,0,0,0};
