@@ -178,6 +178,8 @@ def fill_template(template: bytes, entries, name: str) -> bytes:
     pos = template.find(MAGIC)
     if pos < 0 or template.find(MAGIC, pos + 1) >= 0:
         raise ValueError("ROM area in template could not be located unambiguously")
+    if len(template) < pos + 240:
+        raise ValueError("template is damaged (truncated)")
     version, capacity, _, _ = struct.unpack_from("<4I", template, pos + 32)
     if version == 2:
         # compact template: the reserved ROM area has been removed -> insert it again
@@ -252,6 +254,92 @@ def la_blob(version, control, wave, reverb) -> bytes:
     return head + ctl + pcm + rev
 
 
+def verify_pe(data: bytes) -> None:
+    """Raises ValueError unless data is a complete Windows PE file (all sections lie inside the file).
+    Catches a template that was cut off after its header, which would otherwise give a broken plug-in."""
+    bad = "template is damaged (not a complete Windows plug-in)"
+    if len(data) < 0x40 or data[:2] != b"MZ":
+        raise ValueError(bad)
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    if pe + 24 > len(data) or data[pe:pe + 4] != b"PE\0\0":
+        raise ValueError(bad)
+    sections, opt_size = struct.unpack_from("<H", data, pe + 6)[0], struct.unpack_from("<H", data, pe + 20)[0]
+    table, end = pe + 24 + opt_size, 0
+    for i in range(sections):
+        at = table + 40 * i
+        if at + 40 > len(data):
+            raise ValueError(bad)
+        size, ptr = struct.unpack_from("<2I", data, at + 16)
+        end = max(end, ptr + size)
+    if end > len(data):
+        raise ValueError(bad)
+
+
+def write_pair(plugin: bytes, targets):
+    """Writes the same file to all targets so that either all of them are replaced or none (a failure leaves the old
+    files untouched): first temporary files, then each old file is moved aside and the new one put in its place; on an
+    error everything is rolled back."""
+    temps, moved, created = [], [], []
+    target = None
+    try:
+        for target in targets:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target.exists() and not os.access(target, os.W_OK):   # write-protected file: refuse, as before
+                raise PermissionError(13, "Permission denied", str(target))
+            tmp = target.with_name(target.name + ".new")
+            tmp.write_bytes(plugin)
+            temps.append(tmp)
+        for tmp, target in zip(temps, targets):
+            if target.exists():
+                old = target.with_name(target.name + ".old")
+                try:
+                    old.unlink()
+                except OSError:
+                    pass
+                os.replace(target, old)
+                moved.append((target, old))
+            else:
+                created.append(target)
+            os.replace(tmp, target)
+    except OSError as e:
+        if target is not None:
+            e.filename = str(target)                                # name the plug-in file, not a temporary name
+        for t, old in reversed(moved):
+            try:
+                os.replace(old, t)
+            except OSError:
+                pass
+        for t in created:
+            try:
+                t.unlink()
+            except OSError:
+                pass
+        raise
+    except BaseException:
+        for t, old in reversed(moved):
+            try:
+                os.replace(old, t)
+            except OSError:
+                pass
+        for t in created:
+            try:
+                t.unlink()
+            except OSError:
+                pass
+        raise
+    finally:
+        for tmp in temps:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+    for _, old in moved:
+        try:
+            old.unlink()
+        except OSError:
+            pass  # a loaded old file may stay behind (Windows); it is removed by the next build
+
+
 def plan(found):
     """Per model: what was found. List of dicts (key, file, title, parts, have, missing, ctf)."""
     result = []
@@ -297,13 +385,10 @@ def build_model(item, templates: Path = TEMPLATES, output: Path = OUTPUT):
                 raise ValueError("CTF patch did not produce the expected checksum")
         entries.append((location, blob))
     plugin = fill_template(tpl.read_bytes(), entries, title)
-    paths = []
-    for sub, ext in (("CLAP", ".clap"), ("VST2", ".dll")):
-        (output / sub).mkdir(parents=True, exist_ok=True)
-        path = output / sub / f"{tpl_name}{ext}"
-        path.write_bytes(plugin)
-        paths.append(path)
-    return tuple(paths)
+    verify_pe(plugin)
+    paths = tuple(output / sub / f"{tpl_name}{ext}" for sub, ext in (("CLAP", ".clap"), ("VST2", ".dll")))
+    write_pair(plugin, paths)
+    return paths
 
 
 def main() -> int:
@@ -325,8 +410,8 @@ def main() -> int:
             continue
         try:
             build_model(item)
-        except (ValueError, OSError) as e:
-            print(f"[!!] {title}: {e}")
+        except Exception as e:  # a failure of one model must not stop the others
+            print(f"[!!] {title}: {e if isinstance(e, (ValueError, OSError)) else f'{type(e).__name__}: {e}'}")
             continue
         ctf_note = " (CTF patch will be applied)" if item["ctf"] else ""
         print(f"[ok] {title}{ctf_note}: output/CLAP/{tpl_name}.clap, output/VST2/{tpl_name}.dll")

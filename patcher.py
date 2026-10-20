@@ -76,8 +76,8 @@ def build(items, log):
     for item in items:
         try:
             builder.build_model(item, TEMPLATES, PLUGINS)
-        except (ValueError, OSError) as e:
-            log(f"[!!] {item['title']}: {e}\n")
+        except Exception as e:                  # also unexpected errors: the patcher must not freeze
+            log(f"[!!] {item['title']}: {e if isinstance(e, (ValueError, OSError)) else f'{type(e).__name__}: {e}'}\n")
             failed.append(item['title'])
             continue
         note = ' (CTF patch applied)' if item['ctf'] else ''
@@ -286,10 +286,15 @@ def main_window():
 
         def work():
             failed = []
-            for i, it in enumerate(items):
-                q.put(('step', i, len(items), it['title']))
-                failed += build([it], lambda t: q.put(('line', t)))
-            q.put(('finished', len(items) - len(failed), failed))
+            try:
+                for i, it in enumerate(items):
+                    q.put(('step', i, len(items), it['title']))
+                    failed += build([it], lambda t: q.put(('line', t)))
+            except Exception as e:              # never leave the window in the "patching" state
+                q.put(('line', f'[!!] {type(e).__name__}: {e}\n'))
+                failed += [it['title'] for it in items if it['title'] not in failed][:1] or ['?']
+            finally:
+                q.put(('finished', len(items) - len(failed), failed))
         threading.Thread(target=work, daemon=True).start()
 
     def step(i, total, title):
