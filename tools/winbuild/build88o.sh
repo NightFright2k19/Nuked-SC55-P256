@@ -1,9 +1,9 @@
-# Build-Funktion fuer das Ein-Datei-Plugin "Emu-SC88" (Roland SC-88, 88emu-Kern, ROMs + Panel eingebettet).
-# Erwartet: S (Plugin-Quellen), GM (Gearmulator-Checkout mit Patches), LIBW (Windows-lib88emu.a),
-#           ROM88O (sc88_control.bin sc88_wave0..3.bin, Roh-Dumps), CXX (MinGW g++-posix)
+# Build function for the single-file plug-in "Emu-SC88" (Roland SC-88, 88emu core, ROMs + panel embedded).
+# Expects: S (plug-in sources), GM (Gearmulator checkout with patches), LIBW (Windows lib88emu.a),
+#           ROM88O (sc88_control.bin sc88_wave0..3.bin, raw dumps), CXX (MinGW g++-posix)
 build88o() {
   F="Emu-SC88"; N="Emu-SC88"
-  # NK_SLOT_CAP gesetzt: ROM-lose Vorlage (reservierter ROM-Bereich, befuellt von tools/p256_builder)
+  # NK_SLOT_CAP set: ROM-free template (reserved ROM area, filled by tools/p256_builder)
   if [ -n "$NK_SLOT_CAP" ]; then python3 $S/tools/gen_embedded_roms.py --slot gen/roms_88o.cpp 0 "SC-88" $NK_SLOT_CAP
   else python3 $S/tools/gen_embedded_roms.py gen/roms_88o.cpp 0 "SC-88 (embedded)" \
      0=$ROM88O/sc88_control.bin 1=$ROM88O/sc88_wave0.bin 2=$ROM88O/sc88_wave1.bin 3=$ROM88O/sc88_wave2.bin 4=$ROM88O/sc88_wave3.bin; fi

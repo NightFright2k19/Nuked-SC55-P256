@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-# Erzeugt eine C++-Quelle, die ROM-Dateien per .incbin in die Binary einbettet.
-# Aufruf: gen_embedded_roms.py <out.cpp> <romset-enum> <name> <loc>=<datei> ...
-#    oder: gen_embedded_roms.py --slot <out.cpp> <romset-enum> <name> <kapazitaet>
-#          (ROM-lose Vorlage: reservierter Bereich, den p256_builder.py / der Patcher befuellt)
+# Creates a C++ source that embeds ROM files into the binary with .incbin.
+# Usage: gen_embedded_roms.py <out.cpp> <romset-enum> <name> <loc>=<file> ...
+#    or: gen_embedded_roms.py --slot <out.cpp> <romset-enum> <name> <capacity>
+#        (ROM-free template: reserved area that p256_builder.py / the patcher fills)
 import sys, os, struct
 if sys.argv[1] == "--slot":
     out, romset, name, cap = sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
     blob = os.path.splitext(out)[0] + "_slot.bin"
-    # Kopf (256 Byte): Kennung, Version, Kapazitaet, Anzahl, befuellt, 8 Eintraege, Name; dann Datenbereich
+    # header (256 bytes): identifier, version, capacity, count, filled, 8 entries, name; then data area
     head = b"NUKED-P256-ROMSLOT".ljust(32, b"\0") + struct.pack("<4I", 1, cap, 0, 0)
     head += b"\0" * 128 + b"(empty template)".ljust(64, b"\0")
     head = head.ljust(256, b"\0")
@@ -15,8 +15,8 @@ if sys.argv[1] == "--slot":
         f.write(head); f.write(b"\0" * cap)
     path = os.path.abspath(blob).replace("\\", "/")
     with open(out, "w") as f:
-        f.write(f"""// ROM-lose Vorlage: ROMs werden nachtraeglich in den Bereich nk_romslot geschrieben
-// (p256_builder.py). Der Inhalt ist fuer den Compiler unbekannt (.incbin).
+        f.write(f"""// ROM-free template: ROMs are written into the nk_romslot area afterwards
+// (p256_builder.py). The content is unknown to the compiler (.incbin).
 #include "embedded_roms.h"
 #include <cstdint>
 #ifdef _WIN32

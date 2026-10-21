@@ -34,7 +34,7 @@ int main(int argc,char**argv){
   for(long b=0;b<nblocks;b++){
     evs.clear(); double t=b*B/sr;
     if(b==0){ midi(0,0xC0,0,0); midi(1,0xC1,48,0); midi(2,0xB0,64,127); midi(3,0xB1,64,127);} // Piano, Strings, Sustain
-    // mode 1: 1 Note; mode 2: Flut: 160 Noten in 2 s über 2 Kanäle
+    // mode 1: 1 note; mode 2: flood: 160 notes in 2 s over 2 channels
     if(mode==3 && b==10){ midi(0,0xB2,0,1); midi(1,0xC2,16,0);} if(mode==3 && b==20) midi(0,0x92,60,110);
     if(mode==4){ for(int k=0;k<256;k++){ long nb=20+(long)(k*512/(double)B); if(nb==b) midi(0,0x90|(k&1),(uint8_t)(24+(k*7)%80),90);} }
     if(mode==1 && b==10) midi(5,0x90,60,100);
@@ -43,12 +43,12 @@ int main(int argc,char**argv){
     t_proc+=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count();
     int act=0; for(int i=0;i<ns->NumInstances();i++) act+=ns->ActivePartials(i);
     if(act>maxact)maxact=act;
-    if((mode==2||mode==4) && (b%94==0)){ printf("t=%4.2fs Partials %3d | wach %2d |",t,act,ns->NumAwake()); for(int i=0;i<ns->NumInstances();i++) printf(" %2d",ns->ActivePartials(i)); printf("\n");}
+    if((mode==2||mode==4) && (b%94==0)){ printf("t=%4.2fs partials %3d | awake %2d |",t,act,ns->NumAwake()); for(int i=0;i<ns->NumInstances();i++) printf(" %2d",ns->ActivePartials(i)); printf("\n");}
     for(uint32_t i=0;i<B;i++) sumsq+=L[i]*L[i];
     fwrite(L.data(),4,B,raw);
   }
   fclose(raw);
-  printf("Instanzen: %d | max. gleichzeitig klingende Partials: %d | RMS L: %.4f | Rechenzeit %.2fs für %ds Audio\n",
+  printf("Instances: %d | max. simultaneously sounding partials: %d | RMS L: %.4f | compute time %.2fs for %ds of audio\n",
     ns->NumInstances(),maxact,sqrt(sumsq/(nblocks*B)),t_proc,seconds_total);
   p->stop_processing(p); p->deactivate(p); p->destroy(p);
 }

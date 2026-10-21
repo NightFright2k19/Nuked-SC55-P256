@@ -1,8 +1,8 @@
 #!/bin/bash
-# Baut die ROM-losen Vorlagen und stellt das Builder-Paket zusammen: out/Nuked-P256-Builder/
-# (p256_builder.py, templates/*.p256tpl, roms/). Selbsttest: Builder mit den
-# Workbench-ROMs (roms/, rom88/, rom8850/, rom88sc/, rom8820/, testdata/roms_la/) ausfuehren, Ergebnis muss "N Plugin(s) erzeugt" melden.
-# Dauer ca. 4 min (im Hintergrund starten).
+# Builds the ROM-free templates and assembles the builder package: out/Nuked-P256-Builder/
+# (p256_builder.py, templates/*.p256tpl, roms/). Self-test: run the builder with the
+# workbench ROMs (roms/, rom88/, rom8850/, rom88sc/, rom8820/, testdata/roms_la/); the result must report "N plugin(s) created".
+# Takes about 4 min (start in the background).
 WB=/home/claude/wb; T=$WB/tools; S=$WB/src; K=$WB/out/Nuked-P256-Builder
 cd $T/winbuild; export S CXX=x86_64-w64-mingw32-g++-posix OUTDIR=out_tpl; rm -rf out_tpl
 . ./build2.sh
@@ -14,15 +14,15 @@ if [ -f $WB/gearmulator/buildwin/source/ronaldo/88emu/88lib/lib88emu.a ]; then
   . ./build8850.sh; NK_SLOT_CAP=36765696 build8850   # 64 KiB + 1 MiB + 2 MiB + 32 MiB
   . ./build88o.sh; NK_SLOT_CAP=8912896 build88o      # 512 KiB + 4 x 2 MiB
   . ./build8820.sh; NK_SLOT_CAP=27394048 build8820   # 128 KiB + 2 MiB + 16 MiB + 8 MiB
-  . ./buildmt32.sh; NK_SLOT_CAP=2621440 buildmt32    # MT-32 alt + neu + CM-32L (je Steuerung, Wave, Reverb)
+  . ./buildmt32.sh; NK_SLOT_CAP=2621440 buildmt32    # MT-32 old + new + CM-32L (each control, wave, reverb)
 fi
 rm -rf $K && mkdir -p $K/templates $K/roms
-# Builder: p256_builder.py aus dem Repo (p256_repo/, wird auch vom Patcher benutzt); ROM-Hinweis wie im Repo
+# Builder: p256_builder.py from the repo (p256_repo/, also used by the patcher); ROM note as in the repo
 cp $WB/p256_repo/p256_builder.py $K/
 cp $WB/p256_repo/roms/place_roms_here.txt $K/roms/
-# kompakt: reservierten (leeren) ROM-Bereich herausschneiden; das Skript setzt die ROMs dort ein
+# compact: cut out the reserved (empty) ROM area; the script inserts the ROMs there
 for f in out_tpl/*.dll; do python3 $S/tools/p256_builder/compact_template.py "$f" "$K/templates/$(basename "$f" .dll).p256tpl"; done
-# Selbsttest mit den Workbench-ROMs (Kopie, das Paket selbst bleibt ROM-frei)
+# self-test with the workbench ROMs (copy, the package itself stays ROM-free)
 X=/tmp/p256_selftest; rm -rf $X && cp -r $K $X && cp -rL $WB/roms $X/roms/sc55 && { [ -d $WB/rom88 ] && cp -r $WB/rom88/. $X/roms/sc88/ || true; } && { [ -d $WB/rom8850 ] && mkdir -p $X/roms/sc8850 && cp -r $WB/rom8850/. $X/roms/sc8850/ || true; } && { [ -d $WB/rom88sc ] && mkdir -p $X/roms/sc88orig && cp -r $WB/rom88sc/. $X/roms/sc88orig/ || true; } && { [ -d $WB/rom8820 ] && mkdir -p $X/roms/sc8820 && cp -r $WB/rom8820/. $X/roms/sc8820/ || true; } && { [ -d $WB/testdata/roms_la ] && mkdir -p $X/roms/mt32 && cp -r $WB/testdata/roms_la/. $X/roms/mt32/ || true; }
-( cd $X && python3 p256_builder.py | grep -E "^\[|created|erzeugt" )
-echo "Paket: $K  (Selbsttest-Ausgabe: $X/output)"
+( cd $X && python3 p256_builder.py | grep -E "^\[|created" )
+echo "Package: $K  (self-test output: $X/output)"

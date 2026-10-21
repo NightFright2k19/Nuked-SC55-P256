@@ -57,7 +57,7 @@ static std::vector<bool> noise(65536,false);
 static void learn(NukedSc55* ns){ static uint8_t x[65536],y[65536]; emu88_peek_work_ram(ns->instances[0].ctx,0,x,65536);
   for(int u=1;u<ns->NumInstances();u++){ emu88_peek_work_ram(ns->instances[u].ctx,0,y,65536); for(int i=0;i<65536;i++) if(x[i]!=y[i]) noise[i]=true; } }
 static void ramdiff(NukedSc55* ns,const char* what){ static uint8_t x[65536],y[65536]; emu88_peek_work_ram(ns->instances[0].ctx,0,x,65536); printf("   RAM %s:",what);
-  for(int u=1;u<ns->NumInstances();u++){ if(!ns->instances[u].awake){ printf(" [E%d schlaeft]",u); continue; } emu88_peek_work_ram(ns->instances[u].ctx,0,y,65536); int n=0;
+  for(int u=1;u<ns->NumInstances();u++){ if(!ns->instances[u].awake){ printf(" [E%d sleeps]",u); continue; } emu88_peek_work_ram(ns->instances[u].ctx,0,y,65536); int n=0;
     for(int i=0x2370;i<0x7400;i++) if((i<0x2560||i>=0x5000)&&!noise[i]&&x[i]!=y[i]){ if(n<(getenv("ALL")?400:3)) printf(" E%d %04X:%02X/%02X",u,i,x[i],y[i]); n++; } printf(" [E%d: %d]",u,n); } printf("\n"); }
 // Issue #26: Mode 2 (Double Module) - resets per part group, menu resets both groups, woken units replay the mode
 int main(int argc,char**argv){
@@ -73,21 +73,21 @@ int main(int argc,char**argv){
   auto st=[&](double a){ return std::fabs(a-ref)<1.0?"Boot-Klang":"verstellt"; };
   // wake all units once and learn the bytes that differ anyway
   { std::vector<Ev> v; for(int k=0;k<250;k++) v.push_back(M(0x92,20+k%90,50)); block(v); idle(0.3); v.clear(); for(int k=0;k<250;k++) v.push_back(M(0x82,20+k%90,0)); block(v); idle(0.5); learn(ns); idle(1.5); }
-  printf("%s, Start: Modus-Haken %d, Mode 2 laut Log %d\n",id,ns->system_mode.load(),ns->state_log.DoubleModule());
+  printf("%s, start: mode flag %d, mode 2 according to log %d\n",id,ns->system_mode.load(),ns->state_log.DoubleModule());
   if(!getenv("MODE1")){ ns->ui_command=9; } idle(1.0);
-  printf("1) Menue Mode 2: Haken %d, Log %d\n",ns->system_mode.load(),ns->state_log.DoubleModule());
+  printf("1) Menu mode 2: flag %d, log %d\n",ns->system_mode.load(),ns->state_log.DoubleModule());
   dirty(0); dirty(1); block({S(GS,1)}); idle(1.0);
-  { double a=note(0), b=note(1); printf("2) Host-GS nur an IN B: A01 %s, B01 %s\n",st(a),st(b)); }
+  { double a=note(0), b=note(1); printf("2) Host GS on IN B only: A01 %s, B01 %s\n",st(a),st(b)); }
   // many notes on A01 wake the other units: they must replay Mode 2, the A01 edits and the B-only GS reset
-  { std::vector<Ev> v; for(int k=0;k<250;k++) v.push_back(M(0x90,20+k%90,50)); block(v); idle(0.5); printf("3) 250 Noten auf A01: wach %d\n",ns->NumAwake());
-    v.clear(); for(int k=0;k<250;k++) v.push_back(M(0x80,20+k%90,0)); block(v); idle(0.4); ramdiff(ns,"Einheiten vs. Einheit 0 (Modusblock + GS-Parameter)"); }
+  { std::vector<Ev> v; for(int k=0;k<250;k++) v.push_back(M(0x90,20+k%90,50)); block(v); idle(0.5); printf("3) 250 notes on A01: awake %d\n",ns->NumAwake());
+    v.clear(); for(int k=0;k<250;k++) v.push_back(M(0x80,20+k%90,0)); block(v); idle(0.4); ramdiff(ns,"units vs. unit 0 (mode block + GS parameters)"); }
   idle(1.5); dirty(0); dirty(1); ns->ui_command=2; idle(1.0);
-  { double a=note(0), b=note(1); printf("4) Menue GS in Mode 2: A01 %s, B01 %s\n",st(a),st(b)); }
+  { double a=note(0), b=note(1); printf("4) Menu GS in mode 2: A01 %s, B01 %s\n",st(a),st(b)); }
   dirty(0); dirty(1); ns->ui_command=6; idle(1.0);
-  { double a=note(0), b=note(1); printf("5) Menue GM in Mode 2: A01 %s, B01 %s\n",st(a),st(b)); }
-  { std::vector<Ev> v; for(int k=0;k<250;k++) v.push_back(M(0x91,20+k%90,50,1)); block(v); idle(0.5); printf("6) 250 Noten auf B02: wach %d\n",ns->NumAwake());
-    v.clear(); for(int k=0;k<250;k++) v.push_back(M(0x81,20+k%90,0,1)); block(v); idle(0.4); ramdiff(ns,"Einheiten vs. Einheit 0 (Modusblock + GS-Parameter)"); idle(1.6); }
+  { double a=note(0), b=note(1); printf("5) Menu GM in mode 2: A01 %s, B01 %s\n",st(a),st(b)); }
+  { std::vector<Ev> v; for(int k=0;k<250;k++) v.push_back(M(0x91,20+k%90,50,1)); block(v); idle(0.5); printf("6) 250 notes on B02: awake %d\n",ns->NumAwake());
+    v.clear(); for(int k=0;k<250;k++) v.push_back(M(0x81,20+k%90,0,1)); block(v); idle(0.4); ramdiff(ns,"units vs. unit 0 (mode block + GS parameters)"); idle(1.6); }
   ns->ui_command=8; idle(1.0); dirty(0); dirty(1); block({S(GS,1)}); idle(1.0);
-  { double a=note(0), b=note(1); printf("7) Menue Mode 1 (Haken %d, Log %d), Host-GS an IN B: A01 %s, B01 %s\n",ns->system_mode.load(),ns->state_log.DoubleModule(),st(a),st(b)); }
-  block({S(MO2)}); idle(1.0); printf("8) Host sendet Mode 2: Haken %d, Log %d\n",ns->system_mode.load(),ns->state_log.DoubleModule());
+  { double a=note(0), b=note(1); printf("7) Menu mode 1 (flag %d, log %d), host GS on IN B: A01 %s, B01 %s\n",ns->system_mode.load(),ns->state_log.DoubleModule(),st(a),st(b)); }
+  block({S(MO2)}); idle(1.0); printf("8) Host sends mode 2: flag %d, log %d\n",ns->system_mode.load(),ns->state_log.DoubleModule());
   return 0; }

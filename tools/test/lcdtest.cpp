@@ -1,5 +1,5 @@
-// Prueft die Teilaktualisierung des Display-Renderers gegen eine vollstaendige Neuberechnung
-// und misst die Rechenzeit (Windows-GDI durch Ersatzfunktionen ersetzt).
+// Checks the partial update of the display renderer against a complete recomputation
+// and measures the compute time (Windows GDI replaced by substitute functions).
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -26,7 +26,7 @@ int main() {
     lcdview::View v; v.on = true; for (int i = 0; i < 80; i++) v.dd[i] = 32 + rng() % 90; for (int i = 0; i < 64; i++) v.cg[i] = rng() & 31;
     double t_inc = 0, t_full = 0; int static_frames = 0;
     for (int f = 0; f < frames; f++) {
-      // typisches Spielgeschehen: Pegelbalken aendern sich fast jedes Bild, Text gelegentlich
+      // typical gameplay: level bars change in almost every frame, text only occasionally
       if (f % 3) for (int c = 0; c < 16; c++) { int hgt = rng() % 17; for (int rr = 0; rr < 16; rr++) { uint16_t bit = 1u << (15 - c); if (15 - rr < hgt) v.matrix[rr] |= bit; else v.matrix[rr] &= ~bit; } }
       else static_frames++;
       if (f % 25 == 0) v.dd[3 + rng() % 16] = 32 + rng() % 90;
@@ -38,11 +38,11 @@ int main() {
       if (a != g_out) mism++;
       t_inc += std::chrono::duration<double>(t1 - t0).count(); t_full += std::chrono::duration<double>(t2 - t1).count();
     }
-    printf("Display %dx%d: %d Bilder, %ld Abweichungen | bisher %.2f ms/Bild, neu %.2f ms/Bild -> bei 30 Bildern/s %.1f %% statt %.1f %% eines Kerns\n",
+    printf("Display %dx%d: %d frames, %ld deviations | before %.2f ms/frame, new %.2f ms/frame -> at 30 frames/s %.1f %% instead of %.1f %% of one core\n",
            wh.first, wh.second, frames, mism, 1000 * t_full / frames, 1000 * t_inc / frames, 3 * 1000 * t_inc / frames, 3 * 1000 * t_full / frames);
-    // ganz ohne Aenderung (stehendes Display)
+    // without any change (static display)
     auto t0 = std::chrono::steady_clock::now(); for (int i = 0; i < 300; i++) lcdview::DrawDots(nullptr, r, v, inc); double ts = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() / 300;
-    printf("  stehendes Display: %.3f ms/Bild -> %.2f %% eines Kerns\n", 1000 * ts, 3 * 1000 * ts);
+    printf("  static display: %.3f ms/frame -> %.2f %% of one core\n", 1000 * ts, 3 * 1000 * ts);
     lcdview::FreeCache(inc);
   }
 }

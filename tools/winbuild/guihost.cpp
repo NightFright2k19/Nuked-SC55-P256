@@ -1,4 +1,4 @@
-// VST2-GUI-Testhost: lädt Plugin, öffnet Editor, spielt MIDI, speichert Screenshots (BMP).
+// VST2 GUI test host: loads the plug-in, opens the editor, plays MIDI, saves screenshots (BMP).
 #include <windows.h>
 #include "vst2/vst2_abi.h"
 #include <cstdio>
@@ -17,22 +17,22 @@ static void SaveShot(HWND w,int W,int H,const char* fn){
 static HWND g_ed; static int g_W,g_H;
 static DWORD WINAPI MenuThread(void*){
   Sleep(400);
-  // SETUP-Button anklicken (rechts unten im Editor)
+  // click the SETUP button (bottom right in the editor)
   int sx=g_W-80, sy=g_H-50; if(const char* xy=getenv("SETUP_XY")) sscanf(xy,"%d,%d",&sx,&sy); // SC-55/8850: 848,255, SC-88: 328,255
   PostMessage(g_ed,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(sx,sy));
   Sleep(900);
-  // MENU_NAV: Tasten vor dem Screenshot (D/U/R/L = Pfeile, E = Enter, X = Escape), z. B. Untermenü öffnen
+  // MENU_NAV: keys before the screenshot (D/U/R/L = arrows, E = Enter, X = Escape), e.g. to open a submenu
   auto keys=[](const char* k){ for(;k&&*k;++k){ WORD vk=*k=='D'?VK_DOWN:*k=='U'?VK_UP:*k=='R'?VK_RIGHT:*k=='L'?VK_LEFT:*k=='E'?VK_RETURN:VK_ESCAPE;
     keybd_event(vk,0,0,0); keybd_event(vk,0,KEYEVENTF_KEYUP,0); Sleep(150);} };
   keys(getenv("MENU_NAV")); Sleep(500);
-  // Bildschirm-Screenshot inkl. Menü (MENU_WH=<b>,<h>, Standard 760,560)
+  // screen screenshot including the menu (MENU_WH=<w>,<h>, default 760,560)
   HDC sdc=GetDC(nullptr); int W=760,H=560; if(const char* wh=getenv("MENU_WH")) sscanf(wh,"%d,%d",&W,&H); HDC mem=CreateCompatibleDC(sdc);
   BITMAPINFO bi{}; bi.bmiHeader.biSize=sizeof(bi.bmiHeader); bi.bmiHeader.biWidth=W; bi.bmiHeader.biHeight=-H; bi.bmiHeader.biPlanes=1; bi.bmiHeader.biBitCount=32;
   void* bits=nullptr; HBITMAP bm=CreateDIBSection(mem,&bi,DIB_RGB_COLORS,&bits,nullptr,0); SelectObject(mem,bm);
   BitBlt(mem,0,0,W,H,sdc,0,0,SRCCOPY); GdiFlush();
   FILE* f=fopen("Z:\\tmp\\menu.bmp","wb"); BITMAPFILEHEADER fh{0x4D42,(DWORD)(54+W*H*4),0,0,54}; BITMAPINFOHEADER ih=bi.bmiHeader;
   fwrite(&fh,sizeof fh,1,f); fwrite(&ih,sizeof ih,1,f); fwrite(bits,4,W*H,f); fclose(f);
-  // Eintrag "64 Stimmen" wählen: 3x Pfeil runter (Kopfzeile ist deaktiviert) + Enter; MENU_DONE: eigene Tasten
+  // choose the entry "64 voices": 3x arrow down (header line is disabled) + Enter; MENU_DONE: own keys
   keys(getenv("MENU_DONE")?getenv("MENU_DONE"):"DDDE");
   return 0; }
 static void pump(){ MSG m; while(PeekMessage(&m,nullptr,0,0,PM_REMOVE)){TranslateMessage(&m);DispatchMessage(&m);} }
@@ -47,9 +47,9 @@ int main(int,char**a){
   HWND host=CreateWindowA("HostWin","Test",WS_OVERLAPPEDWINDOW|WS_VISIBLE,0,0,rc.right-rc.left,rc.bottom-rc.top,0,0,wc.hInstance,0);
   printf("EditOpen=%d\n",(int)fx->dispatcher(fx,effEditOpen,0,0,host,0));
   HWND ed=GetWindow(host,GW_CHILD); g_ed=ed; g_W=W; g_H=H;
-  { void* o0=nullptr; int n0=(int)fx->dispatcher(fx,effGetChunk,0,0,&o0,0); printf("Chunk frische Instanz: %.*s\n",n0,(char*)o0); }
+  { void* o0=nullptr; int n0=(int)fx->dispatcher(fx,effGetChunk,0,0,&o0,0); printf("Chunk fresh instance: %.*s\n",n0,(char*)o0); }
   // State chunk round-trip
-  const char* ch=getenv("INIT_CHUNK")?getenv("INIT_CHUNK"):"NSC55P1 max_voices=128"; // INIT_CHUNK: eigener Startzustand
+  const char* ch=getenv("INIT_CHUNK")?getenv("INIT_CHUNK"):"NSC55P1 max_voices=128"; // INIT_CHUNK: own start state
   fx->dispatcher(fx,effSetChunk,0,(intptr_t)strlen(ch),(void*)ch,0);
   void* out=nullptr; int n=(int)fx->dispatcher(fx,effGetChunk,0,0,&out,0); printf("Chunk: %.*s\n",n,(char*)out);
   std::vector<float> L(512),R(512); float* o[2]={L.data(),R.data()};
@@ -58,7 +58,7 @@ int main(int,char**a){
     std::vector<MidiEvent> me; auto add=[&](uint8_t x,uint8_t y,uint8_t z){MidiEvent m{};m.type=kMidiType;m.byteSize=sizeof m;m.midiData[0]=x;m.midiData[1]=y;m.midiData[2]=z;me.push_back(m);};
     if(b==1) for(int c=0;c<16;c++){ add(0xC0|c,progs[c],0); add(0xB0|c,7,90+c); add(0xB0|c,10,c*8); add(0xB0|c,91,40+c*3); add(0xB0|c,93,c*5); }
     if(b>=5 && b%6==0) for(int c=0;c<16;c++) if((b/6+c)%3!=0) add(0x90|c,36+(c*5+b)%48,40+((c*13+b*7)%87));
-    if(b==150) for(int c=0;c<6;c++) for(int k=0;k<10;k++) add(0x90|c,40+k*3+c,100); // Akkordflut -> mehr Stimmen
+    if(b==150) for(int c=0;c<6;c++) for(int k=0;k<10;k++) add(0x90|c,40+k*3+c,100); // chord flood -> more voices
     std::vector<Event*> ptrs; for(auto&m:me) ptrs.push_back((Event*)&m);
     std::vector<char> buf(sizeof(Events)+ptrs.size()*sizeof(void*)); auto ev=(Events*)buf.data(); ev->numEvents=ptrs.size(); for(size_t i=0;i<ptrs.size();i++) ev->events[i]=ptrs[i];
     fx->dispatcher(fx,effProcessEvents,0,0,ev,0); fx->processReplacing(fx,nullptr,o,512);
@@ -66,7 +66,7 @@ int main(int,char**a){
     if(b==120) SaveShot(ed,W,H,"Z:\\tmp\\shot1.bmp");
     if(b==158) SaveShot(ed,W,H,"Z:\\tmp\\shot2.bmp");
     if(b==170) CreateThread(nullptr,0,MenuThread,nullptr,0,nullptr);
-    if(b==240){ void* o2=nullptr; int n2=(int)fx->dispatcher(fx,effGetChunk,0,0,&o2,0); printf("Chunk nach Menüwahl: %.*s | Host-Änderungsmeldungen: %d\n",n2,(char*)o2,g_upd); SaveShot(ed,W,H,"Z:\\tmp\\shot3.bmp"); }
+    if(b==240){ void* o2=nullptr; int n2=(int)fx->dispatcher(fx,effGetChunk,0,0,&o2,0); printf("Chunk after menu selection: %.*s | host change notifications: %d\n",n2,(char*)o2,g_upd); SaveShot(ed,W,H,"Z:\\tmp\\shot3.bmp"); }
   }
   fx->dispatcher(fx,effEditClose,0,0,0,0); DestroyWindow(host); fx->dispatcher(fx,effClose,0,0,0,0); puts("ok"); return 0;
 }

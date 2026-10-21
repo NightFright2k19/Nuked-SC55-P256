@@ -1,13 +1,13 @@
-# Build-Funktion fuer das Ein-Datei-Plugin "Emu-MT32" (Roland MT-32 alt / neu und CM-32L in einem Plugin,
-# 88emu-Kern, ROMs + Panels eingebettet; Issue #69).
-# Erwartet: S (Plugin-Quellen), GM (Gearmulator-Checkout mit Patches), LIBW (Windows-lib88emu.a), CXX (MinGW g++-posix),
-#           ROMLA (Ordner mit den MT-32/CM-32L-ROMs; die Geraete-Saetze stellt p256_builder.la_blob() zusammen)
+# Build function for the single-file plug-in "Emu-MT32" (Roland MT-32 old / new and CM-32L in one plug-in,
+# 88emu core, ROMs + panels embedded; issue #69).
+# Expects: S (plug-in sources), GM (Gearmulator checkout with patches), LIBW (Windows lib88emu.a), CXX (MinGW g++-posix),
+#           ROMLA (folder with the MT-32/CM-32L ROMs; the per-device sets are assembled by p256_builder.la_blob())
 buildmt32() {
   F="Emu-MT32"; N="Emu-MT32"
-  # NK_SLOT_CAP gesetzt: ROM-lose Vorlage (reservierter ROM-Bereich, befuellt von p256_builder)
+  # NK_SLOT_CAP set: ROM-free template (reserved ROM area, filled by p256_builder)
   if [ -n "$NK_SLOT_CAP" ]; then python3 $S/tools/gen_embedded_roms.py --slot gen/roms_mt32.cpp 0 "MT-32 / CM-32L" $NK_SLOT_CAP
   else
-    # ein Satz je Geraet (0 = MT-32 alt, 1 = MT-32 neu, 2 = CM-32L), wie ihn der Builder einsetzt
+    # one set per device (0 = MT-32 old, 1 = MT-32 new, 2 = CM-32L), as the builder inserts it
     python3 -I -c "import sys; sys.path.insert(0, sys.argv[1]); import p256_builder as b; from pathlib import Path
 s = b.la_sets(b.scan_roms(Path(sys.argv[2])))[0]
 for loc, (_, r) in enumerate(next(m for m in b.MODELS if m[0] == 'la')[3]):
@@ -16,7 +16,7 @@ for loc, (_, r) in enumerate(next(m for m in b.MODELS if m[0] == 'la')[3]):
     python3 $S/tools/gen_embedded_roms.py gen/roms_mt32.cpp 0 "MT-32 / CM-32L (embedded)" $(cat gen/la_list.txt)
   fi
   O="${OUTDIR:-out2}"; mkdir -p "$O"
-  # Panels: ohne Fotos/Fremdgrafik von Grund auf gezeichnet (Hintergrund + alle Lampen an, Glas ueber dem LCD)
+  # Panels: drawn from scratch without photos or third-party graphics (background + all lamps on, glass over the LCD)
   python3 $S/tools/make_la_panel.py gen/panelmt32.bgra --base
   python3 $S/tools/make_la_panel.py gen/litmt32.bgra --all-on
   python3 $S/tools/make_la_panel.py gen/panelcm32l.bgra --base --cm32l

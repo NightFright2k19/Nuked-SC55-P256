@@ -70,5 +70,5 @@ int main(int argc,char**argv){
   block({S(MO1)}); idle(2.0); snap(s3);
   block({S(GS)}); idle(2.0); snap(s4);
   int n=0;
-  for(int i=0;i<65536;i++){ if(s0[i]!=s0b[i]||s1[i]!=s1b[i]) continue; if(s1[i]==s3[i]&&s1[i]!=s2[i]){ if(n++<40) printf("  %04X: Boot %02X  Mode1 %02X  Mode2 %02X  nach GS %02X\n",i,s0[i],s1[i],s2[i],s4[i]); } }
-  printf("%d Bytes folgen dem Modus\n",n); return 0; }
+  for(int i=0;i<65536;i++){ if(s0[i]!=s0b[i]||s1[i]!=s1b[i]) continue; if(s1[i]==s3[i]&&s1[i]!=s2[i]){ if(n++<40) printf("  %04X: Boot %02X  Mode1 %02X  Mode2 %02X  after GS %02X\n",i,s0[i],s1[i],s2[i],s4[i]); } }
+  printf("%d bytes follow the mode\n",n); return 0; }

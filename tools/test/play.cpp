@@ -42,10 +42,10 @@ int main(int,char**a){
       if(t>probes[k].s+0.5 && t<probes[k].e-0.1){ for(uint32_t i=0;i<B;i++){sum[k]+=L[i];sum2[k]+=L[i]*(double)L[i];} cnt[k]+=B; } }
     for(uint32_t i=0;i<B;i++){all.push_back(L[i]);all.push_back(R[i]);}
   }
-  printf("%-40s Instanzen %d\n",a[1],ns->NumInstances());
+  printf("%-40s instances %d\n",a[1],ns->NumInstances());
   for(size_t k=0;k<probes.size();k++){ double m=sum[k]/cnt[k], sd=sqrt(sum2[k]/cnt[k]-m*m);
-    printf("  Runde %d (%3d Noten): max. %3d Stimmen, %2d Instanzen wach, Prüfton %.4f -> %s\n",probes[k].r,probes[k].n,peak[k],awk[k],sd, sd>0.002?"HÖRBAR":"STILLE"); }
-  printf("  Rechenzeit gesamt: %.1f s für 82 s Audio | wache Instanzen min %d / max %d\n",tp,awake_min,awake_max);
+    printf("  Round %d (%3d notes): max. %3d voices, %2d instances awake, probe tone %.4f -> %s\n",probes[k].r,probes[k].n,peak[k],awk[k],sd, sd>0.002?"AUDIBLE":"SILENT"); }
+  printf("  total compute time: %.1f s for 82 s of audio | awake instances min %d / max %d\n",tp,awake_min,awake_max);
   if(a[2]){FILE* w=fopen(a[2],"wb"); fwrite(all.data(),4,all.size(),w); fclose(w);}
   p->stop_processing(p); p->destroy(p);
 }

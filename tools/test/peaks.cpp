@@ -20,7 +20,7 @@ int main(int,char**a){
   std::vector<float> L(B),R(B); float* ch[2]={L.data(),R.data()}; clap_audio_buffer_t out{}; out.data32=ch; out.channel_count=2;
   clap_input_events_t in{nullptr,sz,gt}; clap_process_t pr{}; pr.frames_count=B; pr.audio_outputs=&out; pr.audio_outputs_count=1; pr.in_events=&in;
   size_t ei=0; int win_max=0; int over22=0, over24=0; int secs_over22=0, secs_over24=0; long blocks=0;
-  printf("Max. klingende Partials je Sekunde (alle Einheiten):\n");
+  printf("Max. sounding partials per second (all units):\n");
   for(long pos=0;pos<atof(a[3])*sr;pos+=B){
     blk.clear(); ptr.clear();
     while(ei<ev.size() && ev[ei].t*sr < pos+B){ auto&d=ev[ei].d; if(d[0]!=0xF0){ clap_event_midi_t m{}; m.header={sizeof(m),0,CLAP_CORE_EVENT_SPACE_ID,CLAP_EVENT_MIDI,0}; for(size_t i=0;i<d.size()&&i<3;i++) m.data[i]=d[i]; blk.push_back(m);} ei++; }
@@ -30,5 +30,5 @@ int main(int,char**a){
     win_max=std::max(win_max,act); blocks++;
     if(blocks % (long)(sr/B) == 0){ printf("%3d ",win_max); if(win_max>22) secs_over22++; if(win_max>24) secs_over24++; if((blocks/(long)(sr/B))%20==0) printf("\n"); win_max=0; }
   }
-  printf("\nSekunden mit > 22 Partials: %d, mit > 24 Partials: %d (von %d)\n",secs_over22,secs_over24,(int)(blocks/(long)(sr/B)));
+  printf("\nSeconds with > 22 partials: %d, with > 24 partials: %d (of %d)\n",secs_over22,secs_over24,(int)(blocks/(long)(sr/B)));
 }

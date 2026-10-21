@@ -12,4 +12,4 @@ int main(int,char**a){
   clap_entry.init("/tmp/x/p.clap"); auto fa=(const clap_plugin_factory_t*)clap_entry.get_factory(CLAP_PLUGIN_FACTORY_ID);
   auto p=fa->create_plugin(fa,&host,a[1]); p->init(p); long r1=rss(); p->activate(p,44100,1,512); long r2=rss();
   auto ns=(NukedSc55*)p->plugin_data;
-  printf("%s: %d Einheiten | RAM nach Init %ld MB, nach Aktivieren %ld MB (Programm vorher %ld MB) -> %.1f MB je Einheit\n",a[1],ns->NumInstances(),r1,r2,r0,(r2-r0)/(double)ns->NumInstances()); }
+  printf("%s: %d units | RAM after init %ld MB, after activating %ld MB (program before %ld MB) -> %.1f MB per unit\n",a[1],ns->NumInstances(),r1,r2,r0,(r2-r0)/(double)ns->NumInstances()); }

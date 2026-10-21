@@ -1,7 +1,7 @@
-// Panel-Test (SC-8850, SC-88): spielt eine Eventliste durch ein VST2-Plugin mit offenem Editor und schickt dem
-// Editor zu Songzeiten Mausnachrichten; "shot" speichert einen Screenshot <prefix>_NN.bmp.
-// usage: panelhost <dll> <events.txt> <out-prefix> <t>:<aktion> ...   (NK_CHUNK=<state>: vorher geladen)
-//   aktion: shot | down,x,y | up,x,y | rdown,x,y | rup,x,y | move,x,y | click,x,y (down+up) | wheel,x,y,d
+// Panel test (SC-8850, SC-88): plays an event list through a VST2 plug-in with the editor open and sends the
+// editor mouse messages at song times; "shot" saves a screenshot <prefix>_NN.bmp.
+// usage: panelhost <dll> <events.txt> <out-prefix> <t>:<action> ...   (NK_CHUNK=<state>: loaded beforehand)
+//   action: shot | down,x,y | up,x,y | rdown,x,y | rup,x,y | move,x,y | click,x,y (down+up) | wheel,x,y,d
 #include <windows.h>
 #include "vst2/vst2_abi.h"
 #include <cstdio>
@@ -27,7 +27,7 @@ int main(int argc,char**argv){
     sscanf(c+1,"%15[a-z],%d,%d,%d",w,&a.x,&a.y,&a.d); a.what=w; acts.push_back(a); }
   HMODULE h=LoadLibraryA(argv[1]); auto mainf=(AEffect*(*)(HostCallback))GetProcAddress(h,"VSTPluginMain"); AEffect* fx=mainf(cb);
   fx->dispatcher(fx,effOpen,0,0,0,0); fx->dispatcher(fx,effSetSampleRate,0,0,0,44100.f); fx->dispatcher(fx,effSetBlockSize,0,512,0,0); fx->dispatcher(fx,effMainsChanged,0,1,0,0);
-  if(const char* c=getenv("NK_CHUNK")){ fx->dispatcher(fx,effSetChunk,0,(intptr_t)strlen(c),(void*)c,0); printf("Chunk gesetzt: %s\n",c); } // z. B. Geraet (MT-32)
+  if(const char* c=getenv("NK_CHUNK")){ fx->dispatcher(fx,effSetChunk,0,(intptr_t)strlen(c),(void*)c,0); printf("Chunk set: %s\n",c); } // e.g. device (MT-32)
   ERect* r=nullptr; fx->dispatcher(fx,effEditGetRect,0,0,&r,0); int W=r->right,H=r->bottom;
   WNDCLASSA wc{}; wc.lpfnWndProc=DefWindowProcA; wc.hInstance=GetModuleHandle(0); wc.lpszClassName="PanelHost"; RegisterClassA(&wc);
   RECT rc{0,0,W,H}; AdjustWindowRect(&rc,WS_OVERLAPPEDWINDOW,FALSE);
@@ -45,12 +45,12 @@ int main(int argc,char**argv){
     std::vector<char> buf(sizeof(Events)+ptrs.size()*sizeof(void*)); auto evs=(Events*)buf.data(); evs->numEvents=(int)ptrs.size(); for(size_t i=0;i<ptrs.size();i++) evs->events[i]=ptrs[i];
     fx->dispatcher(fx,effProcessEvents,0,0,evs,0); fx->processReplacing(fx,nullptr,o,512);
     if((pos/512)%4==0) pump();
-    { static DWORD start=GetTickCount(); const DWORD due=start+(DWORD)(t1*1000); while(GetTickCount()<due){ pump(); Sleep(2);} } // Echtzeit wie im Host
+    { static DWORD start=GetTickCount(); const DWORD due=start+(DWORD)(t1*1000); while(GetTickCount()<due){ pump(); Sleep(2);} } // real time like in a host
     while(ai<acts.size() && t1>=acts[ai].t){ const A& a=acts[ai++]; const LPARAM lp=MAKELPARAM(a.x,a.y);
       if(a.what=="shot"){ for(int k=0;k<6;k++){ pump(); Sleep(40);} InvalidateRect(ed,nullptr,FALSE); UpdateWindow(ed); pump();
         char fn[256]; sprintf(fn,"%s_%02d.bmp",argv[3],nshot++); Shot(ed,W,H,fn); printf("Screenshot t=%.2fs -> %s\n",a.t,fn); }
-      else if(a.what=="qshot"){ InvalidateRect(ed,nullptr,FALSE); UpdateWindow(ed); // sofort, ohne Wartezeit (kurz leuchtende Lampen)
-        char fn[256]; sprintf(fn,"%s_%02d.bmp",argv[3],nshot++); Shot(ed,W,H,fn); printf("Screenshot (sofort) t=%.2fs -> %s\n",a.t,fn); }
+      else if(a.what=="qshot"){ InvalidateRect(ed,nullptr,FALSE); UpdateWindow(ed); // immediately, without waiting (briefly lit lamps)
+        char fn[256]; sprintf(fn,"%s_%02d.bmp",argv[3],nshot++); Shot(ed,W,H,fn); printf("Screenshot (immediate) t=%.2fs -> %s\n",a.t,fn); }
       else if(a.what=="dbl"){ SendMessage(ed,WM_LBUTTONDOWN,MK_LBUTTON,lp); SendMessage(ed,WM_LBUTTONUP,0,lp); SendMessage(ed,WM_LBUTTONDBLCLK,MK_LBUTTON,lp); SendMessage(ed,WM_LBUTTONUP,0,lp); }
       else if(a.what=="down") SendMessage(ed,WM_LBUTTONDOWN,MK_LBUTTON,lp);
       else if(a.what=="up") SendMessage(ed,WM_LBUTTONUP,0,lp);

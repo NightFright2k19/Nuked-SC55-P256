@@ -1,7 +1,7 @@
 // Issue #36: traces unit 0's LCD text (DDRAM) over song time, one line per change.
 // lcdscroll <plugin-id> <events.txt> <sek> [t0]   (lines before t0 are not printed)
-// HOLD="<t0> <t1> <bit>": Panel-Taste (Bit) von t0 bis t1 halten
-// OUT=<datei>: Ausgang als float32 (L/R verschachtelt) für den Klangvergleich
+// HOLD="<t0> <t1> <bit>": hold a panel button (bit) from t0 to t1
+// OUT=<file>: output as float32 (L/R interleaved) for the sound comparison
 #include "clap/clap.h"
 #include "nuked_sc55.h"
 #include <cstdio>

@@ -35,7 +35,7 @@ int main(int,char**a){
     int act=0; for(int i=0;i<ns->NumInstances();i++) if(1) act+=ns->ActivePartials(i);
     int aw=ns->NumAwake(); awake_sum+=aw; nb++; maxp=std::max(maxp,act);
     seg_maxp=std::max(seg_maxp,act); seg_maxaw=std::max(seg_maxaw,aw); seg_aw+=aw; seg_n++;
-    if(a[4] && seg_n*B>=10*sr){ printf("  %3.0f s: max %2d Partials, wach Ø %.2f / max %d\n",pos/sr,seg_maxp,seg_aw/seg_n,seg_maxaw); seg_maxp=seg_maxaw=0; seg_aw=0; seg_n=0; }
+    if(a[4] && seg_n*B>=10*sr){ printf("  %3.0f s: max %2d partials, awake avg. %.2f / max %d\n",pos/sr,seg_maxp,seg_aw/seg_n,seg_maxaw); seg_maxp=seg_maxaw=0; seg_aw=0; seg_n=0; }
   }
-  printf("%s: Rechenzeit %.2f s für %.0f s | max %d Partials | Ø wache Instanzen %.2f\n",getenv("LBL"),tp,dur,maxp,awake_sum/nb);
+  printf("%s: compute time %.2f s for %.0f s | max %d partials | avg. awake instances %.2f\n",getenv("LBL"),tp,dur,maxp,awake_sum/nb);
 }

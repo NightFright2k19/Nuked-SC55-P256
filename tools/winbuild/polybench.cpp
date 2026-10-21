@@ -1,20 +1,20 @@
-// polybench: misst, wie gut die Einheiten eines Poly-Plugins (Nuked-SC55 P256, Emu-SC88/8820/8850/MT32) auf mehrere
-// CPU-Kerne verteilt werden (Worker-Pool im Plugin). Das Plugin bleibt unveraendert: polybench laedt eine fertige
-// .clap/.dll, setzt ueber die vorhandenen Umgebungsvariablen NUKED_SC55_POLY_VOICES / NUKED_SC55_POLY_DYNAMIC=0
-// die Zahl der Einheiten (alle wach) und misst je Block
-//   - die Wandzeit des process()-Aufrufs im Audio-Thread (W) und
-//   - die CPU-Zeit aller Threads des Prozesses (C, ohne die Last-Threads von --load).
-// Daraus: Speedup = C / W (wie viele Kerne im Mittel gleichzeitig rechnen), Effizienz = Speedup / Threads, und der
-// Verlust gegenueber dem Ideal (N Einheiten x Zeit einer Einheit / Threads). Ein Wert deutlich unter 100 % bei vier
-// oder mehr Einheiten zeigt Warten (Aufwecken der Worker, Warten auf die langsamste Einheit); bei Hyper-Threading
-// ist auch ohne Warten weniger als der Faktor der Thread-Zahl zu erwarten (siehe README).
-// Bau: x86_64-w64-mingw32-g++-posix -O2 -std=c++20 -I$S/include polybench.cpp -o polybench.exe -static -lpsapi
+// polybench: measures how well the units of a poly plug-in (Nuked-SC55 P256, Emu-SC88/8820/8850/MT32) are spread over several
+// CPU cores (worker pool in the plug-in). The plug-in stays unchanged: polybench loads a finished .clap/.dll, sets the number
+// of units (all awake) through the existing environment variables NUKED_SC55_POLY_VOICES / NUKED_SC55_POLY_DYNAMIC=0
+// and measures per block
+//   - the wall time of the process() call in the audio thread (W) and
+//   - the CPU time of all threads of the process (C, without the load threads of --load).
+// From these: speed-up = C / W (how many cores compute at the same time on average), efficiency = speed-up / threads, and
+// the loss against the ideal (N units x time of one unit / threads). A value clearly below 100 % with four or more units
+// indicates waiting (waking the workers, waiting for the slowest unit); with hyper-threading, less than the thread count
+// as a factor is to be expected even without waiting (see README).
+// Build: x86_64-w64-mingw32-g++-posix -O2 -std=c++20 -I$S/include polybench.cpp -o polybench.exe -static -lpsapi
 // usage: polybench <plugin.clap|.dll> [--n 1,2,3,4,6,8] [--seconds 15] [--block 512] [--rate 44100] [--reps 3]
-//        [--per-instance V] [--events datei.txt] [--load K] [--prio 0|1] [--csv datei.csv]
-//   --events: Eventliste im Format der anderen Testhosts (Zeit n b0 b1 b2 ...); ohne: synthetische Last (ca. 70 % der
-//             Stimmen aller Einheiten belegt)
-//   --load K: K Busy-Threads (normale Prioritaet) als Last wie in einer vollen DAW; --prio 1 (Standard): der
-//             Audio-Thread laeuft mit hoher Prioritaet wie in einem Host, die Worker des Plugins mit normaler
+//        [--per-instance V] [--events file.txt] [--load K] [--prio 0|1] [--csv file.csv]
+//   --events: event list in the format of the other test hosts (time n b0 b1 b2 ...); without it: synthetic load (about 70 % of
+//             the voices of all units occupied)
+//   --load K: K busy threads (normal priority) as load like in a full DAW; --prio 1 (default): the audio thread runs
+//             at high priority like in a host, the workers of the plug-in at normal
 #include <windows.h>
 #include "clap/clap.h"
 #include <algorithm>
@@ -70,31 +70,31 @@ struct Result {
 	int n = 0, threads = 0;
 	double mean = 0, med = 0, p99 = 0, p999 = 0, mx = 0;
 	long over = 0, blocks = 0;
-	double wall = 0, cpu = 0;        // Summe der Blockzeiten (s), CPU-Zeit der Plugin-Threads (s)
+	double wall = 0, cpu = 0;        // sum of the block times (s), CPU time of the plug-in threads (s)
 };
 
 static std::atomic<bool> g_stop{false};
 static DWORD WINAPI busy(LPVOID) { volatile double x = 1.0; while (!g_stop.load(std::memory_order_relaxed)) x = x * 1.0000001 + 1e-9; return 0; }
 
 // ======================================================================================================================
-// Echtzeit-Dauermodus:  polybench --soak <plugin.clap> [<weitere.clap> ...] [Optionen]
-// Spielt ein oder mehrere Plugins gleichzeitig in ECHTZEIT (Blocktakt wie ein Host, je Instanz ein Audio-Thread mit hoher
-// Prioritaet / MMCSS) ueber Stunden und protokolliert je Minute: Blockzeiten (Mittel, p99, p99.9, Maximum, Blöcke ueber Budget,
-// groesste Verspaetung des Starts), Ausgangspegel (Stille faellt auf), und fuer den Prozess privaten Speicher, Arbeitssatz,
-// Handles, Threads, GDI-/USER-Objekte sowie Gesamt-CPU, Plugin-CPU und "fremde Last" (andere Programme). Minuten mit hoher
-// fremder Last werden markiert und getrennt ausgewertet. Am Ende (oder bei Strg+C) steht eine Zusammenfassung mit Steigungen
-// (nach der Anlaufzeit) fuer Speicher, Handles, Threads und GDI-Objekte.
-//   --minutes M | --hours H   Dauer (Standard 60 Minuten)
-//   --rate 48000 --block 512  Abtastrate, Blockgroesse
-//   --events datei.txt        Eventliste (Zeit n b0 b1 ...; auch SysEx, 2-Byte-Programmwechsel); ohne: eingebautes Stueck
-//   --density K               jede Note zusaetzlich K-1 mal mit hoeheren Toenen (mehr Stimmen / Einheiten)
-//   --no-reset                keinen GS-Reset am Beginn jeder Runde senden (Standard: genau einer je Runde)
-//   --react-min N             alle N Audiominuten Neu-Aktivierung (Abtastrate wechselt 48000 <-> 44100)
-//   --save-min N              alle N Audiominuten State speichern und wieder laden
-//   --warm MIN                Anlaufzeit, die bei den Steigungen entfaellt (Standard 10 Minuten)
-//   --noisy PCT               Minute gilt als "gestoert", wenn fremde Last > PCT Prozent der CPU-Kapazitaet (Standard 25)
-//   --prio 0|1                Audio-Threads mit hoher Prioritaet / MMCSS "Pro Audio" (Standard 1, wie ein Host)
-//   --out PREFIX              Ausgabedateien PREFIX_instanzen.csv, PREFIX_system.csv, PREFIX_zusammenfassung.txt
+// Real-time long-run mode:  polybench --soak <plugin.clap> [<more.clap> ...] [options]
+// Plays one or several plug-ins at the same time in REAL TIME (block cadence like a host, one audio thread per instance at high
+// priority / MMCSS) for hours and logs once a minute: block times (mean, p99, p99.9, maximum, blocks over budget, longest
+// lateness of the block start), output level (silence stands out), and for the process private memory, working set, handles,
+// threads, GDI/USER objects as well as total CPU, plug-in CPU and "foreign load" (other programs). Minutes with a high foreign
+// load are marked and evaluated separately. At the end (or on Ctrl+C) a summary with trends (after the warm-up time) for memory,
+// handles, threads and GDI objects is written.
+//   --minutes M | --hours H   duration (default 60 minutes)
+//   --rate 48000 --block 512  sample rate, block size
+//   --events file.txt         event list (time n b0 b1 ...; also SysEx, 2-byte program changes); without it: built-in piece
+//   --density K               play every note K-1 more times with higher pitches (more voices / units)
+//   --no-reset                do not send a GS reset at the start of each loop (default: exactly one per loop)
+//   --react-min N             re-activation every N audio minutes (the sample rate alternates 48000 <-> 44100)
+//   --save-min N              save and reload the state every N audio minutes
+//   --warm MIN                warm-up time that is left out of the trends (default 10 minutes)
+//   --noisy PCT               a minute counts as "disturbed" if the foreign load is > PCT percent of the CPU capacity (default 25)
+//   --prio 0|1                audio threads at high priority / MMCSS "Pro Audio" (default 1, like a host)
+//   --out PREFIX              output files PREFIX_instances.csv, PREFIX_system.csv, PREFIX_summary.txt
 // ======================================================================================================================
 #include <mutex>
 #include <psapi.h>
@@ -169,7 +169,7 @@ static void wait_until(HANDLE tm, int64_t deadline, double freq)
 	const double rest_ms = double(deadline - qpc()) * 1000.0 / freq;
 	if (rest_ms <= 0.0) return;
 	if (tm) {
-		LARGE_INTEGER due; due.QuadPart = -(LONGLONG)(rest_ms * 10000.0);            // relativ, 100-ns-Schritte
+		LARGE_INTEGER due; due.QuadPart = -(LONGLONG)(rest_ms * 10000.0);            // relative, in 100-ns steps
 		if (SetWaitableTimer(tm, &due, 0, nullptr, nullptr, FALSE)) { WaitForSingleObject(tm, INFINITE); return; }
 	}
 	Sleep((DWORD)rest_ms);
@@ -222,12 +222,12 @@ static void audio_thread(Inst& I, const Cfg& C, const std::vector<Line>& lines, 
 		I.p->process(I.p, &pr);
 		const int64_t t_end = qpc(); const double dur = double(t_end - t_start) * 1000.0 / freq;
 		float pk = 0; for (uint32_t i = 0; i < C.B; ++i) pk = std::max(pk, std::max(std::fabs(L[i]), std::fabs(R[i])));
-		{   // die ersten Bloecke nach einer Neu-Aktivierung (Einheiten booten) zaehlen getrennt, nicht als laufender Betrieb
+		{   // the first blocks after a re-activation (units boot) are counted separately, not as running operation
 		  std::lock_guard<std::mutex> g(I.m); I.peak = std::max(I.peak, pk);
 		  if (I.skip > 0) { --I.skip; I.react_blk = std::max(I.react_blk, dur); }
 		  else { I.ms.push_back(float(dur)); ++I.blocks; I.late_max = std::max(I.late_max, late); if (dur > period_s * 1000.0) ++I.over; } }
 		pos += period_s; dl += period;
-		if (t_end > dl + int64_t(0.25 * freq)) { dl = t_end; std::lock_guard<std::mutex> g(I.m); ++I.resync; }   // Takt verloren (Aussetzer): neu aufsetzen
+		if (t_end > dl + int64_t(0.25 * freq)) { dl = t_end; std::lock_guard<std::mutex> g(I.m); ++I.resync; }   // cadence lost (dropout): set up the schedule again
 		if (C.save_min > 0 && st && pos >= next_save) {
 			std::string s; clap_ostream_t os{&s, [](const clap_ostream_t* o, const void* b, uint64_t n) -> int64_t { static_cast<std::string*>(o->ctx)->append((const char*)b, (size_t)n); return (int64_t)n; }};
 			st->save(I.p, &os);
@@ -268,7 +268,7 @@ static Sys sample(CpuPrev& pv, int ncpu)
 	}
 	FILETIME i, k, u, c, e, pk, pu; GetSystemTimes(&i, &k, &u); GetProcessTimes(GetCurrentProcess(), &c, &e, &pk, &pu);
 	const double idle = ft100(i), kern = ft100(k), user = ft100(u), pkk = ft100(pk), puu = ft100(pu);
-	const double total = (kern + user) - (pv.kern + pv.user);                 // kern enthaelt idle
+	const double total = (kern + user) - (pv.kern + pv.user);                 // kern includes idle
 	if (pv.wall && total > 0) {
 		s.sys_pct = 100.0 * (1.0 - (idle - pv.idle) / total);
 		s.proc_pct = 100.0 * ((pkk - pv.pk) + (puu - pv.pu)) / total;
@@ -295,37 +295,37 @@ static int main_soak(int argc, char** argv)
 		else if (a == "--events") C.events = nx(); else if (a == "--density") C.density = std::max(1, atoi(nx()));
 		else if (a == "--no-reset") C.reset = false; else if (a == "--react-min") C.react_min = atof(nx()); else if (a == "--save-min") C.save_min = atof(nx());
 		else if (a == "--warm") C.warm = atoi(nx()); else if (a == "--noisy") C.noisy = atof(nx()); else if (a == "--prio") C.prio = atoi(nx()); else if (a == "--out") C.out = nx();
-		else if (a.rfind("--", 0) == 0) { printf("unbekannte Option %s\n", a.c_str()); return 1; }
+		else if (a.rfind("--", 0) == 0) { printf("unknown option %s\n", a.c_str()); return 1; }
 		else C.plugins.push_back(a);
 	}
-	if (C.plugins.empty()) { puts("usage: polybench --soak <plugin.clap> [<weitere.clap> ...] [--minutes M|--hours H] [--events datei] [--density K] [--react-min N] [--save-min N] [--out PREFIX] ..."); return 1; }
+	if (C.plugins.empty()) { puts("usage: polybench --soak <plugin.clap> [<more.clap> ...] [--minutes M|--hours H] [--events file] [--density K] [--react-min N] [--save-min N] [--out PREFIX] ..."); return 1; }
 	std::vector<Line> lines; double loop_len = 0;
 	if (!C.events.empty()) {
-		FILE* fp = fopen(C.events.c_str(), "r"); if (!fp) { printf("kann %s nicht lesen\n", C.events.c_str()); return 1; }
+		FILE* fp = fopen(C.events.c_str(), "r"); if (!fp) { printf("cannot read %s\n", C.events.c_str()); return 1; }
 		char b[8192]; while (fgets(b, sizeof b, fp)) { char* q = b; Line l; l.t = strtod(q, &q); const int n = (int)strtol(q, &q, 10); for (int i = 0; i < n; ++i) l.d.push_back((uint8_t)strtol(q, &q, 10)); if (!l.d.empty()) lines.push_back(std::move(l)); }
 		fclose(fp);
 	} else lines = builtin();
-	if (lines.empty()) { puts("Eventliste leer"); return 1; }
+	if (lines.empty()) { puts("event list empty"); return 1; }
 	loop_len = lines.back().t + 1.0;
 	SetConsoleCtrlHandler(on_ctrl, TRUE);
 	std::vector<std::unique_ptr<Inst>> insts;
-	for (auto& p : C.plugins) { auto I = std::make_unique<Inst>(); I->path = p; if (!load(*I, C)) { printf("Plugin %s startet nicht\n", p.c_str()); return 1; } insts.push_back(std::move(I)); }
+	for (auto& p : C.plugins) { auto I = std::make_unique<Inst>(); I->path = p; if (!load(*I, C)) { printf("plug-in %s does not start\n", p.c_str()); return 1; } insts.push_back(std::move(I)); }
 	const int ncpu = (int)std::thread::hardware_concurrency();
-	FILE* fi = fopen((C.out + "_instanzen.csv").c_str(), "w"); FILE* fs = fopen((C.out + "_system.csv").c_str(), "w");
-	if (!fi || !fs) { puts("kann Ausgabedateien nicht anlegen"); return 1; }
-	fputs("uhrzeit;minute;instanz;plugin;mittel_ms;p99_ms;p999_ms;max_ms;bloecke;ueber_budget;spaet_max_ms;takt_verloren;spitze;stille;neu_aktivierungen;neu_akt_ms;neu_akt_erster_block_ms;state_zyklen;gestoert\n", fi);
-	fputs("uhrzeit;minute;privat_mb;arbeitssatz_mb;handles;threads;gdi;user;cpu_gesamt_pct;cpu_plugin_pct;fremd_pct;gestoert\n", fs);
-	printf("Echtzeit-Dauermodus: %zu Instanz(en), %.0f Minuten, %u Hz, Block %u (Budget %.2f ms), Dichte %d, Reset je Runde: %s, Neu-Aktivierung: %s, State: %s\n", insts.size(), C.minutes, C.SR, C.B, 1000.0 * C.B / C.SR, C.density, C.reset ? "ja" : "nein",
-	       C.react_min > 0 ? (std::to_string((int)C.react_min) + " min").c_str() : "aus", C.save_min > 0 ? (std::to_string((int)C.save_min) + " min").c_str() : "aus");
+	FILE* fi = fopen((C.out + "_instances.csv").c_str(), "w"); FILE* fs = fopen((C.out + "_system.csv").c_str(), "w");
+	if (!fi || !fs) { puts("cannot create the output files"); return 1; }
+	fputs("time;minute;instance;plugin;mean_ms;p99_ms;p999_ms;max_ms;blocks;over_budget;late_max_ms;cadence_lost;peak;silent;reactivations;react_ms;react_first_block_ms;state_cycles;disturbed\n", fi);
+	fputs("time;minute;private_mb;working_set_mb;handles;threads;gdi;user;cpu_total_pct;cpu_plugin_pct;foreign_pct;disturbed\n", fs);
+	printf("Real-time long-run mode: %zu instance(s), %.0f minutes, %u Hz, block %u (budget %.2f ms), density %d, reset per loop: %s, re-activation: %s, state: %s\n", insts.size(), C.minutes, C.SR, C.B, 1000.0 * C.B / C.SR, C.density, C.reset ? "yes" : "no",
+	       C.react_min > 0 ? (std::to_string((int)C.react_min) + " min").c_str() : "off", C.save_min > 0 ? (std::to_string((int)C.save_min) + " min").c_str() : "off");
 	for (size_t k = 0; k < insts.size(); ++k) printf("  [%zu] %s (%s)\n", k, insts[k]->name.c_str(), insts[k]->path.c_str());
-	puts("Strg+C beendet den Lauf mit Zusammenfassung. Hinweis: Netzteil, Energiemodus \"Beste Leistung\", kein Ruhezustand, keine Windows-Updates.\n");
+	puts("Ctrl+C ends the run with a summary. Note: mains power, power mode \"Best performance\", no sleep mode, no Windows updates.\n");
 	CpuPrev prev; sample(prev, ncpu);
 	for (auto& I : insts) I->th = std::thread(audio_thread, std::ref(*I), std::cref(C), std::cref(lines), loop_len);
 	struct Row { double minute; std::vector<MinStats> st; Sys sys; bool noisy; };
 	std::vector<Row> rows; const int64_t t0 = qpc(); const double freq = qpf();
 	for (int minute = 1; !g_stop.load() && minute <= (int)C.minutes; ++minute) {
 		while (!g_stop.load() && double(qpc() - t0) / freq < minute * 60.0) Sleep(200);
-		if (g_stop.load() && double(qpc() - t0) / freq < minute * 60.0 - 5.0) break;         // Abbruch mitten in der Minute: Rest verwerfen
+		if (g_stop.load() && double(qpc() - t0) / freq < minute * 60.0 - 5.0) break;         // abort in the middle of a minute: discard the rest
 		Row r; r.minute = minute; r.sys = sample(prev, ncpu); r.noisy = r.sys.foreign > C.noisy;
 		SYSTEMTIME tm; GetLocalTime(&tm); char clock[16]; snprintf(clock, sizeof clock, "%02d:%02d:%02d", tm.wHour, tm.wMinute, tm.wSecond);
 		for (size_t k = 0; k < insts.size(); ++k) {
@@ -335,32 +335,32 @@ static int main_soak(int argc, char** argv)
 		fprintf(fs, "%s;%d;%.1f;%.1f;%ld;%ld;%ld;%ld;%.1f;%.1f;%.1f;%d\n", clock, minute, r.sys.priv, r.sys.ws, r.sys.handles, r.sys.threads, r.sys.gdi, r.sys.user, r.sys.sys_pct, r.sys.proc_pct, r.sys.foreign, r.noisy ? 1 : 0);
 		fflush(fi); fflush(fs);
 		long over = 0; double worst = 0; for (auto& s : r.st) { over += s.over; worst = std::max(worst, s.mx); }
-		printf("%s  Min %4d | privat %7.1f MB, Handles %5ld, Threads %3ld | CPU gesamt %5.1f %%, Plugin %5.1f %%, fremd %5.1f %%%s | ueber Budget %ld, max %.2f ms\n", clock, minute, r.sys.priv, r.sys.handles, r.sys.threads, r.sys.sys_pct, r.sys.proc_pct, r.sys.foreign, r.noisy ? " (GESTOERT)" : "", over, worst);
+		printf("%s  min %4d | private %7.1f MB, handles %5ld, threads %3ld | CPU total %5.1f %%, plug-in %5.1f %%, foreign %5.1f %%%s | over budget %ld, max %.2f ms\n", clock, minute, r.sys.priv, r.sys.handles, r.sys.threads, r.sys.sys_pct, r.sys.proc_pct, r.sys.foreign, r.noisy ? " (DISTURBED)" : "", over, worst);
 		fflush(stdout); rows.push_back(std::move(r));
 	}
 	g_stop = true; for (auto& I : insts) if (I->th.joinable()) I->th.join();
-	// Zusammenfassung
+	// summary
 	std::string rep; char b[512];
 	auto P = [&](const char* fmt, auto... args) { snprintf(b, sizeof b, fmt, args...); rep += b; };
-	P("Zusammenfassung Echtzeit-Dauermodus: %zu Minuten ausgewertet, %zu Instanz(en), Block %u bei %u Hz (Budget %.2f ms)\n", rows.size(), insts.size(), C.B, C.SR, 1000.0 * C.B / C.SR);
-	size_t noisy_n = 0; for (auto& r : rows) noisy_n += r.noisy; P("Gestoerte Minuten (fremde Last > %.0f %%): %zu von %zu\n\n", C.noisy, noisy_n, rows.size());
+	P("Summary real-time long-run mode: %zu minutes evaluated, %zu instance(s), block %u at %u Hz (budget %.2f ms)\n", rows.size(), insts.size(), C.B, C.SR, 1000.0 * C.B / C.SR);
+	size_t noisy_n = 0; for (auto& r : rows) noisy_n += r.noisy; P("Disturbed minutes (foreign load > %.0f %%): %zu of %zu\n\n", C.noisy, noisy_n, rows.size());
 	for (size_t k = 0; k < insts.size(); ++k) {
 		long blocks = 0, over = 0, over_q = 0, resync = 0, silent = 0, reacts = 0; double worst = 0, worst_q = 0, late = 0, react_worst = 0, react_blk_worst = 0;
 		for (auto& r : rows) { const MinStats& s = r.st[k]; blocks += s.blocks; over += s.over; resync += s.resync; worst = std::max(worst, s.mx); late = std::max(late, s.late_max); reacts += s.reacts; react_worst = std::max(react_worst, s.react_ms); react_blk_worst = std::max(react_blk_worst, s.react_blk); if (s.peak < 1e-4f) ++silent; if (!r.noisy) { over_q += s.over; worst_q = std::max(worst_q, s.mx); } }
-		P("[%zu] %s: %ld Bloecke, ueber Budget %ld (in ruhigen Minuten %ld), groesste Blockzeit %.2f ms (ruhig %.2f ms), groesste Verspaetung %.2f ms, Takt verloren %ld mal, stille Minuten %ld; Neu-Aktivierungen %ld (laengste %.0f ms, erster Block danach %.0f ms, nicht in der Statistik)\n", k, insts[k]->name.c_str(), blocks, over, over_q, worst, worst_q, late, resync, silent, reacts, react_worst, react_blk_worst);
+		P("[%zu] %s: %ld blocks, over budget %ld (in quiet minutes %ld), longest block time %.2f ms (quiet %.2f ms), longest lateness %.2f ms, cadence lost %ld times, silent minutes %ld; re-activations %ld (longest %.0f ms, first block afterwards %.0f ms, not in the statistics)\n", k, insts[k]->name.c_str(), blocks, over, over_q, worst, worst_q, late, resync, silent, reacts, react_worst, react_blk_worst);
 	}
-	P("\nSteigungen nach der Anlaufzeit (%d Minuten), je Stunde (alle Minuten / nur ruhige Minuten; R2 = Geradheit des Trends):\n", C.warm);
+	P("\nTrends after the warm-up time (%d minutes), per hour (all minutes / quiet minutes only; R2 = straightness of the trend):\n", C.warm);
 	struct Col { const char* name; double Sys::* d; long Sys::* l; };
-	const Col cols[] = {{"Privater Speicher [MB]", &Sys::priv, nullptr}, {"Arbeitssatz [MB]", &Sys::ws, nullptr}, {"Handles", nullptr, &Sys::handles}, {"Threads", nullptr, &Sys::threads}, {"GDI-Objekte", nullptr, &Sys::gdi}, {"USER-Objekte", nullptr, &Sys::user}};
+	const Col cols[] = {{"Private memory [MB]", &Sys::priv, nullptr}, {"Working set [MB]", &Sys::ws, nullptr}, {"Handles", nullptr, &Sys::handles}, {"Threads", nullptr, &Sys::threads}, {"GDI objects", nullptr, &Sys::gdi}, {"USER objects", nullptr, &Sys::user}};
 	for (const Col& c : cols) {
 		std::vector<double> xa, ya, xq, yq;
 		for (auto& r : rows) if (r.minute > C.warm) { const double v = c.d ? r.sys.*c.d : double(r.sys.*c.l); xa.push_back(r.minute); ya.push_back(v); if (!r.noisy) { xq.push_back(r.minute); yq.push_back(v); } }
 		double sa, ra, sq, rq; slope(xa, ya, sa, ra); slope(xq, yq, sq, rq);
-		P("  %-24s alle: %+9.2f /h (R2 %.2f, %zu Min) | ruhig: %+9.2f /h (R2 %.2f, %zu Min)\n", c.name, sa, ra, xa.size(), sq, rq, xq.size());
+		P("  %-24s all: %+9.2f /h (R2 %.2f, %zu min) | quiet: %+9.2f /h (R2 %.2f, %zu min)\n", c.name, sa, ra, xa.size(), sq, rq, xq.size());
 	}
-	P("\nLesart: Ein dauerhaft steigender Wert mit hohem R2 ueber viele Minuten deutet auf Wachstum hin, einzelne Spruenge (z. B. beim ersten Aufwecken von Einheiten, nach einer Neu-Aktivierung) nicht.\n");
-	P("Aussetzer: 'ueber Budget' = Block dauerte laenger als sein Zeitbudget; 'Takt verloren' = Rueckstand von mehr als 0,25 s (hoerbarer Aussetzer).\n");
-	fputs(rep.c_str(), stdout); if (FILE* fz = fopen((C.out + "_zusammenfassung.txt").c_str(), "w")) { fputs(rep.c_str(), fz); fclose(fz); }
+	P("\nReading: a steadily rising value with a high R2 over many minutes indicates growth; single jumps (e.g. at the first wake-up of units, after a re-activation) do not.\n");
+	P("Dropouts: 'over budget' = a block took longer than its time budget; 'cadence lost' = a backlog of more than 0.25 s (audible dropout).\n");
+	fputs(rep.c_str(), stdout); if (FILE* fz = fopen((C.out + "_summary.txt").c_str(), "w")) { fputs(rep.c_str(), fz); fclose(fz); }
 	fclose(fi); fclose(fs);
 	for (auto& I : insts) { I->p->stop_processing(I->p); I->p->deactivate(I->p); I->p->destroy(I->p); }
 	return 0;
@@ -370,7 +370,7 @@ static int main_soak(int argc, char** argv)
 int main(int argc, char** argv)
 {
 	if (argc >= 2 && std::string(argv[1]) == "--soak") return soak::main_soak(argc, argv);
-	if (argc < 2) { puts("usage: polybench <plugin.clap|.dll> [--n 1,2,3,4,6,8] [--seconds 15] [--block 512] [--rate 44100] [--reps 3] [--per-instance V] [--events datei.txt] [--load K] [--prio 0|1] [--csv datei.csv]"); return 1; }
+	if (argc < 2) { puts("usage: polybench <plugin.clap|.dll> [--n 1,2,3,4,6,8] [--seconds 15] [--block 512] [--rate 44100] [--reps 3] [--per-instance V] [--events file.txt] [--load K] [--prio 0|1] [--csv file.csv]"); return 1; }
 	std::string plugin = argv[1], events, csv = "polybench_results.csv";
 	std::vector<int> ns{1, 2, 3, 4, 6, 8};
 	double secs = 15, warm = 2;
@@ -390,16 +390,16 @@ int main(int argc, char** argv)
 		else if (a == "--load") load = atoi(nx());
 		else if (a == "--prio") prio = atoi(nx()) != 0;
 		else if (a == "--csv") csv = nx();
-		else { printf("unbekannte Option %s\n", a.c_str()); return 1; }
+		else { printf("unknown option %s\n", a.c_str()); return 1; }
 	}
 	HMODULE h = LoadLibraryA(plugin.c_str());
-	if (!h) { printf("kann %s nicht laden\n", plugin.c_str()); return 1; }
+	if (!h) { printf("cannot load %s\n", plugin.c_str()); return 1; }
 	auto entry = (const clap_plugin_entry_t*)GetProcAddress(h, "clap_entry");
-	if (!entry || !entry->init(plugin.c_str())) { puts("clap_entry fehlt oder init fehlgeschlagen"); return 1; }
+	if (!entry || !entry->init(plugin.c_str())) { puts("clap_entry missing or init failed"); return 1; }
 	auto f = (const clap_plugin_factory_t*)entry->get_factory(CLAP_PLUGIN_FACTORY_ID);
 	const auto* desc = f->get_plugin_descriptor(f, 0);
 	const std::string id = desc->id;
-	if (per <= 0) {                                   // Stimmen je Einheit (wie im Plugin)
+	if (per <= 0) {                                   // voices per unit (as in the plug-in)
 		per = 24;
 		if (id.find("mk2") != std::string::npos) per = 28;
 		else if (id.find("sc8850") != std::string::npos) per = 128;
@@ -409,15 +409,15 @@ int main(int argc, char** argv)
 	const unsigned hw = std::thread::hardware_concurrency();
 	const int phys = physical_cores();
 	const double budget_ms = 1000.0 * B / SR;
-	printf("Maschine: %u logische CPUs, %d physische Kerne%s\n", hw, phys, (phys && (int)hw > phys) ? " (Hyper-Threading)" : "");
-	printf("Plugin: %s | %s | %d Stimmen je Einheit\n", id.c_str(), desc->name, per);
-	printf("Block %u Frames bei %u Hz (Budget %.2f ms), %.0f s Audio je Lauf + %.0f s Anlauf, %d Wiederholungen, Audio-Thread-Prioritaet %s, %d Last-Threads\n\n",
-	       B, SR, budget_ms, secs, warm, reps, prio ? "hoch" : "normal", load);
+	printf("Machine: %u logical CPUs, %d physical cores%s\n", hw, phys, (phys && (int)hw > phys) ? " (Hyper-Threading)" : "");
+	printf("Plug-in: %s | %s | %d voices per unit\n", id.c_str(), desc->name, per);
+	printf("Block %u frames at %u Hz (budget %.2f ms), %.0f s audio per run + %.0f s warm-up, %d repetitions, audio thread priority %s, %d load threads\n\n",
+	       B, SR, budget_ms, secs, warm, reps, prio ? "high" : "normal", load);
 
 	std::vector<Note> fixed;
 	if (!events.empty()) {
 		FILE* fp = fopen(events.c_str(), "r");
-		if (!fp) { printf("kann %s nicht lesen\n", events.c_str()); return 1; }
+		if (!fp) { printf("cannot read %s\n", events.c_str()); return 1; }
 		char line[8192];
 		while (fgets(line, sizeof line, fp)) {
 			char* q = line;
@@ -435,14 +435,14 @@ int main(int argc, char** argv)
 	std::vector<Result> table;
 	for (int n : ns) {
 		SetEnvironmentVariableA("NUKED_SC55_POLY_VOICES", std::to_string(per * n).c_str());
-		SetEnvironmentVariableA("NUKED_SC55_POLY_DYNAMIC", "0");          // alle Einheiten wach
+		SetEnvironmentVariableA("NUKED_SC55_POLY_DYNAMIC", "0");          // all units awake
 		std::vector<Result> runs;
 		for (int rep = 0; rep < reps; ++rep) {
-			// Last: synthetische Noten (3 s lang, 15 Melodiekanaele, ca. 70 % der Stimmen) oder die Eventliste
+			// load: synthetic notes (3 s long, 15 melody channels, about 70 % of the voices) or the event list
 			std::vector<Note> notes;
 			if (!fixed.empty()) {
 				const double span = fixed.back().t + 0.01;
-				for (double off = 0; off < secs + warm; off += span)         // Liste wiederholen
+				for (double off = 0; off < secs + warm; off += span)         // repeat the list
 					for (auto nt : fixed) { nt.t += off; notes.push_back(nt); }
 			} else {
 				const double dur = 3.0, dt = dur / (0.7 * n * per);
@@ -460,7 +460,7 @@ int main(int argc, char** argv)
 			                 [](const clap_host_t*, const char*) -> const void* { return nullptr; }, [](const clap_host_t*) {},
 			                 [](const clap_host_t*) {}, [](const clap_host_t*) {}};
 			auto p = f->create_plugin(f, &host, desc->id);
-			if (!p || !p->init(p) || !p->activate(p, SR, 1, B)) { puts("Plugin konnte nicht gestartet werden"); return 1; }
+			if (!p || !p->init(p) || !p->activate(p, SR, 1, B)) { puts("plug-in could not be started"); return 1; }
 			p->start_processing(p);
 			std::vector<float> L(B), R(B);
 			float* ch[2] = {L.data(), R.data()};
@@ -481,7 +481,7 @@ int main(int argc, char** argv)
 			long over = 0;
 			const long warm_end = (long)(warm * SR), end = (long)((warm + secs) * SR);
 			for (long pos = 0; pos < end; pos += B) {
-				if (pos >= warm_end && ms.empty()) {                             // Messung beginnt
+				if (pos >= warm_end && ms.empty()) {                             // measurement starts
 					cpu0 = proc_cpu();
 					lt0 = 0; for (HANDLE hh : lt) lt0 += thread_cpu(hh);
 				}
@@ -513,27 +513,27 @@ int main(int argc, char** argv)
 			for (double d : ms) r.wall += d / 1000.0;
 			r.mean = 1000.0 * r.wall / std::max<size_t>(1, ms.size());
 			r.med = quant(ms, 0.5); r.p99 = quant(ms, 0.99); r.p999 = quant(ms, 0.999); r.mx = quant(ms, 1.0);
-			const int workers = std::clamp(std::min(n, (int)hw - 1) - 1, 0, n - 1);   // wie im Plugin
+			const int workers = std::clamp(std::min(n, (int)hw - 1) - 1, 0, n - 1);   // as in the plug-in
 			r.threads = workers + 1;
 			runs.push_back(r);
 			p->stop_processing(p); p->deactivate(p); p->destroy(p);
 		}
 		std::sort(runs.begin(), runs.end(), [](const Result& a, const Result& b) { return a.mean < b.mean; });
-		table.push_back(runs[runs.size() / 2]);                                   // Lauf mit mittlerem Blockmittel
+		table.push_back(runs[runs.size() / 2]);                                   // run with the median block mean
 		const Result& r = table.back();
-		printf("N=%d: Blockmittel je Wiederholung (ms):", n);
+		printf("N=%d: block mean per repetition (ms):", n);
 		for (auto& x : runs) printf(" %.2f", x.mean);
-		printf("  -> mittlerer Lauf ausgewertet\n");
+		printf("  -> median run evaluated\n");
 		fflush(stdout);
 	}
 	entry->deinit();
 
-	// Zeit einer Einheit (seriell) aus dem N=1-Lauf (ohne Pool): CPU-Zeit je Block
+	// time of one unit (serial) from the N=1 run (without pool): CPU time per block
 	double t1 = 0;
 	for (auto& r : table) if (r.n == 1 && r.blocks) t1 = 1000.0 * r.cpu / r.blocks;
-	puts("\n  N Thr | Block ms: Mittel Median   p99 p99.9   max | >Budget | CPU/Block ms | Speedup Effizienz | je Einheit ms | Ideal ms Verlust");
+	puts("\n  N Thr | Block ms:  mean median   p99 p99.9   max | >budget | CPU/block ms | speedup efficiency | per unit ms | ideal ms   loss");
 	FILE* cf = fopen(csv.c_str(), "w");
-	if (cf) fputs("N;Threads;Mittel_ms;Median_ms;p99_ms;p999_ms;max_ms;ueber_Budget;Blocks;CPU_je_Block_ms;Speedup;Effizienz;je_Einheit_ms;Ideal_ms;Verlust\n", cf);
+	if (cf) fputs("N;threads;mean_ms;median_ms;p99_ms;p999_ms;max_ms;over_budget;blocks;cpu_per_block_ms;speedup;efficiency;per_unit_ms;ideal_ms;loss\n", cf);
 	for (auto& r : table) {
 		const double cpu_blk = r.blocks ? 1000.0 * r.cpu / r.blocks : 0;
 		const double speed = r.wall > 0 ? r.cpu / r.wall : 0;
@@ -547,6 +547,6 @@ int main(int argc, char** argv)
 		                cpu_blk, speed, eff, per_inst, ideal, loss);
 	}
 	if (cf) { fclose(cf); printf("\nCSV: %s\n", csv.c_str()); }
-	puts("Ideal = N x (Zeit einer Einheit aus dem N=1-Lauf) / Threads; Verlust = Blockmittel / Ideal - 1.");
+	puts("Ideal = N x (time of one unit from the N=1 run) / threads; loss = block mean / ideal - 1.");
 	return 0;
 }

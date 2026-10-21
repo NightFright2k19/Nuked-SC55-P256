@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# Bereitet die 88emu-Panelgrafik des SC-8850 (sc8850_panel.png, GPLv3, The Usual Suspects) fuer das
-# Emu-SC8850-Poly-Panel auf: halbe Groesse des 3x-Exports (918x280 = 612x187 dp x 1,5), Branding
-# ersetzt, Playlist-Kopf -> VOICES, VOLUME -> GAIN; alles andere bleibt unveraendert.
-# Ausgabe: rohe BGRA-Pixel (918*280*4 Byte) fuer .incbin.
+# Prepares the 88emu panel graphic of the SC-8850 (sc8850_panel.png, GPLv3, The Usual Suspects) for the
+# Emu-SC8850 poly panel: half the size of the 3x export (918x280 = 612x187 dp x 1.5), branding
+# replaced, playlist header -> VOICES, VOLUME -> GAIN; everything else stays unchanged.
+# Output: raw BGRA pixels (918*280*4 bytes) for .incbin.
 # usage: make_sc8850_panel.py <sc8850_panel.png> <out.bgra> [preview.png]
 import sys
 from PIL import Image, ImageDraw, ImageFont
@@ -16,8 +16,8 @@ def font(sz, style=""):
     except OSError: return ImageFont.load_default()
 
 def hgrad_fill(box, lx, rx):
-    """Glatte Flaeche mit waagerechtem Verlauf (schwarzer LCD-Rahmen): je Zeile linear zwischen
-    den Bildpunkten bei x=lx und x=rx."""
+    """Smooth area with a horizontal gradient (black LCD frame): per row, linear between
+    the pixels at x=lx and x=rx."""
     x0, y0, x1, y1 = box; p = im.load()
     for y in range(y0, y1):
         a, b = p[lx, y], p[rx, y]
@@ -26,8 +26,8 @@ def hgrad_fill(box, lx, rx):
             p[x, y] = tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(3))
 
 def texture_fill(box, src, feather=4, sides="lrtb"):
-    """Gekoernte Flaeche: Struktur derselben Zeilen aus dem schriftfreien Spaltenbereich src=(a, b)
-    uebernehmen, gespiegelt gekachelt (keine Naht) und an den Raendern weich eingeblendet."""
+    """Grained area: take the texture of the same rows from the lettering-free column range src=(a, b),
+    tiled mirrored (no seam) and blended in softly at the edges."""
     x0, y0, x1, y1 = box; sa, sb = src; w = sb - sa; p = im.load()
     orig = {(x, y): p[x, y] for x in range(x0, x1) for y in range(y0, y1)}
     for y in range(y0, y1):
@@ -43,8 +43,8 @@ def texture_fill(box, src, feather=4, sides="lrtb"):
             p[x, y] = c
 
 def inpaint_text(box, base_cols, thr=5, grow=2):
-    """Glatte Flaeche mit Schrift/Symbol: nur abweichende oder farbige Pixel (samt Saum) werden
-    senkrecht zwischen den naechsten unberuehrten Nachbarn linear aufgefuellt."""
+    """Smooth area with lettering/symbol: only deviating or coloured pixels (with their fringe) are
+    filled in vertically, linearly between the nearest untouched neighbours."""
     x0, y0, x1, y1 = box; p = im.load()
     lum = lambda c: 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]
     mask = set()
@@ -68,7 +68,7 @@ def inpaint_text(box, base_cols, thr=5, grow=2):
                 p[x, k] = tuple(round(t_[i] + (b_[i] - t_[i]) * t) for i in range(3))
 
 def oblique_text(x, y, t, f, fill, slant=0.21):
-    """Kursiv wie im Original: Schrift aufrecht rendern und scheren (nur DejaVu Sans noetig)."""
+    """Italic like the original: render the lettering upright and shear it (only DejaVu Sans needed)."""
     l, top, r, b = d.textbbox((0, 0), t, font=f)
     w, h = r + 8, b + 4
     m = Image.new("L", (w, h), 0); ImageDraw.Draw(m).text((2, 0), t, font=f, fill=255)
@@ -79,23 +79,23 @@ def oblique_text(x, y, t, f, fill, slant=0.21):
 def center_text(cx, y, t, f, fill):
     w = d.textlength(t, font=f); d.text((cx - w / 2, y), t, font=f, fill=fill)
 
-# Branding oben auf dem LCD-Rahmen ("TheUsualSuspects", weiss kursiv) -> Produktname, gleicher Stil
+# Branding on top of the LCD frame ("TheUsualSuspects", white italic) -> product name, same style
 hgrad_fill((408, 6, 571, 30), 406, 572)
 f1, f2 = font(15), font(15, "-Bold")
 w = d.textlength("Emu-", font=f1) + d.textlength("SC8850", font=f2)
 x = 566 - w
 x += oblique_text(x, 9, "Emu-", f1, (236, 238, 240))
 oblique_text(x, 9, "SC8850", f2, (236, 238, 240))
-# Logo unten links ("88Emu50" + Pfeil): Struktur aus der leeren Flaeche rechts daneben (gleiche Zeilen)
-# (Vorlage zwischen den Bohrungen von F1 und F2, gespiegelt gekachelt)
+# Logo at the bottom left ("88Emu50" + arrow): texture from the empty area to its right (same rows)
+# (template between the holes of F1 and F2, tiled mirrored)
 texture_fill((30, 234, 226, 274), (298, 328))
 f1, f2 = font(22), font(22, "-Bold")
 x = 40 + oblique_text(40, 239, "Emu-SC", f1, (22, 22, 22))
 oblique_text(x, 239, "8850", f2, (22, 22, 22))
-# Playlist-Kopf -> "VOICES" (Ordnersymbol entfernt), Spalten-Verlauf bleibt
+# playlist header -> "VOICES" (folder symbol removed), column gradient stays
 inpaint_text((32, 13, 141, 34), (40, 135))
 center_text(86, 17, "VOICES", font(11, "-Bold"), (28, 28, 28))
-# Pegelknopf: "VOLUME" -> "GAIN"; Struktur aus der schriftfreien Flaeche rechts daneben
+# Level knob: "VOLUME" -> "GAIN"; texture from the lettering-free area to its right
 texture_fill((158, 15, 218, 33), (218, 234), feather=2)
 center_text(189.5, 18, "GAIN", font(11, "-Bold"), (28, 28, 28))
 px = im.load(); w, h = im.size

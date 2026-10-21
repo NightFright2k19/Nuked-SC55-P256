@@ -1,4 +1,4 @@
-// Spielt eine Eventliste und protokolliert Weckvorgänge + Schlafhindernisse je Instanz.
+// Plays an event list and logs wake-ups + sleep obstacles per instance.
 #include "clap/clap.h"
 #include "nuked_sc55.h"
 #include <chrono>
@@ -34,12 +34,12 @@ int main(int,char**a){
     tsum+=ms; nb++;
     double t=pos/sr;
     for(int i=0;i<ns->NumInstances();i++){ auto d=ns->Diag(i);
-      if(d.awake && !was[i]) printf("t=%6.2fs  Einheit %d WACH  (Wecken %.1f ms, %d Bytes nachgespielt) Block %.1f ms (Budget %.1f ms)\n",t,i,d.last_wake_ms,d.last_wake_bytes,ms,B*1000.0/sr);
-      if(!d.awake && was[i]) printf("t=%6.2fs  Einheit %d schlaeft\n",t,i);
+      if(d.awake && !was[i]) printf("t=%6.2fs  unit %d AWAKE  (waking %.1f ms, %d bytes replayed) block %.1f ms (budget %.1f ms)\n",t,i,d.last_wake_ms,d.last_wake_bytes,ms,B*1000.0/sr);
+      if(!d.awake && was[i]) printf("t=%6.2fs  unit %d sleeps\n",t,i);
       was[i]=d.awake; }
-    if(ms>worst){ worst=ms; if(getenv("WORST")) printf("  neuer Spitzenblock %.1f ms bei t=%.2fs\n",ms,t);}
-    if(getenv("WHY") && (pos%((long)sr)<B) && t>=atof(getenv("WHY")) && t<atof(getenv("WHY"))+14){ printf("  t=%5.1fs:",t); for(int i=0;i<ns->NumInstances();i++){auto d=ns->Diag(i); if(d.awake) printf(" [E%d last %d still %.1fs Noten %d peak %.1e]",i,d.load,d.silent_frames/32000.0,d.owns_notes,d.last_peak);} printf("\n"); }
+    if(ms>worst){ worst=ms; if(getenv("WORST")) printf("  new peak block %.1f ms at t=%.2fs\n",ms,t);}
+    if(getenv("WHY") && (pos%((long)sr)<B) && t>=atof(getenv("WHY")) && t<atof(getenv("WHY"))+14){ printf("  t=%5.1fs:",t); for(int i=0;i<ns->NumInstances();i++){auto d=ns->Diag(i); if(d.awake) printf(" [E%d load %d silent %.1fs notes %d peak %.1e]",i,d.load,d.silent_frames/32000.0,d.owns_notes,d.last_peak);} printf("\n"); }
   }
   { const char* nm[4]={"Packing","Pin","Drumgruppe","Wiederanschlag"}; for(int w=0;w<4;w++){ printf("  %-15s",nm[w]); for(int i=0;i<4;i++) printf(" E%d:%u",i,ns->Router().reason_count[w][i]); printf("\n");} }
-  printf("Ø Block %.2f ms, schlechtester Block %.1f ms (Budget %.1f ms)\n",tsum/nb,worst,B*1000.0/sr);
+  printf("avg. block %.2f ms, worst block %.1f ms (budget %.1f ms)\n",tsum/nb,worst,B*1000.0/sr);
 }

@@ -1,4 +1,4 @@
-# Grafikordner des 88emu-Players (Gearmulator, festgehaltener Stand); ohne 88emu-Build nur die Grafiken holen
+# Graphics folder of the 88emu player (Gearmulator, recorded state); without a 88emu build only fetch the graphics
 gm_assets() {
  local G=${GM:-/home/claude/wb/gearmulator} C=c8047e7a61a9a466e3cd9192157965856e774786 P=source/ronaldo/88emu/88emuplayer/assets
  if [ ! -f $G/$P/sc55_panel.png ]; then
@@ -12,11 +12,11 @@ gm_assets() {
  python3 -c 'import cairosvg' 2>/dev/null || pip install -q --break-system-packages cairosvg >&2
  echo $G/$P; }
 build(){ F="$1"; N="$2"; M=$3; ID=$4; RS=$5; RN=$6; shift 6
- # NK_SLOT_CAP gesetzt: ROM-lose Vorlage (reservierter ROM-Bereich, befuellt von tools/p256_builder)
+ # NK_SLOT_CAP set: ROM-free template (reserved ROM area, filled by tools/p256_builder)
  if [ -n "$NK_SLOT_CAP" ]; then python3 $S/tools/gen_embedded_roms.py --slot "gen/roms_$M.cpp" $RS "$RN" $NK_SLOT_CAP
  else python3 $S/tools/gen_embedded_roms.py "gen/roms_$M.cpp" $RS "$RN" "$@"; fi
  O="${OUTDIR:-out2}"; mkdir -p "$O"
- # Panel (88emu-Grafik SC-55 bzw. SC-55mkII, GPLv3) und Bedienelemente; Grafiken aus Gearmulator
+ # Panel (88emu graphic SC-55 or SC-55mkII, GPLv3) and controls; graphics from Gearmulator
  A=$(gm_assets); P=mk1; [ $M = 5 ] && P=mk2; PNG=sc55_panel.png; [ $P = mk2 ] && PNG=sc55mk2_panel.png
  python3 $S/tools/make_sc55_panel.py $A/$PNG $P gen/panel55_$P.bgra >/dev/null
  python3 $S/tools/gen_blob.py gen/panel55_$M.cpp nk_panel55 gen/panel55_$P.bgra

@@ -1,8 +1,8 @@
-// MT-32-Test (Issue #69): spielt eine Eventliste durch das CLAP-Plugin Emu-MT32, RMS je Sekunde,
-// optional Geraetewechsel per State waehrend der Wiedergabe (Zeit des Blocks mit dem Neustart).
-// usage: mt32host <clap> <events.txt> <sekunden> [state] [t_wechsel state2]
-//   Kanaele der Eventliste werden auf die MT-32-Parts gelegt (1..9 -> 2..10, 10 bleibt Rhythmus, 11..16 entfallen),
-//   NK_NOSHIFT=1: unveraendert (z. B. fuer SC-55-Vergleiche).
+// MT-32 test (issue #69): plays an event list through the CLAP plug-in Emu-MT32, RMS per second,
+// optionally device switching via state during playback (time of the block with the restart).
+// usage: mt32host <clap> <events.txt> <seconds> [state] [t_switch state2]
+//   channels of the event list are mapped onto the MT-32 parts (1..9 -> 2..10, 10 stays rhythm, 11..16 are dropped),
+//   NK_NOSHIFT=1: unchanged (e.g. for SC-55 comparisons).
 #include <windows.h>
 #include "clap/clap.h"
 #include <chrono>
@@ -31,7 +31,7 @@ static void load_state(const clap_plugin_t* p, const char* s)
 	auto st = (const clap_plugin_state_t*)p->get_extension(p, CLAP_EXT_STATE);
 	Src src{s};
 	clap_istream_t is{&src, rd};
-	printf("State %s: %s\n", st->load(p, &is) ? "geladen" : "FEHLER", s);
+	printf("State %s: %s\n", st->load(p, &is) ? "loaded" : "ERROR", s);
 }
 int main(int argc, char** argv)
 {
@@ -119,7 +119,7 @@ int main(int argc, char** argv)
 		}
 	}
 	ssall += ss; nall += n;
-	printf("RMS gesamt %.4f (%.1f dBFS) | Rechenzeit %.1f s fuer %.0f s Audio, laengster Block %.2f s\n",
+	printf("RMS total %.4f (%.1f dBFS) | compute time %.1f s for %.0f s of audio, longest block %.2f s\n",
 	       std::sqrt(ssall / (2 * nall)), 20 * std::log10(std::sqrt(ssall / (2 * nall)) + 1e-12), tp, secs, worst);
 	auto st = (const clap_plugin_state_t*)p->get_extension(p, CLAP_EXT_STATE);
 	struct Dst { std::string s; } dst;

@@ -5,6 +5,6 @@ for cfg in "SC-55-v1.21 mk1-v1.21 $T 85 Polytest-mk1" "SC-55mk2-v1.01 mk2-ctf-sc
   set -- $cfg; [ -d $R/$1 ] || continue
   a=$(./ref_orig $R/$1 $2 $3 $4 $5); b=$(./ref_new $R/$1 $2 $3 $4 $5)
   ha=$(echo "$a" | awk '{print $3}'); hb=$(echo "$b" | awk '{print $3}'); ta=$(echo "$a" | awk '{print $(NF-1)}'); tb=$(echo "$b" | awk '{print $(NF-1)}')
-  [ "$ha" = "$hb" ] && ok=IDENTISCH || ok=ABWEICHUNG
-  echo "$5: $ok  ($ha)  alt ${ta}s -> neu ${tb}s"
+  [ "$ha" = "$hb" ] && ok=IDENTICAL || ok=DEVIATION
+  echo "$5: $ok  ($ha)  old ${ta}s -> new ${tb}s"
 done > /tmp/verify.txt 2>&1; touch /tmp/verifydone

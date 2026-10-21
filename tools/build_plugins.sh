@@ -1,11 +1,11 @@
 #!/bin/bash
-# Baut die beiden ausgelieferten Ein-Datei-Plugins (ROMs eingebettet, NUR PRIVAT) nach tools/winbuild/out2/:
-#   Nuked-SC55_v121.clap/.dll   und   Nuked-SC55_MkII.clap/.dll  (MkII mit CTF-rom2.bin)
-#   sowie, falls 88emu gebaut ist (setup_wb.sh mit sc88pro.zip): Emu-SC88_Pro.clap/.dll
-#   und mit SC-8850-ROMs (setup_wb.sh, 4. Argument): Emu-SC8850.clap/.dll
-#   und mit SC-88-ROMs (setup_wb.sh, 5. Argument): Emu-SC88.clap/.dll
-#   und mit SC-8820-ROMs (setup_wb.sh, testdata/roms88/sc8820.zip): Emu-SC8820.clap/.dll
-#   und mit MT-32/CM-32L-ROMs (setup_wb.sh, mt32_roms.zip): Emu-MT32.clap/.dll
+# Builds the delivered single-file plug-ins (ROMs embedded, PRIVATE USE ONLY) into tools/winbuild/out2/:
+#   Nuked-SC55_v121.clap/.dll   and   Nuked-SC55_MkII.clap/.dll  (MkII with CTF rom2.bin)
+#   and, if 88emu is built (setup_wb.sh with sc88pro.zip): Emu-SC88_Pro.clap/.dll
+#   and with SC-8850 ROMs (setup_wb.sh, 4th argument): Emu-SC8850.clap/.dll
+#   and with SC-88 ROMs (setup_wb.sh, 5th argument): Emu-SC88.clap/.dll
+#   and with SC-8820 ROMs (setup_wb.sh, testdata/roms88/sc8820.zip): Emu-SC8820.clap/.dll
+#   and with MT-32/CM-32L ROMs (setup_wb.sh, mt32_roms.zip): Emu-MT32.clap/.dll
 set -e
 WB=/home/claude/wb; S=$WB/src; R=$WB/roms; CXX=x86_64-w64-mingw32-g++-posix
 cd $WB/tools/winbuild && mkdir -p gen out2 && . ./build2.sh

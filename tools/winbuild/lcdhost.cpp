@@ -1,4 +1,4 @@
-// LCD-Test: spielt eine Eventliste durch ein VST2-Plugin mit offenem Editor, Screenshots zu Songzeiten.
+// LCD test: plays an event list through a VST2 plug-in with the editor open, screenshots at song times.
 // usage: lcdhost <dll> <events.txt> <out-prefix> <t1> [t2 ...]
 #include <windows.h>
 #include "vst2/vst2_abi.h"

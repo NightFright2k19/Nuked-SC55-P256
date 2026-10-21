@@ -1,6 +1,6 @@
-// Misst die CPU-Zeit des Oberflaechen-Threads: Editor offen, Song wird in Echtzeit abgespielt
-// (Audio in eigenem Thread), Hauptthread verarbeitet nur Fensternachrichten (30-Bilder-Takt).
-// usage: guiload <dll> <events.txt> <sekunden>
+// Measures the CPU time of the UI thread: editor open, song played in real time
+// (audio in its own thread), main thread only processes window messages (30 frames/s cadence).
+// usage: guiload <dll> <events.txt> <seconds>
 #include <windows.h>
 #include "vst2/vst2_abi.h"
 #include <atomic>
@@ -38,5 +38,5 @@ int main(int,char**a){
   double c0=cpu(self); HANDLE th=CreateThread(nullptr,0,Audio,nullptr,0,nullptr);
   while(run){ MSG m; while(PeekMessage(&m,nullptr,0,0,PM_REMOVE)){TranslateMessage(&m);DispatchMessage(&m);} MsgWaitForMultipleObjects(0,nullptr,FALSE,5,QS_ALLINPUT); }
   WaitForSingleObject(th,INFINITE); double gui=cpu(self)-c0, au=cpu(th);
-  printf("Oberflaeche: %.2f s CPU in %.0f s -> %.1f %% eines Kerns | Audio-Thread %.1f %%\n",gui,secs,100*gui/secs,100*au/secs);
+  printf("UI: %.2f s CPU in %.0f s -> %.1f %% of one core | audio thread %.1f %%\n",gui,secs,100*gui/secs,100*au/secs);
   fx->dispatcher(fx,effEditClose,0,0,0,0); return 0; }

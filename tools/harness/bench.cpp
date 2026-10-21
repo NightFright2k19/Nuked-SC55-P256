@@ -19,11 +19,11 @@ int main(int argc,char**argv){
   run(e,(long)fs*4);
   auto t0=std::chrono::steady_clock::now(); run(e,(long)fs*10);
   double s=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count();
-  printf("%s: fs=%.0f Hz, 10 s Audio in %.2f s -> %.1f%% eines Kerns\n",rs,fs,s,s*10);
-  // Poly-Test: Ch1 Piano, Sustain an, 40 Noten
+  printf("%s: fs=%.0f Hz, 10 s of audio in %.2f s -> %.1f%% of one core\n",rs,fs,s,s*10);
+  // poly test: ch1 piano, sustain on, 40 notes
   e.PostMIDI(0xB0);e.PostMIDI(64);e.PostMIDI(127);
   for(int n=0;n<40;n++){ e.PostMIDI(0x90);e.PostMIDI(36+n);e.PostMIDI(100); run(e,(long)(fs*0.05)); }
-  printf("aktive Slots nach 40 Noten (Sustain): %d\n",active(e));
+  printf("active slots after 40 notes (sustain): %d\n",active(e));
   e.PostMIDI(0xB0);e.PostMIDI(64);e.PostMIDI(0);
   for(int n=0;n<40;n++){e.PostMIDI(0x80);e.PostMIDI(36+n);e.PostMIDI(0);}
   for(int i=0;i<8;i++){ run(e,(long)(fs*0.5)); printf("  +%.1fs: %d\n",0.5*(i+1),active(e)); }

@@ -1,5 +1,5 @@
 build(){ F="$1"; N="$2"; M=$3; ID=$4; RS=$5; RN=$6; shift 6
- # NK_SLOT_CAP gesetzt: ROM-lose Vorlage (reservierter ROM-Bereich, befuellt von tools/p256_builder)
+ # NK_SLOT_CAP set: ROM-free template (reserved ROM area, filled by tools/p256_builder)
  if [ -n "$NK_SLOT_CAP" ]; then python3 $S/tools/gen_embedded_roms.py --slot "gen/roms_$M.cpp" $RS "$RN" $NK_SLOT_CAP
  else python3 $S/tools/gen_embedded_roms.py "gen/roms_$M.cpp" $RS "$RN" "$@"; fi
  O="${OUTDIR:-out2}"; mkdir -p "$O"

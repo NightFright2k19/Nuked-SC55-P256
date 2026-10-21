@@ -1,4 +1,4 @@
-// Rendert eine Eventliste mit EINEM Emulator und gibt Hash + Rechenzeit aus.
+// Renders an event list with ONE emulator and prints hash + compute time.
 #include "backend/emu.h"
 #include "common/rom_loader.h"
 #include <chrono>

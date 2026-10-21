@@ -43,7 +43,7 @@ int main(int argc,char**argv){
   const bool ui=!getenv("UI")||atoi(getenv("UI"));
   clap_host_t host{CLAP_VERSION_INIT,nullptr,"t","t","","1",[](const clap_host_t*,const char*)->const void*{return nullptr;},[](const clap_host_t*){},[](const clap_host_t*){},[](const clap_host_t*){}};
   clap_entry.init("/tmp/x/p.clap"); auto fa=(const clap_plugin_factory_t*)clap_entry.get_factory(CLAP_PLUGIN_FACTORY_ID);
-  p=fa->create_plugin(fa,&host,id); if(!p||!p->init(p)){ printf("kein Plugin %s\n",id); return 1; } auto ns=(NukedSc55*)p->plugin_data;
+  p=fa->create_plugin(fa,&host,id); if(!p||!p->init(p)){ printf("no plug-in %s\n",id); return 1; } auto ns=(NukedSc55*)p->plugin_data;
   p->activate(p,44100,1,512); p->start_processing(p);
   float* ch[2]={L,R}; static clap_audio_buffer_t out{}; out.data32=ch; out.channel_count=2; static clap_input_events_t in{nullptr,sz,gt};
   pr.frames_count=512; pr.audio_outputs=&out; pr.audio_outputs_count=1; pr.in_events=&in;
@@ -53,11 +53,11 @@ int main(int argc,char**argv){
   { block({}); double s=0; for(int i=0;i<512;i++) s+=L[i]; dc=s/512; }
   const double ref=note();
   dirty(); const double dirt=note();
-  printf("%s\n1) Wirkung: Boot-Note %.1f dB, nach Strings+CC7=40 %.1f dB\n",id,ref,dirt);
+  printf("%s\n1) Effect: boot note %.1f dB, after strings+CC7=40 %.1f dB\n",id,ref,dirt);
   struct R { const char* n; std::vector<uint8_t>* m; } rs[]={{"GM",&GM},{"GS",&GS},{"GM2",&GM2},{"Mode 1",&MO1},{"Mode 2",&MO2}};
   const bool only4=getenv("ONLY4");
-  if(!only4) for(auto& r: rs){ dirty(); block({S(*r.m)}); idle(1.5); const double a=note(); printf("   %-6s danach %.1f dB (%s)\n",r.n,a,std::fabs(a-ref)<1.0?"zurueckgesetzt":"NICHT zurueckgesetzt"); }
-  if(!only4) printf("2) Bereitschaft: Note d ms nach dem Reset (Boot-Pegel %.1f dB)\n",ref);
+  if(!only4) for(auto& r: rs){ dirty(); block({S(*r.m)}); idle(1.5); const double a=note(); printf("   %-6s afterwards %.1f dB (%s)\n",r.n,a,std::fabs(a-ref)<1.0?"reset":"NOT reset"); }
+  if(!only4) printf("2) Readiness: note d ms after the reset (boot level %.1f dB)\n",ref);
   if(!only4) for(auto& r: rs){ printf("   %-6s",r.n);
     for(int d: {0,20,50,100,150,200,250,300,500}){
       dirty(); const int fr=(int)(d*44.1); std::vector<Ev> v{S(*r.m,0,0)}; onset=-1; const long t0=smp;
@@ -67,7 +67,7 @@ int main(int argc,char**argv){
       printf(" %d:%s/%.0f",d,std::fabs(a-ref)<0.3?"ok":(a<-90?"still":"falsch"),on<0?-1.0:(on-t0)/44.1-d); }
     printf("\n"); }
   if(is88&&(!only4||getenv("ONLY3"))){
-    printf("3) Systemmodus: B01 bekommt Strings (Port B), Note auf Port A / Port B\n");
+    printf("3) System mode: B01 gets strings (port B), note on port A / port B\n");
     auto test=[&](const char* n){ alloff(); block({M(0xC0,0,0,0),M(0xB0,7,100,0)}); block({M(0xC0,48,0,1),M(0xB0,7,40,1)}); idle(0.3);
       const double a=note(0), b=note(1); printf("   %-10s Port A %.1f dB, Port B %.1f dB -> %s\n",n,a,b,
         std::fabs(a-b)>3?"B unabhaengig (32 Parts)":"B = A (16 Parts)"); };
@@ -77,42 +77,42 @@ int main(int argc,char**argv){
       for(int k=0;k<70;k++) v.push_back(M(0x90,30+k,100,0)); block(v); idle(0.3); const int a=ns->ui_voices.load();
       v.clear(); for(int k=0;k<70;k++) v.push_back(M(0x90,30+k,100,1)); block(v); idle(0.3); const int b=ns->ui_voices.load();
       v.clear(); for(int port=0;port<2;port++) for(int k=0;k<70;k++) v.push_back(M(0x80,30+k,0,port)); block(v); idle(1.5);
-      ns->SetMaxVoices(256); printf("   %-10s 70 Orgelnoten A01: %d Stimmen, dazu 70 auf B01: %d Stimmen (1 Einheit)\n",n,a,b); };
+      ns->SetMaxVoices(256); printf("   %-10s 70 organ notes A01: %d voices, plus 70 on B01: %d voices (1 unit)\n",n,a,b); };
     voices("Boot"); block({S(MO1)}); idle(2.0); voices("Mode 1"); block({S(MO2)}); idle(2.0); voices("Mode 2");
-    block({S(GS)}); idle(2.0); voices("GS danach"); block({S(MO1)}); idle(2.0); voices("Mode 1"); block({S(GS)}); idle(2.0); voices("GS danach");
+    block({S(GS)}); idle(2.0); voices("GS afterwards"); block({S(MO1)}); idle(2.0); voices("Mode 1"); block({S(GS)}); idle(2.0); voices("GS afterwards");
     test("Boot");
     // Mode 2 (Double Module): a reset received on one MIDI IN initialises only that group (manual p.194)
     auto groups=[&](const char* mode,std::vector<uint8_t>& ms,const char* rn,std::vector<uint8_t>& rm,int port){
       block({S(ms)}); idle(2.0); alloff(); dirty(0); dirty(1); block({S(rm,port)}); idle(1.5);
       const double a=note(0), b=note(1);
-      printf("   %-7s %-3s an Port %c: A01 %.1f dB (%s), B01 %.1f dB (%s)\n",mode,rn,'A'+port,a,std::fabs(a-ref)<1.0?"zurueck":"bleibt",b,std::fabs(b-ref)<1.0?"zurueck":"bleibt"); };
+      printf("   %-7s %-3s on port %c: A01 %.1f dB (%s), B01 %.1f dB (%s)\n",mode,rn,'A'+port,a,std::fabs(a-ref)<1.0?"back":"stays",b,std::fabs(b-ref)<1.0?"back":"stays"); };
     for(int port=0;port<2;port++){ groups("Mode 1",MO1,"GS",GS,port); groups("Mode 2",MO2,"GS",GS,port); groups("Mode 2",MO2,"GM",GM,port); }
     block({S(MO1)}); idle(2.0);
     block({S(MO1)}); idle(2.0); test("Mode 1");
     block({S(MO2)}); idle(2.0); test("Mode 2");
     block({S(MO1)}); idle(2.0); test("Mode 1");
-    block({S(GS)}); idle(2.0); test("GS danach");
+    block({S(GS)}); idle(2.0); test("GS afterwards");
   }
 #ifndef NO_UI
   if(ui){
-    printf("4) Menue-Befehle (alle Einheiten, Noten zurueckgehalten)\n");
+    printf("4) Menu commands (all units, notes held back)\n");
     // wake all units, dirty part 1 everywhere, then reset via the menu and play a chord at once
     std::vector<Ev> on; for(int k=0;k<200;k++) on.push_back(M(0x91,30+k%70,60)); block(on); idle(0.5);
     std::vector<Ev> off; for(int k=0;k<200;k++) off.push_back(M(0x81,30+k%70,0)); block(off); idle(1.0);
     { dirty(); onset=-1; const long t0=smp; block({M(0x90,60,110)}); meas(); const long on=onset; block({M(0x80,60,0)}); idle(1.5);
-      printf("   ohne Reset: Einsatz nach %.0f ms\n",(on-t0)/44.1); }
+      printf("   without reset: onset after %.0f ms\n",(on-t0)/44.1); }
     struct C { const char* n; int cmd; } cs[]={{"GM",6},{"GS",2},{"GM2",7},{"Mode 1",8},{"Mode 2",9}};
     for(auto& c: cs){
       if((c.cmd==7&&!is8850)||(c.cmd>=8&&!is88)) continue;
       int awake0=ns->NumAwake(); dirty(); ns->ui_command=c.cmd; onset=-1; const long t0=smp; block({M(0x90,60,110)}); const double a=meas(); const long on=onset; block({M(0x80,60,0)}); idle(1.5);
-      printf("   %-6s Note im selben Block: %.1f dB (%s), Einsatz nach %.0f ms, wach %d -> %d, Modus %d\n",c.n,a,std::fabs(a-ref)<1.0?"ok":"FALSCH",
+      printf("   %-6s note in the same block: %.1f dB (%s), onset after %.0f ms, awake %d -> %d, mode %d\n",c.n,a,std::fabs(a-ref)<1.0?"ok":"WRONG",
              on<0?-1.0:(on-t0)/44.1,awake0,ns->NumAwake(),ns->system_mode.load());
     }
     // units woken after a menu reset replay it (state log): many notes on fresh units
     dirty(); ns->ui_command=2; idle(1.0);
     std::vector<Ev> ch2; for(int k=0;k<200;k++) ch2.push_back(M(0x90,30+k%70,60)); block(ch2); idle(0.3);
     std::vector<Ev> of2; for(int k=0;k<200;k++) of2.push_back(M(0x80,30+k%70,0)); block(of2); idle(1.0);
-    printf("   nach GS + 200 Noten: wach %d, Note %.1f dB\n",ns->NumAwake(),note());
+    printf("   after GS + 200 notes: awake %d, note %.1f dB\n",ns->NumAwake(),note());
   }
 #endif
   return 0; }

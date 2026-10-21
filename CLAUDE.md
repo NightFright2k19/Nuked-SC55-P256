@@ -26,3 +26,12 @@ Applies to the plugin panels and user interface (`src/`, panel scripts under
 ## 3. Binding nature
 
 - If it is unclear whether something has been approved, ask before implementing.
+
+## 4. Language
+
+- Everything that goes into this repository is written in English: commit messages, code, comments, tool
+  output (including CSV headers, JSON keys and file names), documentation, issue and PR texts. No exceptions,
+  however small the commit.
+- Intentionally bilingual product features (the patcher language switch in `patcher_i18n.py`, the German
+  texts in the plug-in SETUP menu) stay as they are.
+

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# Erzeugt eine C++-Quelle, die eine Binaerdatei per .incbin einbindet (Symbole <name>_b / <name>_e).
-# usage: gen_blob.py <out.cpp> <name> <datei>
+# Creates a C++ source that includes a binary file with .incbin (symbols <name>_b / <name>_e).
+# usage: gen_blob.py <out.cpp> <name> <file>
 import sys, os
 out, name, path = sys.argv[1:4]
 p = os.path.abspath(path).replace("\\", "/")

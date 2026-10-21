@@ -1,18 +1,18 @@
-# Build-Funktion fuer das Ein-Datei-Plugin "Emu-SC8820" (Roland SC-8820, 88emu-Kern, ROMs + Panel eingebettet).
-# Erwartet: S (Plugin-Quellen), GM (Gearmulator-Checkout mit Patches), LIBW (Windows-lib88emu.a),
+# Build function for the single-file plug-in "Emu-SC8820" (Roland SC-8820, 88emu core, ROMs + panel embedded).
+# Expects: S (plug-in sources), GM (Gearmulator checkout with patches), LIBW (Windows lib88emu.a),
 #           ROM8820 (sc8820_internal.bin sc8820_program.bin sc8820_wave0.bin sc8820_wave1.bin), CXX (MinGW g++-posix)
 build8820() {
   F="Emu-SC8820"; N="Emu-SC8820"
-  # NK_SLOT_CAP gesetzt: ROM-lose Vorlage (reservierter ROM-Bereich, befuellt von p256_builder)
+  # NK_SLOT_CAP set: ROM-free template (reserved ROM area, filled by p256_builder)
   if [ -n "$NK_SLOT_CAP" ]; then python3 $S/tools/gen_embedded_roms.py --slot gen/roms_8820.cpp 0 "SC-8820" $NK_SLOT_CAP
   else python3 $S/tools/gen_embedded_roms.py gen/roms_8820.cpp 0 "SC-8820 (embedded)" \
      0=$ROM8820/sc8820_internal.bin 1=$ROM8820/sc8820_program.bin 2=$ROM8820/sc8820_wave0.bin 3=$ROM8820/sc8820_wave1.bin; fi
   O="${OUTDIR:-out2}"; mkdir -p "$O"
-  # Panel: ohne Fotos/Fremdgrafik von Grund auf gezeichnet (Hintergrund + alle Lampen an)
-  # Pro-Oberflaeche (Issue #49/#67, SETUP-Menue "Interface Style"): zweites Panel im selben Plugin
+  # Panel: drawn from scratch without photos or third-party graphics (background + all lamps on)
+  # Pro interface (issue #49/#67, SETUP menu "Interface Style"): second panel in the same plug-in
   python3 $S/tools/make_sc8820_panel.py gen/panel8820p.bgra --base --pro
   python3 $S/tools/make_sc8820_panel.py gen/lit8820p.bgra --all-on --pro
-  # SC-D70-Oberflaeche (Issue #86, SETUP-Menue "Interface Style"): drittes Panel im selben Plugin
+  # SC-D70 interface (issue #86, SETUP menu "Interface Style"): third panel in the same plug-in
   python3 $S/tools/make_scd70_panel.py gen/panel8820d.bgra --base
   python3 $S/tools/make_scd70_panel.py gen/lit8820d.bgra --all-on
   python3 $S/tools/gen_blob.py gen/panel8820p.cpp nk_panel8820p gen/panel8820p.bgra

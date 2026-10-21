@@ -1,14 +1,14 @@
-# Build-Funktion fuer das Ein-Datei-Plugin "Emu-SC88 Pro" (88emu-Kern, ROMs + Panel eingebettet).
-# Erwartet: S (Plugin-Quellen), GM (Gearmulator-Checkout mit Patches), LIBW (Windows-lib88emu.a),
-#           ROMPROC (aufbereitete ROMs: control.bin waveA.bin waveB.bin waveC.bin), CXX (MinGW g++-posix)
+# Build function for the single-file plug-in "Emu-SC88 Pro" (88emu core, ROMs + panel embedded).
+# Expects: S (plug-in sources), GM (Gearmulator checkout with patches), LIBW (Windows lib88emu.a),
+#           ROMPROC (prepared ROMs: control.bin waveA.bin waveB.bin waveC.bin), CXX (MinGW g++-posix)
 build88() {
   F="Emu-SC88_Pro"; N="Emu-SC88 Pro"
-  # NK_SLOT_CAP gesetzt: ROM-lose Vorlage (reservierter ROM-Bereich, befuellt von tools/p256_builder)
+  # NK_SLOT_CAP set: ROM-free template (reserved ROM area, filled by tools/p256_builder)
   if [ -n "$NK_SLOT_CAP" ]; then python3 $S/tools/gen_embedded_roms.py --slot gen/roms_88.cpp 0 "SC-88 Pro" $NK_SLOT_CAP
   else python3 $S/tools/gen_embedded_roms.py gen/roms_88.cpp 0 "SC-88 Pro (embedded)" \
      0=$ROMPROC/control.bin 1=$ROMPROC/waveA.bin 2=$ROMPROC/waveB.bin 3=$ROMPROC/waveC.bin; fi
   O="${OUTDIR:-out2}"; mkdir -p "$O"
-  # Panel wie beim SC-88 (editor_sc88orig.inc): Original-Grafik des SC-88 Pro, gleiche Bedienelemente
+  # Panel as for the SC-88 (editor_sc88orig.inc): original graphic of the SC-88 Pro, same controls
   A=$GM/source/ronaldo/88emu/88emuplayer/assets
   python3 $S/tools/make_sc88orig_panel.py --pro $A/sc88pro_panel.png gen/panel88.bgra
   python3 $S/tools/gen_blob.py gen/panel88.cpp nk_panel88o gen/panel88.bgra

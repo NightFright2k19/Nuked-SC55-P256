@@ -14,4 +14,4 @@ int main(int,char**a){
   for(int b=0;b<200;b++) p->process(p,&pr);
   const int n=(int)(20*44100/512); auto t0=std::chrono::steady_clock::now(); for(int b=0;b<n;b++) p->process(p,&pr);
   double s=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count();
-  printf("%s: Stille 20 s, %d Einheit(en) wach -> %.1f %% eines Kerns\n",a[1],ns->NumAwake(),100*s/20); }
+  printf("%s: silence 20 s, %d unit(s) awake -> %.1f %% of one core\n",a[1],ns->NumAwake(),100*s/20); }

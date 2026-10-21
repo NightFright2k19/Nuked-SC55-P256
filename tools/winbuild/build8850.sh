@@ -1,9 +1,9 @@
-# Build-Funktion fuer das Ein-Datei-Plugin "Emu-SC8850" (88emu-Kern, ROMs + Panel eingebettet).
-# Erwartet: S (Plugin-Quellen), GM (Gearmulator-Checkout mit Patches), LIBW (Windows-lib88emu.a),
+# Build function for the single-file plug-in "Emu-SC8850" (88emu core, ROMs + panel embedded).
+# Expects: S (plug-in sources), GM (Gearmulator checkout with patches), LIBW (Windows lib88emu.a),
 #           ROM8850 (sc8850_internal.bin sc8850_program.bin sc8850_data.bin sc8850_wave.bin), CXX (MinGW g++-posix)
 build8850() {
   F="Emu-SC8850"; N="Emu-SC8850"
-  # NK_SLOT_CAP gesetzt: ROM-lose Vorlage (reservierter ROM-Bereich, befuellt von tools/p256_builder)
+  # NK_SLOT_CAP set: ROM-free template (reserved ROM area, filled by tools/p256_builder)
   if [ -n "$NK_SLOT_CAP" ]; then python3 $S/tools/gen_embedded_roms.py --slot gen/roms_8850.cpp 0 "SC-8850" $NK_SLOT_CAP
   else python3 $S/tools/gen_embedded_roms.py gen/roms_8850.cpp 0 "SC-8850 (embedded)" \
      0=$ROM8850/sc8850_internal.bin 1=$ROM8850/sc8850_program.bin 2=$ROM8850/sc8850_data.bin 3=$ROM8850/sc8850_wave.bin; fi

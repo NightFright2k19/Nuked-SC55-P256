@@ -32,6 +32,6 @@ int main(int argc,char**argv){
     auto t0=std::chrono::steady_clock::now(); p->process(p,&pr); tp+=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count();
     if(b*B>=4*48000){ for(uint32_t i=0;i<B;i++){ss_late+=L[i]*L[i];} nlate+=B; }
   }
-  printf("RMS (4-5 s, nach 256 Noten): %.4f | Rechenzeit %.1f s fuer 5 s Audio\n",sqrt(ss_late/nlate),tp);
+  printf("RMS (4-5 s, after 256 notes): %.4f | compute time %.1f s for 5 s of audio\n",sqrt(ss_late/nlate),tp);
   p->stop_processing(p); p->destroy(p); entry->deinit(); return 0;
 }

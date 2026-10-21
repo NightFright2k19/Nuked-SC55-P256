@@ -1,30 +1,30 @@
 #!/bin/bash
-# Baut alle Test- und Messwerkzeuge. usage: build_tools.sh [Ordner mit D_E1M1.mid/Animus.mid]
+# Builds all test and measuring tools. usage: build_tools.sh [folder with D_E1M1.mid/Animus.mid]
 set -e
 WB=/home/claude/wb; S=$WB/src; C=$S/src/nuked-sc55; T=$WB/tools; MIDIDIR=${1:-/mnt/user-data/uploads}
 
-echo "  Linux-Plugin (CMake, liefert die Objekte fuer die Test-Hosts)"
+echo "  Linux plug-in (CMake, provides the objects for the test hosts)"
 cmake -S $S -B $S/build -DCMAKE_BUILD_TYPE=Release >/dev/null
 cmake --build $S/build -j2 2>&1 | grep -E "error|Built target" || true
 
-echo "  harness/ (einzelner Emulator, aktueller Kern)"
+echo "  harness/ (single emulator, current core)"
 cd $T/harness && gcc -O2 -c $C/sha/sha224-256.c -o sha.o
 for t in bench probe partials ctf locs which; do
   g++ -O2 -std=c++20 -I$S/src -I$C -I$C/backend $t.cpp $C/backend/*.cpp $C/common/*.cpp sha.o -o $t
 done
 
-echo "  exact/ (ref_orig = Upstream-Kern, ref_new = aktueller Kern, beide -O2)"
+echo "  exact/ (ref_orig = upstream core, ref_new = current core, both -O2)"
 cd $T/exact
 g++ -O2 -std=c++20 -Icore_orig -Icore_orig/backend -I$S/src ref.cpp core_orig/backend/*.cpp core_orig/common/*.cpp ../harness/sha.o -o ref_orig
 g++ -O2 -std=c++20 -I$C -I$C/backend -I$S/src ref.cpp $C/backend/*.cpp $C/common/*.cpp ../harness/sha.o -o ref_new
 
-echo "  test/ (CLAP-Ebene, linkt die Objekte des Linux-Builds)"
+echo "  test/ (CLAP level, links the objects of the Linux build)"
 cd $T/test; OBJ=$(find $S/build -name '*.o')
 for t in host play e1 diag peaks lcddump lcdscroll mem act idle; do
   g++ -O2 -std=c++23 -I$S/include -I$S/src -I$S/build $t.cpp $OBJ -lspeexdsp -lpthread -o $t
 done
 
-echo "  winbuild/ (MinGW-Hilfsobjekte + Windows-Test-Hosts)"
+echo "  winbuild/ (MinGW helper objects + Windows test hosts)"
 cd $T/winbuild; mkdir -p inc/speex gen out2
 cp $WB/speexdsp/include/speex/*.h inc/speex/
 printf '#ifndef __SPEEX_TYPES_H__\n#define __SPEEX_TYPES_H__\n#include <stdint.h>\ntypedef int16_t spx_int16_t; typedef uint16_t spx_uint16_t;\ntypedef int32_t spx_int32_t; typedef uint32_t spx_uint32_t;\n#endif\n' > inc/speex/speexdsp_config_types.h
@@ -39,19 +39,19 @@ x86_64-w64-mingw32-g++-posix -O2 -std=c++20 -I$S/src lcdhost.cpp -o lcdhost.exe 
 x86_64-w64-mingw32-g++-posix -O2 -std=c++20 -I$S/src memhost.cpp -o memhost.exe -static -lpsapi
 x86_64-w64-mingw32-g++-posix -O2 -std=c++20 -I$S/src guiload.cpp -o guiload.exe -static -lgdi32 -luser32
 
-echo "  midi/ (Polyphonie-Test neu erzeugen, Eventlisten)"
+echo "  midi/ (regenerate the polyphony test, event lists)"
 cd $T/midi && python3 gen.py 2> info.txt
 for m in D_E1M1:e1m1 Animus:animus grabbag:grabbag; do
-  f=$MIDIDIR/${m%%:*}.mid; [ -f "$f" ] && python3 smf2ev.py "$f" ${m##*:}.txt || echo "  (optional fehlt: $f)"
+  f=$MIDIDIR/${m%%:*}.mid; [ -f "$f" ] && python3 smf2ev.py "$f" ${m##*:}.txt || echo "  (optional, missing: $f)"
 done
-# LCD-Testdateien des Nutzers (LCD_Test_Midis.zip: StarGame.mid, 3X3EYES_mod.mid)
+# LCD test files of the user (LCD_Test_Midis.zip: StarGame.mid, 3X3EYES_mod.mid)
 if [ -f "$MIDIDIR/LCD_Test_Midis.zip" ]; then
   mkdir -p lcd && unzip -q -o "$MIDIDIR/LCD_Test_Midis.zip" -d lcd
   for f in lcd/*.mid; do python3 smf2ev.py "$f" "${f%.mid}.txt"; done
 fi
 
 if [ -f $WB/gearmulator/build88/source/ronaldo/88emu/88lib/lib88emu.a ]; then
-  echo "  SC-88 Pro: Linux-Testvariante des Plugins + diag88/play88/peaks88/map88"
+  echo "  SC-88 Pro: Linux test variant of the plug-in + diag88/play88/peaks88/map88"
   I88=$WB/gearmulator/source/ronaldo/88emu/88lib; L88=$WB/gearmulator/build88/source/ronaldo/88emu/88lib/lib88emu.a
   D88="-DNUKED_SC55_ENGINE_88PRO -DNUKED_SC55_ONLY_MODEL=6 -DNUKED_SC55_POLY_TARGET_VOICES=256"
   P=$T/test/build88p; rm -rf $P; mkdir -p $P
@@ -62,5 +62,5 @@ if [ -f $WB/gearmulator/build88/source/ronaldo/88emu/88lib/lib88emu.a ]; then
   cd $T/sc88probe; for t in probe voices loop; do gcc -O2 -c $t.c -I$I88 -o $t.o && g++ $t.o $L88 -lpthread -ldl -o $t; done
 fi
 
-# Display-Renderer: Teilaktualisierung gegen Vollberechnung (pixelgleich?) + Rechenzeit, ohne Windows
+# Display renderer: partial update against full recomputation (pixel-identical?) + compute time, without Windows
 ( cd $T/test && g++ -O2 -std=c++20 -I$S/src -I$S/src/gui lcdtest.cpp -o lcdtest )

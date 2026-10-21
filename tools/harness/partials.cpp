@@ -15,6 +15,6 @@ int main(int,char**a){
     e.PostMIDI(0x90);e.PostMIDI(60);e.PostMIDI(100); run(e,fs*1.0); int a1=act(e);
     run(e,fs*3.0); int a2=act(e);
     e.PostMIDI(0x80);e.PostMIDI(60);e.PostMIDI(0); run(e,fs*3);
-    printf("Prog %3d: %d Partials nach 1 s, %d nach 4 s\n",prog+1,a1,a2);
+    printf("Prog %3d: %d partials after 1 s, %d after 4 s\n",prog+1,a1,a2);
   }
 }

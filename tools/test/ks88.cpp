@@ -17,6 +17,6 @@ int main(int,char**a){
   data={dt1(0x11,0x16,0x46), dt1(0x12,0x16,0x34)}; // Part 1: +6, Part 2: -12
   for(auto& d:data){ clap_event_midi_sysex_t e{}; e.header={sizeof(e),0,CLAP_CORE_EVENT_SPACE_ID,CLAP_EVENT_MIDI_SYSEX,0}; e.buffer=d.data(); e.size=d.size(); sx.push_back(e);} for(auto&e:sx) ptr.push_back(&e.header);
   p->process(p,&pr); ptr.clear(); for(int b=0;b<80;b++) p->process(p,&pr);
-  printf("Anzeigedaten Plugin: Part1 Key Shift %+d, Part2 %+d\n",ns->ui_parts[0].key_shift.load()-0x40,ns->ui_parts[1].key_shift.load()-0x40);
-  NukedSc55::LcdSnapshot s; if(ns->GetLcd(0,s)){ printf("LCD der Firmware (Part 1), K SHIFT-Feld: '"); for(int i=52;i<55;i++) putchar(s.dd[i]>=32&&s.dd[i]<127?s.dd[i]:(s.dd[i]<8?'#':'?')); printf("'  (Zeichen < 8 = Sonderzeichen +/-)\n"); }
+  printf("Display data plug-in: part 1 key shift %+d, part 2 %+d\n",ns->ui_parts[0].key_shift.load()-0x40,ns->ui_parts[1].key_shift.load()-0x40);
+  NukedSc55::LcdSnapshot s; if(ns->GetLcd(0,s)){ printf("LCD of the firmware (part 1), K SHIFT field: '"); for(int i=52;i<55;i++) putchar(s.dd[i]>=32&&s.dd[i]<127?s.dd[i]:(s.dd[i]<8?'#':'?')); printf("'  (characters < 8 = special characters +/-)\n"); }
   return 0; }

@@ -9,4 +9,4 @@ int main(int,char**a){
   auto t0=std::chrono::steady_clock::now(); auto p=fa->create_plugin(fa,&host,a[1]); p->init(p); auto t1=std::chrono::steady_clock::now();
   p->activate(p,44100,1,512); auto t2=std::chrono::steady_clock::now();
   auto s=[](auto x,auto y){return std::chrono::duration<double>(y-x).count();};
-  printf("  Init %.2f s + Aktivieren %.2f s = %.2f s (%d Einheiten)\n",s(t0,t1),s(t1,t2),s(t0,t2),((NukedSc55*)p->plugin_data)->NumInstances()); }
+  printf("  init %.2f s + activate %.2f s = %.2f s (%d units)\n",s(t0,t1),s(t1,t2),s(t0,t2),((NukedSc55*)p->plugin_data)->NumInstances()); }

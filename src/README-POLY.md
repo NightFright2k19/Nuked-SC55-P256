@@ -1,109 +1,109 @@
 # Nuked SC-55 Poly (CLAP)
 
-Fork von [Nuked-SC55-CLAP](https://github.com/johnnovak/Nuked-SC55-CLAP) (Basis: Commit `de2a799`)
-mit erweiterter Polyphonie: 128 Stimmen per Default, bis 256+ konfigurierbar.
+Fork of [Nuked-SC55-CLAP](https://github.com/johnnovak/Nuked-SC55-CLAP) (based on commit `de2a799`)
+with extended polyphony: 128 voices by default, configurable up to 256+.
 
-## Prinzip
+## Principle
 
-Die Polyphonie-Grenze (24 Partials beim SC-55, 28 beim SC-55mk2) steckt in der
-Hardware des PCM-Chips (feste Slot-Zahl pro Sample-Takt, an die die Samplerate
-gekoppelt ist) und in der Firmware. Beides lässt sich nicht sinnvoll „aufbohren“.
-Stattdessen laufen N identische, bitgenaue Emulatoren parallel:
+The polyphony limit (24 partials on the SC-55, 28 on the SC-55mk2) is built into the
+hardware of the PCM chip (a fixed number of slots per sample clock, to which the sample rate
+is coupled) and into the firmware. Neither can sensibly be "bored out".
+Instead, N identical, bit-exact emulators run in parallel:
 
-| Modell  | Partials/Instanz | 128-Ziel        | 256-Ziel         |
-|---------|------------------|-----------------|------------------|
-| SC-55   | 24               | 6 Inst. = 144   | 11 Inst. = 264   |
-| SC-55mk2| 28               | 5 Inst. = 140   | 10 Inst. = 280   |
+| Model   | Partials/instance | 128 target      | 256 target       |
+|---------|-------------------|-----------------|------------------|
+| SC-55   | 24                | 6 inst. = 144   | 11 inst. = 264   |
+| SC-55mk2| 28                | 5 inst. = 140   | 10 inst. = 280   |
 
-`src/poly_router.h` verteilt die MIDI-Daten:
+`src/poly_router.h` distributes the MIDI data:
 
-- Note-On → Instanz mit der geringsten gemessenen Last (Hüllkurvenpegel aller
-  PCM-Slots, `ram2[slot][10] != 0`) + Round-Robin bei Gleichstand.
-- Note-Off / Poly-Aftertouch → die Instanz(en), die die Taste spielen.
-- Wiederanschlag einer gehaltenen Taste → dieselbe Instanz.
-- Mono-Mode (CC126) und Portamento (CC65) → Kanal wird auf eine Instanz gepinnt.
-- Rhythm-Parts: Exklusiv-Gruppen (HiHat, Whistle, Guiro, Cuica, Triangle, Surdo)
-  bleiben auf einer Instanz pro Kanal, damit Choke funktioniert. GS-SysEx
-  „Use For Rhythm Part“ und „Rx Channel“ werden mitgelesen.
-- Alles andere (CC, PC, Pitchbend, SysEx, GS/GM-Reset) geht an alle Instanzen.
+- Note-on → the instance with the lowest measured load (envelope level of all
+  PCM slots, `ram2[slot][10] != 0`) + round-robin on a tie.
+- Note-off / poly aftertouch → the instance(s) playing the key.
+- Re-striking a held key → the same instance.
+- Mono mode (CC126) and portamento (CC65) → the channel is pinned to one instance.
+- Rhythm parts: exclusive groups (hi-hat, whistle, guiro, cuica, triangle, surdo)
+  stay on one instance per channel so that choke works. The GS SysEx
+  "Use For Rhythm Part" and "Rx Channel" are read along.
+- Everything else (CC, PC, pitch bend, SysEx, GS/GM reset) goes to all instances.
 
-Alle Instanzen booten identisch und erhalten identische Controller-/SysEx-Daten.
-Dadurch laufen LFOs, Chorus und Reverb im Gleichschritt, und die Summe verhält
-sich (linear) wie die Effektsektion eines einzelnen Geräts. Den konstanten
-DC-Offset jeder Instanz (1/32 FS) wird für die Zusatzinstanzen kompensiert:
-**Bei ≤ 24/28 Stimmen ist die Ausgabe bitidentisch mit einer einzelnen Instanz.**
+All instances boot identically and receive identical controller/SysEx data.
+As a result, LFOs, chorus and reverb run in lockstep, and the sum behaves
+(linearly) like the effects section of a single device. The constant
+DC offset of each instance (1/32 FS) is compensated for the additional instances:
+**With ≤ 24/28 voices the output is bit-identical to a single instance.**
 
-## Konfiguration
+## Configuration
 
-- Build-Zeit: `-DNUKED_SC55_POLY_TARGET_VOICES=256` (Default 128)
-- Laufzeit (überschreibt): Umgebungsvariable `NUKED_SC55_POLY_VOICES=256`
-- ROMs: wie im Original, `Nuked-SC55-Resources/ROMs/...` neben dem Plugin oder
-  `SOUNDCANVAS_ROM_PATH`. Neue Plugin-IDs (`net.nuked_sc55_poly_clap.*`), das
-  Plugin lässt sich also parallel zum Original installieren.
+- Build time: `-DNUKED_SC55_POLY_TARGET_VOICES=256` (default 128)
+- Run time (overrides): environment variable `NUKED_SC55_POLY_VOICES=256`
+- ROMs: as in the original, `Nuked-SC55-Resources/ROMs/...` next to the plug-in or
+  `SOUNDCANVAS_ROM_PATH`. New plug-in IDs (`net.nuked_sc55_poly_clap.*`), so the
+  plug-in can be installed alongside the original.
 
 ## Capital Tone Fallback (CTF)
 
-- SC-55 (alle Versionen): CTF ist Teil der Original-Firmware, immer aktiv.
-- SC-55mk2: Liegt ein mit sc55mk2-ctf-patcher gepatchtes `rom2.bin` im
-  ROM-Ordner, wird es bevorzugt geladen (das Original-Plugin nimmt immer das
-  ungepatchte). Erzwingen einer bestimmten Variante:
-  `NUKED_SC55_MK2_ROMSET=mk2-v1.01` (ohne CTF) oder z. B.
+- SC-55 (all versions): CTF is part of the original firmware, always active.
+- SC-55mk2: if a `rom2.bin` patched with sc55mk2-ctf-patcher is in the
+  ROM folder, it is preferred (the original plug-in always takes the
+  unpatched one). To force a specific variant:
+  `NUKED_SC55_MK2_ROMSET=mk2-v1.01` (without CTF) or e.g.
   `mk2-ctf-sc55-drum-sc55-v1.21`.
 
 ## VST2
 
-`src/vst2/` enthält eine eigenständig geschriebene Beschreibung der VST-2.4-
-Binärschnittstelle (kein Steinberg-SDK) und eine Brücke, die das CLAP-Plugin
-derselben DLL als VST2 anbietet. Dafür werden Einzelmodell-Builds verwendet
-(`-DNUKED_SC55_ONLY_MODEL=<0..5>`). Dieselbe Datei funktioniert als `.clap`
-und als VST2-`.dll`. Siehe `build-mingw-win64.sh`.
+`src/vst2/` contains an independently written description of the VST 2.4
+binary interface (no Steinberg SDK) and a bridge that offers the CLAP plug-in
+of the same DLL as VST2. Single-model builds are used for this
+(`-DNUKED_SC55_ONLY_MODEL=<0..5>`). The same file works as `.clap`
+and as a VST2 `.dll`. See `build-mingw-win64.sh`.
 
-## Dynamische Instanzen
+## Dynamic instances
 
-Nur so viele Instanzen laufen, wie gebraucht werden. Schlafende Instanzen
-verpassen Controller/SysEx; diese werden in `src/state_log.h` kompakt (letzter
-Wert je Parameter, Reihenfolge nach letztem Auftreten) protokolliert und beim
-Wecken nachgespielt. Abschalten: `NUKED_SC55_POLY_DYNAMIC=0`.
+Only as many instances run as are needed. Sleeping instances
+miss controllers/SysEx; these are logged compactly in `src/state_log.h` (last
+value per parameter, ordered by last occurrence) and replayed when the
+instance wakes up. To switch this off: `NUKED_SC55_POLY_DYNAMIC=0`.
 
-## Ein-Datei-Builds (eingebettete ROMs, nur privat)
+## Single-file builds (embedded ROMs, private use only)
 
-`-DNUKED_SC55_EMBED_ROMS` + eine mit `tools/gen_embedded_roms.py` erzeugte
-Quelle. Anzeigename: `-DNUKED_SC55_DISPLAY_NAME`, Windows-Versionsinfo:
-`src/vst2/version.rc.in`. Siehe `tools/build-embedded-win64.sh.inc`.
+`-DNUKED_SC55_EMBED_ROMS` + a source generated with `tools/gen_embedded_roms.py`.
+Display name: `-DNUKED_SC55_DISPLAY_NAME`, Windows version info:
+`src/vst2/version.rc.in`. See `tools/build-embedded-win64.sh.inc`.
 
-## Kern-Optimierung: Timer
+## Core optimisation: timers
 
-`src/nuked-sc55/backend/mcu_timer.cpp`: Ereignislose Timer-Ticks werden
-gebündelt (nur Zähler erhöhen); Ticks mit Compare-Match, Überlauf oder nach
-Registerzugriffen laufen mit der Originallogik. Bitgenau identisch zum
-Originalkern, ca. 35–40 % schneller (mit -O3 -flto). Timer werden lazy pro Timer ausgewertet.
+`src/nuked-sc55/backend/mcu_timer.cpp`: timer ticks without events are
+bundled (only the counter is increased); ticks with a compare match, overflow or after
+register accesses run with the original logic. Bit-exact identical to the
+original core, about 35–40 % faster (with -O3 -flto). Timers are evaluated lazily, per timer.
 
 ## Editor (Windows)
 
-`src/gui/editor_win32.cpp` (Win32/GDI, prozedural gezeichnet im Stil der Gearmulator-Skins; Menüsprache nach Windows-UI-Sprache DE/EN): SC-55-artiges Panel mit Part-Parametern,
-16 Part-Pegelbalken, Polyphonie-Anzeige und SETUP-Menü (Laufzeit-Stimmenlimit,
-GS-Reset, alle Noten aus). Anbindung: CLAP `gui`-Extension, VST2
-`effEditOpen`/`effEditClose`/`effEditGetRect`. Zustand (Limit) über CLAP `state`
-bzw. VST2-Chunks; das Plugin schreibt keine Dateien. Änderungen im Menü werden dem Host gemeldet (CLAP `state.mark_dirty`, VST2 `audioMasterUpdateDisplay`).
-Linken mit `-lgdi32 -luser32 -lmsimg32`.
+`src/gui/editor_win32.cpp` (Win32/GDI, drawn procedurally in the style of the Gearmulator skins; menu language follows the Windows UI language DE/EN): SC-55-like panel with part parameters,
+16 part level bars, polyphony display and a SETUP menu (run-time voice limit,
+GS reset, all notes off). Integration: CLAP `gui` extension, VST2
+`effEditOpen`/`effEditClose`/`effEditGetRect`. State (limit) via CLAP `state`
+or VST2 chunks; the plug-in writes no files. Changes in the menu are reported to the host (CLAP `state.mark_dirty`, VST2 `audioMasterUpdateDisplay`).
+Link with `-lgdi32 -luser32 -lmsimg32`.
 
 ## Build (Windows)
 
-Wie im Original-README (vcpkg + CMake-Presets). Die Ausgabedatei heißt
+As in the original README (vcpkg + CMake presets). The output file is called
 `Nuked-SC55-Poly.clap`.
 
 ## CPU
 
-Jede Instanz läuft durchgehend (die Firmware-Timer müssen weiterlaufen).
-Rendering ist pro Instanz parallelisiert (Worker-Pool, Audio-Thread arbeitet mit).
-Richtwert: N × die CPU-Last des Original-Plugins, verteilt auf mehrere Kerne.
+Every instance runs continuously (the firmware timers have to keep running).
+Rendering is parallelised per instance (worker pool, the audio thread helps).
+Rule of thumb: N × the CPU load of the original plug-in, spread over several cores.
 
-## Bekannte Abweichungen zur Hardware
+## Known deviations from the hardware
 
-- Firmware-Voice-Stealing greift erst, wenn *alle* Instanzen voll sind, und
-  dann innerhalb der gewählten Instanz – nicht global nach ältester Stimme.
-- Interne Clipping-Grenze gilt pro Instanz, nicht für die Summe (in Float gibt
-  es kein Summen-Clipping; bei sehr dichten Arrangements Pegel beachten).
-- Effekte: Summen-Reverb/-Chorus ist mathematisch nahezu gleichwertig; minimale
-  Unterschiede durch die Festkomma-Rundung pro Instanz sind möglich.
-- Partial-Reserve (GS „Voice Reserve“) wirkt pro Instanz.
+- Firmware voice stealing only kicks in when *all* instances are full, and
+  then within the chosen instance – not globally by oldest voice.
+- The internal clipping limit applies per instance, not to the sum (in float there
+  is no summing clipping; mind the level in very dense arrangements).
+- Effects: the summed reverb/chorus is mathematically almost equivalent; minimal
+  differences due to the fixed-point rounding per instance are possible.
+- Part reserve (GS "Voice Reserve") acts per instance.

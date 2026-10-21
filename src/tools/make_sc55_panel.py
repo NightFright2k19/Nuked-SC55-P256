@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# Bereitet die 88emu-Panelgrafik des SC-55 / SC-55mkII (sc55_panel.png / sc55mk2_panel.png, GPLv3,
-# The Usual Suspects) fuer das Nuked-SC55-Panel auf: 918x280 (= 612x187 dp x 1,5), Branding ersetzt, Playlist-Kopf ->
-# VOICES, VOLUME -> GAIN, Logo unten links ersetzt; alles andere bleibt unveraendert.
-# Ausgabe: rohe BGRA-Pixel (918*280*4 Byte) fuer .incbin.
+# Prepares the 88emu panel graphic of the SC-55 / SC-55mkII (sc55_panel.png / sc55mk2_panel.png, GPLv3,
+# The Usual Suspects) for the Nuked-SC55 panel: 918x280 (= 612x187 dp x 1.5), branding replaced, playlist header ->
+# VOICES, VOLUME -> GAIN, logo at the bottom left replaced; everything else stays unchanged.
+# Output: raw BGRA pixels (918*280*4 bytes) for .incbin.
 # usage: make_sc55_panel.py <sc55_panel.png|sc55mk2_panel.png> <mk1|mk2> <out.bgra> [preview.png]
 import sys
 from PIL import Image, ImageDraw, ImageFont
@@ -17,8 +17,8 @@ def font(sz, style=""):
     except OSError: return ImageFont.load_default()
 
 def hgrad_fill(box, lx, rx):
-    """Glatte Flaeche mit waagerechtem Verlauf (schwarzer LCD-Rahmen): je Zeile linear zwischen
-    den Bildpunkten bei x=lx und x=rx."""
+    """Smooth area with a horizontal gradient (black LCD frame): per row, linear between
+    the pixels at x=lx and x=rx."""
     x0, y0, x1, y1 = box; p = im.load()
     for y in range(y0, y1):
         a, b = p[lx, y], p[rx, y]
@@ -27,8 +27,8 @@ def hgrad_fill(box, lx, rx):
             p[x, y] = tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(3))
 
 def texture_fill(box, src, feather=4, sides="lrtb"):
-    """Gekoernte Flaeche: Struktur derselben Zeilen aus dem schriftfreien Spaltenbereich src=(a, b)
-    uebernehmen, gespiegelt gekachelt (keine Naht) und an den Raendern weich eingeblendet."""
+    """Grained area: take the texture of the same rows from the lettering-free column range src=(a, b),
+    tiled mirrored (no seam) and blended in softly at the edges."""
     x0, y0, x1, y1 = box; sa, sb = src; w = sb - sa; p = im.load()
     orig = {(x, y): p[x, y] for x in range(x0, x1) for y in range(y0, y1)}
     for y in range(y0, y1):
@@ -44,8 +44,8 @@ def texture_fill(box, src, feather=4, sides="lrtb"):
             p[x, y] = c
 
 def inpaint_text(box, base_cols, thr=5, grow=2):
-    """Glatte Flaeche mit Schrift/Symbol: nur abweichende oder farbige Pixel (samt Saum) werden
-    senkrecht zwischen den naechsten unberuehrten Nachbarn linear aufgefuellt."""
+    """Smooth area with lettering/symbol: only deviating or coloured pixels (with their fringe) are
+    filled in vertically, linearly between the nearest untouched neighbours."""
     x0, y0, x1, y1 = box; p = im.load()
     lum = lambda c: 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]
     mask = set()
@@ -69,7 +69,7 @@ def inpaint_text(box, base_cols, thr=5, grow=2):
                 p[x, k] = tuple(round(t_[i] + (b_[i] - t_[i]) * t) for i in range(3))
 
 def oblique_text(x, y, t, f, fill, slant=0.21):
-    """Kursiv wie im Original: Schrift aufrecht rendern und scheren (nur DejaVu Sans noetig)."""
+    """Italic like the original: render the lettering upright and shear it (only DejaVu Sans needed)."""
     l, top, r, b = d.textbbox((0, 0), t, font=f)
     w, h = r + 8, b + 4
     m = Image.new("L", (w, h), 0); ImageDraw.Draw(m).text((2, 0), t, font=f, fill=255)
@@ -81,15 +81,15 @@ def center_text(cx, y, t, f, fill):
     w = d.textlength(t, font=f); d.text((cx - w / 2, y), t, font=f, fill=fill)
 
 def vgrad_fill(box, lx, rx):
-    """Glatte Flaeche mit senkrechtem Verlauf (Rahmen ueber dem LCD): je Zeile Mittel der
-    Bildpunkte bei x=lx und x=rx."""
+    """Smooth area with a vertical gradient (frame above the LCD): per row the mean of the
+    pixels at x=lx and x=rx."""
     x0, y0, x1, y1 = box; p = im.load()
     for y in range(y0, y1):
         a, b = p[lx, y], p[rx, y]
         c = tuple((a[i] + b[i]) // 2 for i in range(3))
         for x in range(x0, x1): p[x, y] = c
 
-# Branding oben auf dem LCD-Rahmen ("TheUsualSuspects", weiss kursiv) -> Produktname, gleicher Stil
+# Branding on top of the LCD frame ("TheUsualSuspects", white italic) -> product name, same style
 vgrad_fill((390, 6, 558, 29), 388, 560)
 f1, f2 = font(15), font(15, "-Bold")
 name = "SC-55mkII" if mk2 else "SC-55"
@@ -97,16 +97,16 @@ w = d.textlength("Nuked", font=f1) + d.textlength(name, font=f2)
 x = 551 - w
 x += oblique_text(x, 9, "Nuked", f1, (236, 238, 240))
 oblique_text(x, 9, name, f2, (236, 238, 240))
-# Logo unten links ("55Emu" / "55EmumkII" + Pfeil): Struktur aus der leeren Flaeche rechts daneben
+# Logo at the bottom left ("55Emu" / "55EmumkII" + arrow): texture from the empty area to its right
 texture_fill((32, 236, 225, 274), (235, 385))
 f1, f2 = font(22), font(22, "-Bold")
 x = 42 + oblique_text(42, 241, "Nuked-SC", f1, (236, 238, 240))
 x += oblique_text(x, 241, "55", f2, (236, 238, 240))
 if mk2: oblique_text(x + 2, 241, "mkII", f1, (240, 120, 40))
-# Playlist-Kopf -> "VOICES" (Ordnersymbol entfernt), Spalten-Verlauf bleibt
+# playlist header -> "VOICES" (folder symbol removed), column gradient stays
 inpaint_text((31, 12, 140, 35), (95, 115), thr=3, grow=2)
 center_text(86, 18, "VOICES", font(11, "-Bold"), (226, 228, 232))
-# Pegelknopf: "VOLUME" -> "GAIN"; Struktur aus der schriftfreien Flaeche rechts daneben
+# Level knob: "VOLUME" -> "GAIN"; texture from the lettering-free area to its right
 texture_fill((160, 15, 219, 30), (219, 229), feather=2)
 center_text(189.5, 17, "GAIN", font(12), (226, 230, 236))
 px = im.load(); w, h = im.size

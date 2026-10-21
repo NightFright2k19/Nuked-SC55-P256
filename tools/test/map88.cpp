@@ -23,15 +23,15 @@ int main(){
   const char* nm[3]={"SC-55","SC-88","SC-88 Pro"};
   double r[3]; printf("Start-Map laut Plugin: %s\n",nm[ns->tone_map.load()]);
   double a=note(0,60); printf("Piano, Start (Kanal 1): RMS %.5f\n",a);
-  for(int m : {2,0,1}){ ns->tone_map=m; idle(1.5); r[m]=note(0,60); printf("nach Umschalten auf %-9s: RMS %.5f  (Verhaeltnis zu SC-88 Pro: %.3f)\n",nm[m],r[m],0.0); }
-  for(int m=0;m<3;m++) printf("  %-9s / SC-88 Pro = %.3f   (Referenz 88emu direkt: SC-55 1.373, SC-88 1.705)\n",nm[m],r[m]/r[2]);
-  printf("Start war %s\n", std::fabs(a-r[2])<std::fabs(a-r[1])&&std::fabs(a-r[2])<std::fabs(a-r[0])?"SC-88 Pro (Werkseinstellung, wie gewuenscht)":"NICHT SC-88 Pro");
-  // Map aller Einheiten (auch schlafender) laut Panel-LEDs, nach Umschalten auf SC-55
+  for(int m : {2,0,1}){ ns->tone_map=m; idle(1.5); r[m]=note(0,60); printf("after switching to %-9s: RMS %.5f  (ratio to SC-88 Pro: %.3f)\n",nm[m],r[m],0.0); }
+  for(int m=0;m<3;m++) printf("  %-9s / SC-88 Pro = %.3f   (reference 88emu direct: SC-55 1.373, SC-88 1.705)\n",nm[m],r[m]/r[2]);
+  printf("Start was %s\n", std::fabs(a-r[2])<std::fabs(a-r[1])&&std::fabs(a-r[2])<std::fabs(a-r[0])?"SC-88 Pro (factory setting, as desired)":"NOT SC-88 Pro");
+  // map of all units (also sleeping ones) according to the panel LEDs, after switching to SC-55
   ns->tone_map=0; idle(2.5); idle(1.0);
-  printf("Einheiten-Map nach Umschalten auf SC-55 (wach: %d):",ns->NumAwake()); for(int i=0;i<ns->NumInstances();i++) printf(" E%d=%s",i,nm[ns->UnitToneMap(i)]); printf("\n");
+  printf("Unit map after switching to SC-55 (awake: %d):",ns->NumAwake()); for(int i=0;i<ns->NumInstances();i++) printf(" E%d=%s",i,nm[ns->UnitToneMap(i)]); printf("\n");
   std::vector<clap_event_midi_t> on; block({M(0xC1,16,0)}); for(int k=0;k<70;k++) on.push_back(M(0x91,30+k%60,60)); block(on);
-  idle(1.5); printf("Nach 70 Orgelnoten wach: %d, Maps:",ns->NumAwake()); for(int i=0;i<ns->NumInstances();i++) printf(" E%d=%s",i,nm[ns->UnitToneMap(i)]); printf("\n");
+  idle(1.5); printf("After 70 organ notes awake: %d, maps:",ns->NumAwake()); for(int i=0;i<ns->NumInstances();i++) printf(" E%d=%s",i,nm[ns->UnitToneMap(i)]); printf("\n");
   std::vector<clap_event_midi_t> off; for(int k=0;k<70;k++) off.push_back(M(0x81,30+k%60,0)); block(off); idle(4);
-  printf("Nach Loslassen + 4 s wach: %d\n",ns->NumAwake());
+  printf("After release + 4 s awake: %d\n",ns->NumAwake());
   char buf[80]; void* d=nullptr; (void)d; printf("Chunk: max_voices=%d map=%d\n",ns->max_voices.load(),ns->tone_map.load());
   return 0; }
