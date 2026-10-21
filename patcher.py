@@ -7,8 +7,13 @@
 #   folder the user chooses. 'Patch' builds every complete model into the folder 'Plugins' next
 #   to the patcher (Plugins/CLAP, Plugins/VST2).
 # * patcher --build [folder]: same without a window (prints like p256_builder.py).
-# * patcher --selftest: checks the bundled templates (used by the release workflow).
+# * patcher --selftest: checks the bundled templates (used by the release workflow); --selftest-out <file>
+#   also writes the result to a file (a windowed exe prints nothing, used by the self-update's own test).
 # * Language: the system language, else English; a menu at the top right switches it.
+# * Update (issue #89): a release patcher looks for a newer release a moment after it has started and offers
+#   it with the Update button (selfupdate.py); --no-update-check (or NUKED_P256_NO_UPDATE_CHECK=1) leaves out
+#   the check at the start. Test options: --update-dir <folder with release files>, --update-test-version r<N>;
+#   --after-update <old> is used by the update itself.
 import sys, os, threading, queue, subprocess, locale
 from pathlib import Path
 
@@ -102,7 +107,7 @@ def run_build(folder: Path) -> int:
     return 0 if n and not failed else 2
 
 
-def selftest() -> int:
+def selftest(out: Path | None = None) -> int:
     for _, name, title, parts in builder.MODELS:
         tpl = TEMPLATES / f'{name}.p256tpl'
         assert tpl.is_file(), f'template missing: {tpl}'
@@ -111,7 +116,11 @@ def selftest() -> int:
     assert len(builder.apply_ctf(bytes(524288))) == 524288
     for f in ICON_FILES:
         assert (ICONS / f).is_file(), f'icon missing: {ICONS / f}'
+    import selfupdate
+    assert selfupdate.asset_name(1).startswith('Nuked-SC55-P256-Patcher-r1-'), 'selfupdate'
     print('selftest ok', VERSION)
+    if out is not None:                             # a windowed exe prints nothing; the self-update reads this
+        out.write_text(f'selftest ok {VERSION}\n')
     return 0
 
 
@@ -138,8 +147,9 @@ def shape_rtl(text: str, width: int = 0) -> str:
 
 def main_window():
     import tkinter as tk
-    from tkinter import ttk, filedialog
+    from tkinter import ttk, filedialog, messagebox
     from patcher_i18n import TEXT, LANGUAGES
+    import selfupdate
 
     root = tk.Tk()
     root.title(f'{NAME} {VERSION}')
@@ -162,16 +172,16 @@ def main_window():
     frame = ttk.Frame(root, padding=14)
     frame.grid(sticky='nsew')
     head = ttk.Frame(frame)
-    head.grid(row=0, column=0, columnspan=3, sticky='ew')
+    head.grid(row=0, column=0, columnspan=4, sticky='ew')
     ttk.Label(head, text=NAME, font=('TkDefaultFont', 13, 'bold')).pack(side='left')
     lang_var = tk.StringVar(value=shown[st['lang']])
     lang_box = ttk.Combobox(head, textvariable=lang_var, values=list(shown.values()),
                             state='readonly', width=16, height=len(LANGUAGES))
     lang_box.pack(side='right')
     intro = ttk.Label(frame, wraplength=520)
-    intro.grid(row=1, column=0, columnspan=3, sticky='w', pady=(2, 10))
+    intro.grid(row=1, column=0, columnspan=4, sticky='w', pady=(2, 10))
     box = ttk.LabelFrame(frame, padding=10)
-    box.grid(row=2, column=0, columnspan=3, sticky='ew')
+    box.grid(row=2, column=0, columnspan=4, sticky='ew')
     box.columnconfigure(1, weight=1)
     folder_lbl = ttk.Label(box)
     folder_lbl.grid(row=0, column=0, sticky='w')
@@ -183,17 +193,25 @@ def main_window():
     rows.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(8, 0))
     rows.columnconfigure(1, weight=1)
     target = ttk.Label(frame, foreground='#444')
-    target.grid(row=3, column=0, columnspan=3, sticky='w', pady=(8, 0))
+    target.grid(row=3, column=0, columnspan=4, sticky='w', pady=(8, 0))
     progress = ttk.Progressbar(frame, mode='determinate')
-    progress.grid(row=4, column=0, columnspan=3, sticky='ew', pady=(8, 0))
-    ttk.Separator(frame).grid(row=5, column=0, columnspan=3, sticky='ew', pady=10)
+    progress.grid(row=4, column=0, columnspan=4, sticky='ew', pady=(8, 0))
+    ttk.Separator(frame).grid(row=5, column=0, columnspan=4, sticky='ew', pady=10)
     status = ttk.Label(frame, wraplength=330)
     status.grid(row=6, column=0, sticky='w')
     det_btn = ttk.Button(frame)
-    det_btn.grid(row=6, column=1, sticky='e', padx=6)
+    det_btn.grid(row=6, column=2, sticky='e', padx=6)
     patch_btn = ttk.Button(frame, width=14)
-    patch_btn.grid(row=6, column=2, sticky='e')
+    patch_btn.grid(row=6, column=3, sticky='e')
     open_btn = ttk.Button(frame)
+    cur = selfupdate.current(VERSION)
+    upd_on = selfupdate.enabled(VERSION, FROZEN)
+    # state: None, checking, new, current, error, load, verify, start, failed; quiet: no message (the check at the start)
+    upd = dict(state=None, rev=None, err='', done=0, total=0, quiet=True)
+    upd_btn = ttk.Button(frame)
+    upd_note = ttk.Label(frame, wraplength=330)
+    if upd_on:
+        upd_btn.grid(row=6, column=1, sticky='e')
     log = tk.Text(frame, height=14, width=80, font=('TkFixedFont', 9), state='disabled')
     frame.columnconfigure(0, weight=1)
 
@@ -226,6 +244,104 @@ def main_window():
         open_btn['text'] = T('open_folder')
         patch_btn.state(['!disabled'] if not st['busy'] and ready_items() else ['disabled'])
         browse.state(['disabled'] if st['busy'] else ['!disabled'])
+        refresh_upd()
+
+    def refresh_upd():
+        if not upd_on:
+            return
+        s, v = upd['state'], f"r{upd['rev']}"
+        av = f'Autobuild {v}'                                         # the name of the release, in the messages of the update itself
+        upd_btn['text'] = T('upd_btn')
+        upd_btn.state(['disabled'] if st['busy'] or s in ('checking', 'load', 'verify', 'start') else ['!disabled'])
+        mb = lambda n: f'{n / 1e6:.1f}'   # noqa: E731
+        note, color = {
+            'checking': ('' if upd['quiet'] else T('upd_checking'), '#444'),
+            'new': (T('upd_new', ver=v), '#1a7f37'),
+            'current': ('' if upd['quiet'] else T('upd_none', ver=f'r{cur}'), '#444'),
+            'error': ('' if upd['quiet'] else T('upd_fail', err=upd['err']), '#b3261e'),
+            'load': (T('upd_load', ver=av, done=mb(upd['done']), total=mb(upd['total']) if upd['total'] else '?'), '#444'),
+            'verify': (T('upd_verify', ver=av), '#444'),
+            'start': (T('upd_start', ver=av), '#444'),
+            'failed': (T('upd_fail', err=upd['err']), '#b3261e'),
+        }.get(s, ('', '#444'))
+        upd_note.configure(text=note, foreground=color)
+        if note:
+            upd_note.grid(row=7, column=0, columnspan=3, sticky='w', pady=(8, 0))
+        else:
+            upd_note.grid_remove()
+
+    def start_check(manual):
+        if upd['state'] in ('checking', 'load', 'verify', 'start'):
+            return
+        upd.update(state='checking', quiet=not manual)
+        refresh_upd()
+
+        def work():
+            try:
+                q.put(('upd_checked', selfupdate.latest_revision(), '', manual))
+            except Exception as e:
+                q.put(('upd_checked', None, str(e) or type(e).__name__, manual))
+        threading.Thread(target=work, daemon=True).start()
+
+    def upd_checked(rev, err, manual):
+        if err:
+            upd.update(state='error', err=err, quiet=not manual)
+        elif rev is not None and cur is not None and rev > cur:
+            upd.update(state='new', rev=rev, quiet=False)
+        else:
+            upd.update(state='current', quiet=not manual)
+        refresh_upd()
+        if manual and upd['state'] == 'new':
+            upd_click()
+
+    def upd_click():
+        if upd['state'] == 'new':
+            if messagebox.askokcancel(T('upd_btn'), T('upd_ask', ver=f"Autobuild r{upd['rev']}")):
+                start_update()
+        else:
+            start_check(True)
+
+    def start_update():
+        st['busy'] = True
+        upd.update(state='load', done=0, total=0, err='')
+        progress.configure(mode='determinate', maximum=100, value=0)
+        refresh()
+        rev = upd['rev']
+
+        def work():
+            try:
+                cmd = selfupdate.perform(rev, HERE, FROZEN, lambda d, t: q.put(('upd_prog', d, t)),
+                                         lambda key: q.put(('upd_stage', key)))
+            except Exception as e:
+                q.put(('upd_failed', str(e) or type(e).__name__))
+                return
+            q.put(('upd_ready', cmd))
+        threading.Thread(target=work, daemon=True).start()
+
+    def upd_prog(done, total):
+        upd.update(state='load', done=done, total=total)
+        progress.configure(value=100 * done / total if total else 0)
+        refresh_upd()
+
+    def upd_stage(key):
+        upd['state'] = key
+        progress.configure(value=100)
+        refresh_upd()
+
+    def upd_ready(cmd):
+        upd['state'] = 'start'
+        refresh_upd()
+        try:
+            selfupdate.launch(cmd, HERE)
+        except Exception as e:
+            return upd_failed(str(e) or type(e).__name__)
+        root.after(400, root.destroy)
+
+    def upd_failed(err):
+        st['busy'] = False
+        upd.update(state='failed', err=err)
+        progress.configure(value=0)
+        refresh()
 
     def set_status(key, **kw):
         st['status'] = (key, kw)
@@ -273,7 +389,7 @@ def main_window():
     def toggle_details():
         st['details'] = not st['details']
         if st['details']:
-            log.grid(row=8, column=0, columnspan=3, sticky='nsew', pady=(10, 0))
+            log.grid(row=8, column=0, columnspan=4, sticky='nsew', pady=(10, 0))
         else:
             log.grid_remove()
         refresh()
@@ -310,7 +426,7 @@ def main_window():
                 toggle_details()
         else:
             set_status('done', n=n)
-        open_btn.grid(row=7, column=2, sticky='e', pady=(8, 0))
+        open_btn.grid(row=7, column=3, sticky='e', pady=(8, 0))
 
     def open_folder():
         p = str(PLUGINS)
@@ -329,7 +445,9 @@ def main_window():
         try:
             while True:
                 m = q.get_nowait()
-                {'scanned': scanned, 'line': write_log, 'step': step, 'finished': finished}[m[0]](*m[1:])
+                {'scanned': scanned, 'line': write_log, 'step': step, 'finished': finished,
+                 'upd_checked': upd_checked, 'upd_prog': upd_prog, 'upd_stage': upd_stage,
+                 'upd_ready': upd_ready, 'upd_failed': upd_failed}[m[0]](*m[1:])
         except queue.Empty:
             pass
         root.after(80, poll)
@@ -338,17 +456,35 @@ def main_window():
     det_btn['command'] = toggle_details
     patch_btn['command'] = start_patch
     open_btn['command'] = open_folder
+    upd_btn['command'] = upd_click
     lang_box.bind('<<ComboboxSelected>>', pick_lang)
     refresh()
     start_scan()
     poll()
+    old = os.environ.get('NUKED_P256_AFTER_UPDATE', '')
+    if old:
+        threading.Thread(target=selfupdate.after_update, args=(old, FROZEN), daemon=True).start()   # just updated
+    if upd_on and selfupdate.auto_check():
+        root.after(1500, lambda: start_check(False))
     root.mainloop()
+
+
+def option(name: str) -> str | None:
+    a = sys.argv
+    return a[a.index(name) + 1] if name in a and a.index(name) + 1 < len(a) else None
 
 
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == '--selftest':
-        sys.exit(selftest())
+        out = option('--selftest-out')
+        sys.exit(selftest(Path(out) if out else None))
     elif len(sys.argv) > 1 and sys.argv[1] == '--build':
         sys.exit(run_build(Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else HERE))
     else:
+        for opt, env in (('--update-dir', 'NUKED_P256_UPDATE_DIR'), ('--update-test-version', 'NUKED_P256_UPDATE_TEST_VERSION'),
+                         ('--after-update', 'NUKED_P256_AFTER_UPDATE')):
+            if option(opt) is not None:
+                os.environ[env] = option(opt)
+        if '--no-update-check' in sys.argv:
+            os.environ['NUKED_P256_NO_UPDATE_CHECK'] = '1'
         main_window()
