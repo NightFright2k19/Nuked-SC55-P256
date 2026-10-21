@@ -8,6 +8,11 @@ Apply them proactively, without needing to be reminded.
 - For every change, check whether `README.md` and/or the Autobuild Release Notes
   need to be updated. The release notes are the `body` of the "Create GitHub
   release" step in `.github/workflows/build.yml`.
+- `selfupdate.py` is the patcher's self-update (issue #89, standard library only): it finds the newest
+  release from the redirect of `releases/latest`, downloads `Nuked-SC55-P256-Patcher-r<N>-<system>` from
+  `releases/download/autobuild-r<N>/`, checks size/SHA-256/`--selftest --selftest-out`, then replaces the
+  running version. **The tag `autobuild-r<N>` and the asset names built in `build.yml` are a contract with
+  it: change them together.**
 - Required documentation changes belong in the same change (the same PR).
 - Never skip a documentation update without checking first. State the result of
   the check (updated, or not needed and why) in the PR.

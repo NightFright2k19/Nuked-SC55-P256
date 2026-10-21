@@ -14,6 +14,7 @@ on:
       - 'p256_builder.py'
       - 'patcher.py'
       - 'patcher_i18n.py'
+      - 'selfupdate.py'
       - '.github/workflows/build.yml'
   workflow_dispatch:
 
@@ -38,7 +39,7 @@ jobs:
       - name: Check Python syntax and templates
         run: |
           set -euo pipefail
-          python3 -m py_compile p256_builder.py patcher.py patcher_i18n.py
+          python3 -m py_compile p256_builder.py patcher.py patcher_i18n.py selfupdate.py
           python3 patcher.py --selftest
 
       - name: Next release number
@@ -101,6 +102,7 @@ jobs:
             --add-data "icons:icons" \
             ${ICON[@]+"${ICON[@]}"} \
             --hidden-import p256_builder --hidden-import patcher_i18n --hidden-import patcher_version \
+            --hidden-import selfupdate \
             patcher.py
           ls -la dist
 
@@ -176,6 +178,7 @@ jobs:
             - The plugins end up in `Plugins/CLAP` and `Plugins/VST2` next to the patcher.
             - The files are not signed: Windows SmartScreen and macOS Gatekeeper warn on the first start. See README.md ("The patcher") for how to start it anyway.
             - The generated plugins contain your ROMs. Do not share them.
+            - Once you have a release patcher running, it checks for newer Autobuilds itself and offers to update with one click (**Update**, left of **Show details**). See README.md ("The patcher") for details and how to turn the check off.
 
       - name: Remove the Pre-release label from older Autobuild releases (left over from earlier workflow versions)
         uses: actions/github-script@v8
