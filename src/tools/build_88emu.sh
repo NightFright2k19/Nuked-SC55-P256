@@ -4,7 +4,7 @@
 # usage: build_88emu.sh <target folder> <plug-in source folder>      (takes about 8-10 min, 1 core)
 set -e
 GM=${1:?Zielordner}; S=${2:?Plugin-Quellen}
-GM_COMMIT=${GM_COMMIT:-c8047e7a61a9a466e3cd9192157965856e774786} # default: recorded state
+GM_COMMIT=${GM_COMMIT:-b8e1a28d4efaa3764d875eb3118d881dba672a70} # default: recorded state
 fetch() { # <path> <url> <commit>
   rm -rf "$1"; git init -q "$1"; (cd "$1" && git remote add origin "$2" && git fetch -q --depth 1 origin "$3" && git checkout -q FETCH_HEAD)
 }
@@ -17,11 +17,11 @@ if [ ! -d "$GM/.git" ]; then
     '/source/axel/' '/source/waldi/' '/source/claudia/' '!/source/**/skins/'
   git fetch -q --depth 1 --filter=blob:none origin $GM_COMMIT; git checkout -q FETCH_HEAD
   echo "[2/5] Submodule"
-  fetch source/cpu/dsp56300 https://github.com/dsp56300/dsp56300 da2ff232d965c9c3da587820baae38e2b29a5879
+  fetch source/cpu/dsp56300 https://github.com/dsp56300/dsp56300 bf222a32c2bc19df3200f7a02a84e2dd2008f9f3
   fetch source/cpu/dsp56300/source/asmjit https://github.com/dsp56300/asmjit.git 3577608cab0bc509f856ebf6e41b2f9d9f71acc4
   fetch source/cpu/mc68k https://github.com/dsp56300/mc68k.git cc3693a23fde2ea97aec261198f9e6291ead5e5e
   git show HEAD:.gitmodules > /tmp/gm_modules
-  for m in "freetype 828916527ce4f69af722bce46ce54d289001a0bd" "lunasvg f8aabfb444bb37f69df7290790f57e4a27730a93" "RmlUi df1b3381f54426611e56f345a7e59813e2cfe88e" "cpp-terminal 43f5dc0061ce31ea0ddc8fd4cc1d65d83e33a232" "portmidi-latest 101dac9455e2718512c94e24cbcae6a6f34b908b"; do
+  for m in "freetype 828916527ce4f69af722bce46ce54d289001a0bd" "lunasvg f8aabfb444bb37f69df7290790f57e4a27730a93" "RmlUi 0c8e94e49e76ab5e40526aea62d22d21605e1125" "cpp-terminal 43f5dc0061ce31ea0ddc8fd4cc1d65d83e33a232" "portmidi-latest 101dac9455e2718512c94e24cbcae6a6f34b908b"; do
     set -- $m; fetch source/3rdparty/$1 "$(git config -f /tmp/gm_modules --get submodule.source/3rdparty/$1.url)" $2
   done
   fetch source/3rdparty/lunasvg/plutovg https://github.com/sammycage/plutovg.git 5e4712cf873b0c7829a4a6157763e2ad3ac49164
