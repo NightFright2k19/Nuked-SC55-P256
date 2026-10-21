@@ -83,7 +83,7 @@ This project started as a fork of John Novak's [Nuked-SC55-CLAP](https://github.
 - **Bit-exact timer and sub-MCU shortcuts** (Issue #28): the 8-bit timer skips whole counting cycles while all its interrupts are off (the SC-55mk2 runs it as a 6-cycle loop), and the SC-55mk2 sub-MCU takes its timer prescaler and interrupt checks in bulk. SC-55mk2 about 12 % and SC-55 about 9 % less CPU under full load, output still identical to the original core.
 - **Packing and wake logic:** notes fill the lowest awake instance first; a single awake instance renders directly in the audio thread without any threading overhead.
 - **Memory:** wave ROMs are shared between SC-55 units (one block, untouched pages cost nothing); the unused 4 MB LCD pixel buffer per unit is gone; 88emu units share one decoded wave ROM; the SC-88 and SC-88 Pro units no longer reserve the whole 1 MB / 16 MB address space of their H8/500 CPU, only what the firmware uses (about 15 MB less per unit, measured on Linux); the SC-8820 and SC-8850 read their wave ROM directly from the embedded image (no per-unit copy).
-- **Faster loading:** SC-55 units are cloned from unit 0 instead of each booting itself (SC-55mk2 load time 6.4 s to 0.6 s under Wine); SC-88 Pro units boot in the background.
+- **Faster loading:** SC-55 units are cloned from unit 0 instead of each booting itself (SC-55mk2 load time 6.4 s to 0.6 s under Wine); the units of the 88emu models boot in parallel inside the activation when every unit gets a core of its own (about as long as one unit alone, and nothing is left to wait for); on machines with fewer cores they boot in the background after unit 0, and a unit that is needed before its boot has finished makes the audio thread wait (a dropout of up to the boot time right after a re-activation).
 
 ### User interface (Windows)
 
@@ -368,7 +368,7 @@ The Roland SC-D70 has the sound engine of the SC-8820 and adds an audio interfac
 
 The SC-8850 plug-in uses the same 88emu core with the SC-8850 firmware (compile-time `NUKED_SC55_DEVICE_8850` on top of `NUKED_SC55_ENGINE_88PRO`, model index 7).
 
-- **Units:** 128 voices per unit (two XP chips), 2 units = 256 voices. The device runs at 32 kHz like the SC-88 Pro. A unit boots in about 2.7 s; with embedded ROMs the second unit boots in the background.
+- **Units:** 128 voices per unit (two XP chips), 2 units = 256 voices. The device runs at 32 kHz like the SC-88 Pro. A unit boots in about 2.7 s; with embedded ROMs the second unit boots in parallel with the first when there are enough cores, otherwise in the background.
 - **Four MIDI inputs, 64 parts (A01-D16):** CLAP note ports "MIDI IN A" to "MIDI IN D"; on VST2 (one input) the port select messages `F5 01` ... `F5 04` choose the port, as with the SC-88 Pro.
 - **GAIN:** -12 ... +12 dB, 0 dB in the middle (default). At 0 dB the output is raised by 7.5 dB to the level of the other plug-ins (RMS of E1M1, Animus and grabbag measured against SC-55 and SC-88 Pro).
 - **Front panel = the device's own panel:** all switches and the VALUE encoder go to unit 0, so the firmware's menus, LCD and LEDs work as on the hardware (EDIT, effects, drum edit, INST MAP, ...). 0.4 s after the last panel input that can edit something (not PART < >, EXIT, SHIFT, MUTE, SOLO or PREVIEW) the plug-in reads back the system and effect settings and the parts shown while editing (RQ1; all parts after ENTER, the drum maps only if DRUM was open) and sends what changed as DT1 to the other units and into the state log, so units that wake later play the same sounds. The requests go through unit 0's MIDI input, so a pass is kept small; reading all 64 parts took about 6 s and disturbed playback (Issue #13). Multi-byte parameters are always sent whole. A changed tone map (INST MAP) is followed by the part's tone number, because the firmware applies a tone map written by DT1 only when the part selects its tone again (Issue #17). Host data for the same part within 0.1 s wins.
@@ -475,7 +475,7 @@ All of these are optional.
 | `SOUNDCANVAS_ROM_PATH` | directories with ROM folders (external ROMs only; the OS path separator is the delimiter) |
 | `NUKED_SC55_NO_WARMER=1` | test switch: no background synchronisation |
 | `NUKED_SC55_NO_CLONE=1` | test switch (SC-55): every unit boots itself |
-| `NUKED_SC55_NO_BGBOOT=1` | test switch (SC-88 Pro): all units boot before start |
+| `NUKED_SC55_NO_BGBOOT=1` | test switch (88emu models): all units boot inside the activation, also on machines with fewer cores than units (the default there is the background boot) |
 | `NUKED_SC55_NO_DISPPACE=1` | test switch: display SysEx to all units, unpaced (old behaviour) |
 
 Build-time options (CMake cache variable or compiler define):
@@ -719,6 +719,7 @@ The development workbench contains the source, the complete patch series (`patch
 | `tools/exact/ref_orig`, `ref_new`, `verify.sh` | one emulator without plug-in: renders an event list and prints an FNV hash and CPU time; same hash = bit-exact |
 | `tools/test/play`, `e1`, `host`, `diag`, `peaks` | CLAP-level tests: polyphony test per round, event lists with CPU and voices per 10 s, scenarios (single note, 160-note flood, CTF, 256 retriggers, runtime limit), wake/sleep log with replay bytes and block time |
 | `tools/test/diag88`, `play88`, `peaks88`, `map88`, `tools/sc88probe/` | the same against the SC-88 Pro engine, including the map transitions |
+| `tools/test/reactstall88` | audio-thread stall after a re-activation (88emu models): plays silence for a given delay after each `activate()`, then a dense chord of 240 notes, and reports the activation time and the longest block; `REACTSTALL_NPROCS` pretends to have more CPUs |
 | `tools/winbuild/vsthost.exe`, `hostw.exe`, `clapgui.exe`, `guihost.exe`, `lcdhost.exe`, `guiload.exe` | Windows test hosts (run under Wine): VST2 / CLAP host, editor test with screenshots and menu, LCD screenshots at song times, CPU of the interface thread |
 | `tools/winbuild/polybench.exe` | Windows host for the worker pool: loads a finished plug-in (`.clap`), sets N awake units via `NUKED_SC55_POLY_VOICES` / `NUKED_SC55_POLY_DYNAMIC=0` and measures the wall time of the audio blocks against the CPU time of the process (speed-up, efficiency, loss against the ideal, blocks over budget); `--load K` adds K busy threads, `--events` plays an event list. `--soak` is a real-time long-run mode: it plays one or several plug-ins at the block rate of a host for hours and logs block times, private memory, handles, threads and GDI/USER objects once a minute, marks minutes with foreign CPU load and ends with trends per hour. Build line in the head of `polybench.cpp`. |
 | `tools/winbuild/panelhost.exe`, `mt32host.exe` | Windows test hosts (run under Wine): mouse actions on the panel with screenshots at song times (`NK_CHUNK` loads a state first, for example the MT-32 device); MT-32 / CM-32L: RMS per second, device switch during playback |

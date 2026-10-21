@@ -644,8 +644,13 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	}
 #endif
 #ifdef NUKED_SC55_EMBED_ROMS
-	// (only units that sleep may boot in the background: awake ones are rendered right away)
-	const bool background_boot = get_env_var("NUKED_SC55_NO_BGBOOT") != "1" && dynamic_instances;
+	// Sleeping units may boot in the background (awake ones are rendered right away), so that Activate() returns after
+	// the booting of unit 0. The audio thread then waits in Wake() for a unit that is needed before its boot has finished,
+	// which is a dropout of up to the boot time right after a re-activation (measured: 0.3-3.8 s). If every unit can boot
+	// on a core of its own (the worker pool has a thread for each), all units boot in parallel inside Activate() instead:
+	// that takes about as long as booting unit 0 alone, and nothing is left to wait for. The result is the same.
+	const int boot_cores = std::min(NumInstances(), static_cast<int>(std::thread::hardware_concurrency()) - 1);
+	const bool background_boot = get_env_var("NUKED_SC55_NO_BGBOOT") != "1" && dynamic_instances && boot_cores < NumInstances();
 #else
 	const bool background_boot = false; // ROM scan from files is not thread-safe
 #endif
@@ -659,7 +664,14 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	} else {
 		std::atomic<bool> boot_failed{false};
 #ifdef NUKED_SC55_EMBED_ROMS
-		pool.Run(NumInstances(), [&](int i) { if (!E88BootUnit(i)) boot_failed = true; });
+		// The units boot in parallel on threads of their own at normal priority, the calling thread boots one of them.
+		// (Not on the worker pool: its threads run at audio priority and would starve the audio threads of the host and
+		// of other plug-ins for the seconds the boots take.)
+		std::vector<std::thread> boot_pool;
+		for (int i = 1; i < NumInstances(); ++i)
+			boot_pool.emplace_back([&, i] { if (!E88BootUnit(i)) boot_failed = true; });
+		if (!E88BootUnit(0)) boot_failed = true;
+		for (auto& t : boot_pool) t.join();
 #else
 		for (int i = 0; i < NumInstances(); ++i) if (!E88BootUnit(i)) boot_failed = true;
 #endif

@@ -57,7 +57,7 @@ if [ -f $WB/gearmulator/build88/source/ronaldo/88emu/88lib/lib88emu.a ]; then
   P=$T/test/build88p; rm -rf $P; mkdir -p $P
   for f in nuked_sc55 plugin; do g++ -O2 -std=c++23 $D88 -I$S/include -I$S/src -I$S/build -I$I88 -c $S/src/$f.cpp -o $P/$f.o; done
   cp $(find $S/build -name '*.o' | grep -v -E "/nuked_sc55.cpp.o|/plugin.cpp.o") $P/
-  cd $T/test; for t in diag peaks play map88 ks88 panel88; do n=$t; [ $t = map88 ] || [ $t = ks88 ] || [ $t = panel88 ] || n=${t}88
+  cd $T/test; for t in diag peaks play reactstall map88 ks88 panel88; do n=$t; [ $t = map88 ] || [ $t = ks88 ] || [ $t = panel88 ] || n=${t}88
     g++ -O2 -std=c++23 $D88 -I$S/include -I$S/src -I$S/build -I$I88 $t.cpp $P/*.o $L88 -lspeexdsp -lpthread -ldl -o $n; done
   cd $T/sc88probe; for t in probe voices loop; do gcc -O2 -c $t.c -I$I88 -o $t.o && g++ $t.o $L88 -lpthread -ldl -o $t; done
 fi
