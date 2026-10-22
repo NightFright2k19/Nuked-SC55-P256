@@ -1339,8 +1339,13 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 			uint8_t port = 0;
 #ifdef NUKED_SC55_ENGINE_88PRO
 			if (midi_event->data[0] == 0xf5) { // port select: F5 01 = IN A, F5 02 = IN B (.. F5 04 = IN D)
-				if (midi_event->data[1] >= 1 && midi_event->data[1] <= kNumPorts)
-					selected_port = static_cast<uint8_t>(midi_event->data[1] - 1);
+				// Players with more ports than the device (FSMP: one per 16 channels of a
+				// 64-channel file) also send F5 03 / F5 04 to a 2-port device. Ignoring them let
+				// the following messages land on whatever port was selected last, so note-offs
+				// could reach another part than their note-ons: hanging notes (issue #92).
+				// Fold them onto the device's ports instead, so each port always maps to one.
+				if (midi_event->data[1] >= 1)
+					selected_port = static_cast<uint8_t>((midi_event->data[1] - 1) % kNumPorts);
 				break; // not passed on to the device
 			}
 			// further CLAP note ports = IN B (C, D); the first one: the port chosen by F5
@@ -3327,7 +3332,8 @@ void NukedSc55::ManageInstances(const int incoming_note_ons)
 	// has been silent for a while (incl. reverb tail) and the remaining
 	// awake ones keep a quarter unit of headroom. Waking is cheap thanks to
 	// the background warmer, so no large hysteresis is needed. Key ownership
-	// does not block sleeping: the instance is verifiably silent.
+	// does not block sleeping: the instance is verifiably silent. Its held
+	// keys stay with it and are settled when it wakes (ReleaseMissedKeys).
 	for (int i = NumInstances() - 1; i >= min_active; --i) {
 		auto& inst = instances[i];
 		if (!inst.awake) continue;
@@ -3336,7 +3342,6 @@ void NukedSc55::ManageInstances(const int incoming_note_ons)
 		// on this instance (e.g. an endless quiet release) is inaudible.
 		if (inst.silent_frames >= sleep_after_frames &&
 		    (above_limit || free - cap + router.MeasuredLoad(i) >= need + cap / 4)) {
-			router.ForgetInstance(i);
 			Sleep(i);
 			break;
 		}
@@ -3347,6 +3352,7 @@ void NukedSc55::Sleep(const int i)
 {
 	auto& inst     = instances[i];
 	inst.awake     = false;
+	router.HeldKeys(i, inst.keys_at_sleep);
 	inst.sleep_seq = state_log.Seq();
 	inst.sched_seq = inst.sleep_seq;
 	inst.queue.clear(); // (bytes still waiting for its MIDI buffer stay: they are state, fed on waking)
@@ -3357,6 +3363,38 @@ void NukedSc55::Sleep(const int i)
 	router.SetAwake(i, false);
 	++sleeps;
 	log("Poly: instance %d -> sleep", i);
+}
+
+// A unit may fall asleep while keys are still down on it, e.g. when a part
+// is faded out with CC7 = 0 under held notes. Their note-offs (or All Notes
+// Off) then reach only the awake units; without this the sleeping unit kept
+// the voices and they came back as hanging notes once it woke and the part
+// was turned up again (issue #92). Before its state is replayed, the unit
+// gets a note-off for every key released while it slept, and All Sound Off
+// on channels where it holds no key any more, so released voices are gone
+// at once instead of fading out audibly after the replay. Keys the host
+// still holds stay down, as on the hardware.
+// Returns the bytes to send, per input port.
+std::array<std::vector<uint8_t>, NukedSc55::kNumPorts> NukedSc55::ReleaseMissedKeys(const int i)
+{
+	std::array<std::vector<uint8_t>, kNumPorts> out;
+	auto& keys = instances[i].keys_at_sleep;
+	int last_lch = -1;
+	for (const auto key : keys) {
+		const int lch = key / 128, note = key % 128;
+		const int port = lch / 16;
+		if (port >= kNumPorts || router.OwnsKey(i, lch, note)) continue;
+		const auto ch = static_cast<uint8_t>(lch % 16);
+		out[port].insert(out[port].end(), {uint8_t(0x80 | ch), uint8_t(note), 0});
+#ifndef NUKED_SC55_DEVICE_LA // (the LA firmware ignores All Sound Off)
+		if (lch != last_lch && !router.OwnsKeysOn(i, lch)) {
+			out[port].insert(out[port].end(), {uint8_t(0xb0 | ch), 120, 0});
+		}
+#endif
+		last_lch = lch;
+	}
+	keys.clear();
+	return out;
 }
 
 void NukedSc55::Wake(const int i)
@@ -3375,6 +3413,14 @@ void NukedSc55::Wake(const int i)
 	inst.buf_r.clear();
 	{
 		size_t bytes = 0;
+		const auto released = ReleaseMissedKeys(i);
+		for (int port = 0; port < kNumPorts; ++port) {
+			if (released[port].empty()) continue;
+			emu88_parse_stream_on_port(inst.ctx, port, released[port].data(),
+			                           static_cast<uint32_t>(released[port].size()));
+			bytes += released[port].size();
+			replayed_bytes += static_cast<int>(released[port].size());
+		}
 		state_log.ForEachSince(inst.sleep_seq, [&](const StateLog::Entry& e) {
 #if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
 			if (StateLog::IsCm64Marker(e.bytes)) {
@@ -3415,6 +3461,10 @@ void NukedSc55::Wake(const int i)
 	}
 	inst.buf_l.clear();
 	inst.buf_r.clear();
+
+	const auto released = ReleaseMissedKeys(i);
+	PostToUnit(inst, std::span{released[0].data(), released[0].size()});
+	replayed_bytes += static_cast<int>(released[0].size());
 
 	// Replay what the instance missed since its last sync (compacted).
 	state_log.ForEachSince(inst.sleep_seq, [&](const StateLog::Entry& e) {

@@ -10,6 +10,8 @@
 //  - Re-trigger of a key that is still held on the same channel goes to the
 //    instance that already plays it (keeps the original firmware behaviour).
 //  - Note-off / poly aftertouch: go to the instance(s) that own the key.
+//    Keys held on an instance that goes to sleep stay owned by it, so the
+//    instance learns on waking which of them were released meanwhile.
 //  - Channels in mono mode (CC126) or with portamento on (CC65) are pinned
 //    to one instance, so legato/portamento work exactly as on the hardware.
 //  - Rhythm parts: notes of GS exclusive groups (hi-hats etc.) are pinned to
@@ -53,6 +55,7 @@ public:
 		load.assign(n, 0);
 		pending.assign(n, 0);
 		awake.assign(n, true);
+		awake_bits = all;
 		double_module = false; // the firmware starts in Mode 1
 		Reset();
 	}
@@ -97,6 +100,8 @@ public:
 	void SetAwake(int i, bool on)
 	{
 		awake[i] = on;
+		if (on) awake_bits |= Mask{1} << i;
+		else awake_bits &= ~(Mask{1} << i);
 		if (on) {
 			return;
 		}
@@ -119,13 +124,25 @@ public:
 		return false;
 	}
 	int MeasuredLoad(int i) const { return load[i] + pending[i] * 2; }
-	// Forget key ownership on an instance (it is verifiably silent): a held
-	// key without sounding voice must not keep the instance awake.
-	void ForgetInstance(int i)
+	// Keys an instance holds (logical channel * 128 + note). A sleeping
+	// instance keeps its keys: its firmware still has them down (e.g. a part
+	// faded out with CC7 = 0 while they were held, issue #92), and on waking
+	// it must release the ones whose note-off it missed.
+	void HeldKeys(int i, std::vector<uint16_t>& out) const
+	{
+		out.clear();
+		const Mask bit = Mask{1} << i;
+		for (int ch = 0; ch < NumChannels; ++ch)
+			for (int note = 0; note < 128; ++note)
+				if (owners[ch][note] & bit) out.push_back(static_cast<uint16_t>(ch * 128 + note));
+	}
+	bool OwnsKey(int i, int lch, int note) const { return (owners[lch][note] >> i) & 1; }
+	bool OwnsKeysOn(int i, int lch) const
 	{
 		const Mask bit = Mask{1} << i;
-		for (auto& ch : owners)
-			for (auto& m : ch) m &= ~bit;
+		for (const auto m : owners[lch])
+			if (m & bit) return true;
+		return false;
 	}
 
 	// Called before routing each block with the measured number of sounding
@@ -178,6 +195,7 @@ private:
 	Mask all = 1;
 	std::vector<int> load, pending;
 	std::vector<bool> awake;
+	Mask awake_bits = 1;
 	int rr = 0;
 
 	// Indexed by logical channel (port * 16 + MIDI channel)
@@ -271,13 +289,13 @@ private:
 			if (drum_home[ch] < 0) drum_home[ch] = Pick();
 			target = drum_home[ch];
 			why    = 2;
-		} else if (owners[ch][note] &&
-		           MeasuredLoad(std::countr_zero(owners[ch][note])) <=
-		                   capacity - 2) {
+		} else if (const Mask held = owners[ch][note] & awake_bits;
+		           held && MeasuredLoad(std::countr_zero(held)) <= capacity - 2) {
 			// key still held: re-trigger on the instance that owns it,
 			// as long as that instance has room (otherwise the firmware
-			// would steal a voice there while other instances are free)
-			target = std::countr_zero(owners[ch][note]);
+			// would steal a voice there while other instances are free);
+			// an owner that sleeps cannot take notes
+			target = std::countr_zero(held);
 			why    = 3;
 		} else {
 			target = Pick();
