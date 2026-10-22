@@ -140,6 +140,7 @@ private:
 		size_t uart_wait_pos = 0;
 		bool awake = true;               // dynamic instance management
 		uint64_t sleep_seq = 0;          // state-log position the instance is synced to
+		std::vector<uint16_t> keys_at_sleep; // keys held when it fell asleep (lch * 128 + note)
 		// background sync in progress (heap-allocated: keeps Instance movable)
 		// (number of queued or running jobs; the SC-55 engines have at most one)
 		uint64_t sched_seq = 0;          // 88emu: log position after the jobs already handed to the warmer
@@ -318,6 +319,9 @@ public:
 	static constexpr int kNumPorts = 1;
 #endif
 	static constexpr int kNumParts = kNumPorts * 16;
+private:
+	std::array<std::vector<uint8_t>, kNumPorts> ReleaseMissedKeys(int i);
+public:
 	std::array<UiPart, kNumParts> ui_parts;
 	std::atomic<int> ui_voices{0};      // sounding partials (all instances)
 	std::atomic<int> ui_awake{1};       // awake emulator instances
