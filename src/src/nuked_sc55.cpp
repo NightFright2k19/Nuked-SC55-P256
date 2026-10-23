@@ -1406,6 +1406,10 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 				xg.SysEx(msg, port, xo);
 				if (!xo.pass) {
 					if (xo.count == 0) break; // an XG message the SC-8820 does not understand
+					if (xo.m[0].b[0] < 0xf0) { // translated to channel messages (part sends)
+						for (int i = 0; i < xo.count; ++i) EmitXg(xo.m[static_cast<size_t>(i)], port, render_frame);
+						break;
+					}
 					xg_sysex = xo.m[0];
 					msg      = {xg_sysex.b.data(), xg_sysex.n};
 					if (StateLog::IsReset(msg)) // XG System On became a GS Reset: the firmware needs 0.1 s

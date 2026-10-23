@@ -12,7 +12,9 @@
 //  - XG SysEx (F0 43 1n 4C ..): System On becomes a GS Reset; Master Volume, Part Mode and Drum
 //    Part Protect are translated; everything else is dropped (not understood by the unit).
 //  - GM On / GM Off / GM2 On / GS Reset from the host end XG mode.
-// Not translated yet: the XG variation banks (LSB) fall back to the basic voice, effects.
+//  - XG effects: reverb type / return, chorus type / return and the part sends are translated to the
+//    GS reverb / chorus macros and CC 91 / 93; the XG variation and insertion effects are dropped.
+// Not translated yet: the XG variation banks (LSB) fall back to the basic voice.
 //
 // Pure functions of the incoming message and the translator's own per-part state, so it can be
 // tested without an emulator (tools/test/xg_translate_test.cpp).
@@ -90,6 +92,35 @@ constexpr uint8_t SfxKit(int prog)
 // GS variation (Bank Select MSB of the SC-8820) for an XG melody voice. The XG variation banks
 // (LSB) are not mapped yet: every voice falls back to its basic voice (variation 0).
 constexpr uint8_t Variation(int /*xg_msb*/, int /*xg_lsb*/, int /*prog*/) { return 0; }
+
+// GS reverb macro (40 01 30) for an XG reverb type (MSB, LSB); -1 = no matching GS type.
+// GS: 0 Room 1, 1 Room 2, 2 Room 3, 3 Hall 1, 4 Hall 2, 5 Plate. XG LSB counts the sub types in order.
+constexpr int ReverbMacro(int msb, int lsb)
+{
+	switch (msb) {
+	case 1: return lsb == 0 ? 3 : 4;                  // Hall 1, Hall 2
+	case 2: return lsb == 0 ? 0 : (lsb == 1 ? 1 : 2); // Room 1-3
+	case 3: return lsb == 0 ? 3 : 4;                  // Stage 1, 2 -> Hall 1, 2
+	case 4: return 5;                                 // Plate
+	case 16: return 2;                                // White Room
+	case 17: case 18: return 4;                       // Tunnel, Canyon
+	case 19: return 0;                                // Basement
+	default: return -1;
+	}
+}
+
+// GS chorus macro (40 01 38) for an XG chorus type (MSB, LSB); -1 = no matching GS type.
+// GS: 0-3 Chorus 1-4, 4 Feedback Chorus, 5 Flanger, 6 Short Delay, 7 Short Delay (FB).
+constexpr int ChorusMacro(int msb, int lsb)
+{
+	switch (msb) {
+	case 0x41: return lsb < 4 ? lsb : 3;  // Chorus 1-4
+	case 0x42: case 0x44: return 4;       // Celeste, Symphonic -> Feedback Chorus
+	case 0x43: case 0x48: return 5;       // Flanger, Phaser -> Flanger
+	case 0x57: return 3;                  // Ensemble Detune -> Chorus 4
+	default: return -1;
+	}
+}
 
 // GS part block x (the "1x" in 40 1x 15) of a MIDI channel
 constexpr uint8_t PartBlock(int ch) { return static_cast<uint8_t>(ch == 9 ? 0 : (ch < 9 ? ch + 1 : ch)); }
@@ -181,6 +212,18 @@ public:
 			protect = data != 0;
 		} else if (a1 == 0x00 && a2 == 0x00 && a3 == 0x04) { // Master Volume -> GS 40 00 04
 			out.AddDt1(0x40, 0x00, 0x04, data & 0x7f);
+		} else if (a1 == 0x02 && a2 == 0x01 && a3 == 0x00 && m.size() >= 10) { // Reverb Type (MSB, LSB)
+			const int t = ReverbMacro(m[7] & 0x7f, m[8] & 0x7f);
+			if (t >= 0) out.AddDt1(0x40, 0x01, 0x30, static_cast<uint8_t>(t));
+		} else if (a1 == 0x02 && a2 == 0x01 && a3 == 0x20 && m.size() >= 10) { // Chorus Type (MSB, LSB)
+			const int t = ChorusMacro(m[7] & 0x7f, m[8] & 0x7f);
+			if (t >= 0) out.AddDt1(0x40, 0x01, 0x38, static_cast<uint8_t>(t));
+		} else if (a1 == 0x02 && a2 == 0x01 && a3 == 0x0c) { // Reverb Return -> GS Reverb Level
+			out.AddDt1(0x40, 0x01, 0x33, data & 0x7f);
+		} else if (a1 == 0x02 && a2 == 0x01 && a3 == 0x2c) { // Chorus Return -> GS Chorus Level
+			out.AddDt1(0x40, 0x01, 0x3a, data & 0x7f);
+		} else if (a1 == 0x08 && a2 < 16 && (a3 == 0x12 || a3 == 0x13)) { // Part Chorus / Reverb Send -> CC 93 / 91
+			out.Add({static_cast<uint8_t>(0xb0 | a2), static_cast<uint8_t>(a3 == 0x12 ? 93 : 91), static_cast<uint8_t>(data & 0x7f)});
 		} else if (a1 == 0x08 && a2 < 16 && a3 == 0x07 && port >= 0 && port < kMaxPorts) { // Part Mode
 			const int part = port * 16 + a2;
 			SetRhythm(part, a2, data == 0 ? 0 : (a2 == 9 ? 1 : 2), out);
