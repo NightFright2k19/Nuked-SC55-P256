@@ -158,20 +158,50 @@ def walk_files(root: Path, skip=()):
             yield Path(dirpath) / name
 
 
-def scan_roms(root: Path = ROMS, skip=()):
-    """Known ROM files below root: {(model, role): path}."""
+def scan_roms(root: Path = ROMS, skip=(), notes=None):
+    """Known ROM files below root: {(model, role): path}.
+    notes (optional list) receives (kind, file, text) for files that look like ROMs but were not accepted:
+    kind "unreadable" (right size, cannot be read) or "unknown" (right size, .bin/.rom, checksum not known)."""
     found = {}
     for f in walk_files(root, skip):
         try:
             if not f.is_file() or f.stat().st_size not in SIZES:
                 continue
-            data = f.read_bytes()
         except OSError:
+            continue
+        try:
+            data = f.read_bytes()
+        except OSError as e:
+            if notes is not None:
+                notes.append(("unreadable", f, str(e)))
             continue
         key = KNOWN.get(hashlib.sha256(data).hexdigest()) or KNOWN_MD5.get(hashlib.md5(data).hexdigest())
         if key and key not in found:
             found[key] = f
+        elif not key and notes is not None and f.suffix.lower() in (".bin", ".rom"):
+            notes.append(("unknown", f, ""))
     return found
+
+
+def note_lines(items, notes, limit=10):
+    """Hint lines for scan notes. Unreadable files are always listed, unknown checksums only while a model
+    is incomplete (a damaged ROM would otherwise just be 'missing'), at most `limit` of them."""
+    lines = [f"[!!] {f.name}: cannot be read (cloud file not downloaded?): {text}"
+             for kind, f, text in notes if kind == "unreadable"]
+    unknown = [f for kind, f, _ in notes if kind == "unknown"]
+    if unknown and any(it["missing"] for it in items):
+        lines += [f"[!!] {f.name}: size fits a ROM, but the checksum is not known (damaged file or unknown version)"
+                  for f in unknown[:limit]]
+        if len(unknown) > limit:
+            lines.append(f"[!!] ... and {len(unknown) - limit} more files with a ROM size and an unknown checksum")
+    return lines
+
+
+def lenient_output():
+    """Console encodings without the characters of a path must not abort the output."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
 
 
 def fill_template(template: bytes, entries, name: str) -> bytes:
@@ -392,6 +422,7 @@ def build_model(item, templates: Path = TEMPLATES, output: Path = OUTPUT):
 
 
 def main() -> int:
+    lenient_output()
     print("Nuked SC-55 / Emu SC-88 / SC-8820 / SC-8850 / MT-32 P256 - Plugin Builder\n")
     if not ROMS.is_dir():
         print(f"Folder missing: {ROMS}\n-> Put your ROM files there (subfolders are allowed).")
@@ -400,7 +431,11 @@ def main() -> int:
         print("Note: Nuked-SC55.clap is not required (the P256 functions are newer code,\n"
               "      the original file cannot be patched for this purpose). The build is created from 'templates'.\n")
     built = 0
-    for item in plan(scan_roms()):
+    notes = []
+    items = plan(scan_roms(notes=notes))
+    for line in note_lines(items, notes):
+        print(line)
+    for item in items:
         title, tpl_name = item["title"], item["file"]
         if item["missing"]:
             if any(item["have"].values()):

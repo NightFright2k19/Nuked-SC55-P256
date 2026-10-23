@@ -68,12 +68,17 @@ def system_language(known) -> str:
     return 'en'
 
 
-def scan(folder: Path):
-    """Model list (p256_builder.plan) for the ROM files below folder."""
+def scan(folder: Path, notes=None):
+    """Model list (p256_builder.plan) for the ROM files below folder; notes (list) receives the hints
+    of p256_builder.note_lines."""
     skip = [PLUGINS]
     if not FROZEN:                              # running from the repository: skip its own files
         skip += [CODE / 'templates', CODE / 'src', CODE / '.git']
-    return builder.plan(builder.scan_roms(folder, skip))
+    found_notes = []
+    items = builder.plan(builder.scan_roms(folder, skip, found_notes))
+    if notes is not None:
+        notes += builder.note_lines(items, found_notes)
+    return items
 
 
 def build(items, log):
@@ -95,7 +100,11 @@ def build(items, log):
 
 def run_build(folder: Path) -> int:
     print(f'{NAME} {VERSION}\n')
-    items = scan(folder)
+    builder.lenient_output()
+    notes = []
+    items = scan(folder, notes)
+    for line in notes:
+        print(line)
     for it in items:
         if it['missing'] and any(it['have'].values()):
             print(f"[--] {it['title']}: incomplete, missing: {', '.join(it['missing'])}")
@@ -369,7 +378,11 @@ def main_window():
 
         def work():
             try:
-                q.put(('scanned', scan(st['folder'])))
+                notes = []
+                items = scan(st['folder'], notes)
+                for line in notes:
+                    q.put(('line', line + '\n'))
+                q.put(('scanned', items))
             except Exception as e:
                 q.put(('line', f'{e}\n'))
                 q.put(('scanned', []))

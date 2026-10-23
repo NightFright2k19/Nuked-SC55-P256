@@ -4,6 +4,11 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r61: Clearer hints for unreadable or damaged ROM files (2026-10-23)
+
+- The patcher's details log and `--build` name ROM files that cannot be read (for example cloud files that are not downloaded) and files with a ROM size but an unknown checksum (damaged file or unknown version).
+- `--build` no longer aborts on consoles whose encoding lacks characters of the path [#88].
+
 ## r60: Version history and "What's new?" link (2026-10-23)
 
 - New version history (this file), release titles say what changed, and the patcher has a **What's new?** link to it [#94].
