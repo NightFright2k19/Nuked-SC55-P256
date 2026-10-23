@@ -39,7 +39,7 @@ All panels are Windows-only (Win32/GDI), 918 x 280 px, 30 frames per second, and
 | Device (MT-32) | MT-32 (old, v1.xx) / MT-32 (new, v2.xx) / CM-32L (v1.xx, default): boots the units again as that device; stored in the state (`dev=0..2`). Devices without ROMs are greyed out. A left click on the name in the panel switches too |
 | Send Reset (MT-32) | All parameters reset |
 | Max polyphony | 24 / 48 / 64 / 96 / 128 / 160 / 192 / 224 / 256 (SC-55mk2: 28 / 56 / ...) |
-| Send Reset | submenu MT-32 / GM / GS / GM2 (SC-8850, SC-8820), MT-32 / GM / GS (others): clicking an entry sends that reset to all units (nothing is marked or stored) |
+| Send Reset | submenu MT-32 / GM / GS / GM2 (SC-8850), MT-32 / GM / GS / XG / GM2 (SC-8820), MT-32 / GM / GS (others): clicking an entry sends that reset to all units (nothing is marked or stored). XG sends a GS Reset and turns on the [XG mode](models.md#xg-mode-sc-8820) of the SC-8820 |
 | System Mode (SC-88, SC-88 Pro) | submenu Mode 1 (Single Module) / Mode 2 (Double Module): sends System Mode Set (`F0 41 10 42 12 00 00 7F 0n ..`) to all units and marks it (default Mode 1 = factory setting, stored in the state) |
 | All notes off | stops all sounding notes |
 | Tone map (SC-88) | SC-55 / SC-88 (default SC-88) for all parts: ALL + INST MAP on every unit; stored in the state (`map=0..1`), kept over GS resets |

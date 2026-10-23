@@ -4,6 +4,11 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r63: XG mode for the SC-8820 (2026-10-23)
+
+- New **XG** entry in SETUP > Send Reset of the SC-8820: files written for Yamaha XG play with fitting sounds. Bank Select and Program Change are translated (XG drum kits to SC-8820 drum sets, drum parts on other channels), XG System On and Master Volume are understood, XG reverb / chorus type and return and the part sends are translated to the GS effects, other XG SysEx is dropped. XG variation banks play as their basic voice [#95].
+- Fixed a rare hang or very long render when events held back after a reset (such as the one after XG System On) were released late: their time offset could underflow. Applies to all models.
+
 ## r62: Clearer hints for unreadable or damaged ROM files (2026-10-23)
 
 - The patcher's details log and `--build` name ROM files that cannot be read (for example cloud files that are not downloaded) and files with a ROM size but an unknown checksum (damaged file or unknown version).

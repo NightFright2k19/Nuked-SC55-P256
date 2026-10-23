@@ -444,6 +444,7 @@ void ShowSetupMenu(Editor& e)
         AppendMenuW(rt_menu, MF_STRING, 10, L"MT-32");
         AppendMenuW(rt_menu, MF_STRING, 6, L"GM");
         AppendMenuW(rt_menu, MF_STRING, 2, L"GS");
+        if (p.HasXg()) AppendMenuW(rt_menu, MF_STRING, 12, L"XG");
         if (p.HasGm2()) AppendMenuW(rt_menu, MF_STRING, 7, L"GM2");
         AppendMenuW(m, MF_POPUP, (UINT_PTR)rt_menu, T(L"Send Reset", L"Reset senden"));
     }
@@ -505,7 +506,7 @@ void ShowSetupMenu(Editor& e)
     } else if (cmd >= 100) {
         p.SetMaxVoices(cmd - 100); // stored in the plugin state by the host
         p.NotifyStateChanged();
-    } else if (cmd == 1 || cmd == 2 || cmd == 6 || cmd == 7 || cmd == 10 || cmd == 11) { // all notes off, resets
+    } else if (cmd == 1 || cmd == 2 || cmd == 6 || cmd == 7 || cmd == 10 || cmd == 11 || cmd == 12) { // all notes off, resets
         p.ui_command = cmd;
 #ifdef NUKED_SC55_DEVICE_LA
     } else if (cmd >= 30 && cmd < 30 + NukedSc55::kLaDevices) { // device, stored in the state

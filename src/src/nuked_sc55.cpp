@@ -997,11 +997,15 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	for (; released < held_events.size(); ++released) {
 		auto& h = held_events[released];
 		if (h.frame >= render_frame_count + num_render_frames) break;
+		// An event held in the block where the hold ends (its frame is before this block) is due at once:
+		// a negative offset would wrap to ~4 billion frames and the unit would emulate for ever (seen with
+		// an XG file whose XG System On is followed closely by notes)
+		const auto offset = static_cast<uint32_t>(h.frame > render_frame_count ? h.frame - render_frame_count : 0);
 		if (h.midi.header.type == CLAP_EVENT_MIDI_SYSEX) {
 			h.sysex.buffer = h.bytes.data();
-			block_events.push_back({&h.sysex.header, static_cast<uint32_t>(h.frame - render_frame_count)});
+			block_events.push_back({&h.sysex.header, offset});
 		} else {
-			block_events.push_back({&h.midi.header, static_cast<uint32_t>(h.frame - render_frame_count)});
+			block_events.push_back({&h.midi.header, offset});
 		}
 	}
 	for (uint32_t i = 0; i < num_events; ++i) {
@@ -1365,6 +1369,15 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 #endif
 #ifdef NUKED_SC55_DEVICE_8820
 			if (!injecting) ui_midi_in.fetch_add(1, std::memory_order_relaxed);
+			if (!injecting && xg.Enabled() && (status == ControlChange || status == ProgramChange)) {
+				// XG mode: Bank Select is held back and sent as GS bank / map with the Program Change
+				XgTranslate::Out xo;
+				xg.Short(midi_event->data, len, port, xo);
+				if (!xo.pass) {
+					for (int i = 0; i < xo.count; ++i) EmitXg(xo.m[static_cast<size_t>(i)], port, render_frame);
+					break;
+				}
+			}
 #endif
 			state_log.AddShort(midi_event->data, port);
 			UiTrackShort(midi_event->data, port);
@@ -1379,12 +1392,31 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 			const auto sysex_event =
 			        reinterpret_cast<const clap_event_midi_sysex*>(event);
 
-			const std::span msg{sysex_event->buffer, sysex_event->size};
+			std::span<const uint8_t> msg{sysex_event->buffer, sysex_event->size};
 			uint8_t port = 0;
 #ifdef NUKED_SC55_ENGINE_88PRO
 			if (sysex_event->port_index >= 1 && sysex_event->port_index < kNumPorts)
 				port = static_cast<uint8_t>(sysex_event->port_index);
 			else port = selected_port;
+#endif
+#ifdef NUKED_SC55_DEVICE_8820
+			XgTranslate::Msg xg_sysex; // replacement for an XG message, must outlive msg
+			if (!injecting) {
+				XgTranslate::Out xo;
+				xg.SysEx(msg, port, xo);
+				if (!xo.pass) {
+					if (xo.count == 0) break; // an XG message the SC-8820 does not understand
+					if (xo.m[0].b[0] < 0xf0) { // translated to channel messages (part sends)
+						for (int i = 0; i < xo.count; ++i) EmitXg(xo.m[static_cast<size_t>(i)], port, render_frame);
+						break;
+					}
+					xg_sysex = xo.m[0];
+					msg      = {xg_sysex.b.data(), xg_sysex.n};
+					if (StateLog::IsReset(msg)) // XG System On became a GS Reset: the firmware needs 0.1 s
+						hold_until = std::max(hold_until, render_frame_count + render_frame +
+						                                          static_cast<uint64_t>(render_sample_rate_hz * 0.1));
+				}
+			}
 #endif
 			if (disp_pace && IsDisplaySysEx(msg)) {
 #ifdef NUKED_SC55_DEVICE_8850
@@ -2127,8 +2159,9 @@ void NukedSc55::HandleUiCommands()
 				}
 			}
 		}
-	} else if (cmd == 2 || cmd == 6 || (cmd == 7 && HasGm2()) || ((cmd == 8 || cmd == 9) && HasSystemMode())) {
-		// SETUP menu "Send Reset" (GM / GS / GM2) and "System Mode" (Mode 1 / Mode 2)
+	} else if (cmd == 2 || cmd == 6 || (cmd == 7 && HasGm2()) || (cmd == 12 && HasXg()) ||
+	           ((cmd == 8 || cmd == 9) && HasSystemMode())) {
+		// SETUP menu "Send Reset" (GM / GS / XG / GM2) and "System Mode" (Mode 1 / Mode 2)
 		static const uint8_t gm[]  = {0xf0, 0x7e, 0x7f, 0x09, 0x01, 0xf7};
 		static const uint8_t gs[]  = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x40,
 		                              0x00, 0x7f, 0x00, 0x41, 0xf7};
@@ -2143,8 +2176,10 @@ void NukedSc55::HandleUiCommands()
 		case 7: msg = gm2; break;
 		case 8: msg = md1; system_mode = 0; break;
 		case 9: msg = md2; system_mode = 1; break;
-		default: msg = gs; break;
+		default: msg = gs; break; // GS, and XG (a GS Reset, then XG mode: GM2 would switch the SC-8820 to its GM2 sound map)
 		}
+		if (cmd == 12) xg.Enable();
+		else xg.Disable();
 		// Mode 2 (Double Module): GM On / GS Reset reach only the part group of the MIDI IN
 		// they arrive on, so the menu sends them on IN A and IN B to reset the whole module
 		const int ports = (cmd != 8 && cmd != 9 && state_log.DoubleModule()) ? 2 : 1;
@@ -2176,6 +2211,29 @@ double NukedSc55::ResetSettleSeconds(const StateLog::Entry& e)
 	return (m.size() >= 10 && m[1] == 0x41 && m[5] == 0x00 && m[6] == 0x00 && m[7] == 0x7f) ? 0.2 : 0.06;
 }
 #endif
+
+bool NukedSc55::HasXg() const
+{
+#ifdef NUKED_SC55_DEVICE_8820
+	return true;
+#else
+	return false;
+#endif
+}
+
+// Audio thread: one message of the XG translation, handled like one from the host
+void NukedSc55::EmitXg(const XgTranslate::Msg& m, const uint8_t port, const uint32_t render_frame)
+{
+	if (m.b[0] == 0xf0) {
+		const std::span<const uint8_t> msg{m.b.data(), m.n};
+		state_log.AddSysEx(msg, port);
+		QueueMidi(router.RouteSysEx(msg, port), msg.data(), msg.size(), render_frame, port);
+	} else {
+		state_log.AddShort(m.b.data(), port);
+		UiTrackShort(m.b.data(), port);
+		QueueMidi(router.RouteShort(m.b.data(), port), m.b.data(), m.n, render_frame, port);
+	}
+}
 
 bool NukedSc55::HasGm2() const
 {

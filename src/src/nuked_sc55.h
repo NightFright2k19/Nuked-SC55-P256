@@ -31,6 +31,7 @@
 #include "c_interface.h" // 88emu (Gearmulator, GPLv3)
 #endif
 #include "state_log.h"
+#include "xg_translate.h"
 
 // Simple persistent worker pool: runs fn(0..count-1) in parallel, the
 // calling (audio) thread participates. No allocations in Run().
@@ -327,10 +328,14 @@ public:
 	std::atomic<int> ui_awake{1};       // awake emulator instances
 	std::atomic<int> max_voices{256};   // user limit (setup menu)
 	std::atomic<int> ui_command{0};     // 1 = all sound off, 2 = GS reset, 3/4 = PART </> button, 5 = ALL button (SC-88 Pro),
-	                                    // 6 = GM reset, 7 = GM2 reset (SC-8850), 8/9 = System Mode 1/2 (SC-88, SC-88 Pro)
+	                                    // 6 = GM reset, 7 = GM2 reset (SC-8850), 8/9 = System Mode 1/2 (SC-88, SC-88 Pro),
+	                                    // 12 = XG reset (SC-8820: GS reset, then XG mode)
 	// SETUP menu "System Mode" (SC-88, SC-88 Pro; last mode set from the menu): 0 = Mode 1, 1 = Mode 2
 	std::atomic<int> system_mode{0}; // default Mode 1 (factory setting)
 	bool HasGm2() const;
+	bool HasXg() const; // XG mode (SC-8820): XG Bank Select / Program Change / SysEx are translated, issue #95
+	XgTranslate::Translator xg; // audio thread only
+	void EmitXg(const XgTranslate::Msg& m, uint8_t port, uint32_t render_frame);
 	bool HasSystemMode() const;
 	// Plugin settings as text (CLAP state, VST2 chunk)
 	static constexpr size_t kStateSize = 128;
