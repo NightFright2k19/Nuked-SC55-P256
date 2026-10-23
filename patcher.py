@@ -14,7 +14,7 @@
 #   it with the Update button (selfupdate.py); --no-update-check (or NUKED_P256_NO_UPDATE_CHECK=1) leaves out
 #   the check at the start. Test options: --update-dir <folder with release files>, --update-test-version r<N>;
 #   --after-update <old> is used by the update itself.
-import sys, os, threading, queue, subprocess, locale
+import sys, os, threading, queue, subprocess, locale, webbrowser
 from pathlib import Path
 
 FROZEN = getattr(sys, 'frozen', False)
@@ -33,6 +33,7 @@ TEMPLATES = CODE / 'templates'
 ICONS = CODE / 'icons'
 ICON_FILES = ('patcher_16.png', 'patcher_32.png', 'patcher.png')   # window icon (Tk picks the best size)
 PLUGINS = HERE / 'Plugins'
+CHANGELOG_URL = 'https://github.com/NightFright2k19/Nuked-SC55-P256/blob/main/docs/changelog.md'
 NAME = 'Nuked SC-55 P256 Patcher'
 
 
@@ -197,8 +198,14 @@ def main_window():
     progress = ttk.Progressbar(frame, mode='determinate')
     progress.grid(row=4, column=0, columnspan=4, sticky='ew', pady=(8, 0))
     ttk.Separator(frame).grid(row=5, column=0, columnspan=4, sticky='ew', pady=10)
-    status = ttk.Label(frame, wraplength=330)
-    status.grid(row=6, column=0, sticky='w')
+    status_box = ttk.Frame(frame)
+    status_box.grid(row=6, column=0, sticky='w')
+    status = ttk.Label(status_box, wraplength=330)
+    status.pack(anchor='w')
+    whats_new = ttk.Label(status_box, foreground='#0b57d0', cursor='hand2',
+                          font=('TkDefaultFont', 9, 'underline'))
+    whats_new.pack(anchor='w', pady=(6, 0))
+    whats_new.bind('<Button-1>', lambda e: webbrowser.open(CHANGELOG_URL))
     det_btn = ttk.Button(frame)
     det_btn.grid(row=6, column=2, sticky='e', padx=6)
     patch_btn = ttk.Button(frame, width=14)
@@ -220,6 +227,7 @@ def main_window():
 
     def refresh():
         intro['text'] = T('intro', 70)
+        whats_new['text'] = T('whats_new')
         box['text'] = T('files')
         folder_lbl['text'] = T('folder') + ':'
         folder_val['text'] = str(st['folder'])

@@ -37,6 +37,7 @@ LANGUAGES = {
 
 TEXT = {
     'en': {
+        'whats_new': "What's new?",
         'intro': 'Creates the plugins (CLAP + VST2, Windows x64) from your own ROM files.',
         'files': 'ROM files', 'folder': 'Folder', 'browse': 'Change…',
         'complete': 'complete', 'complete_ctf': 'complete (CTF is applied)',
@@ -62,6 +63,7 @@ TEXT = {
         'upd_checking': 'Checking for updates…',
     },
     'de': {
+        'whats_new': 'Was ist neu?',
         'intro': 'Erstellt die Plugins (CLAP + VST2, Windows x64) aus deinen eigenen ROM-Dateien.',
         'files': 'ROM-Dateien', 'folder': 'Ordner', 'browse': 'Ändern…',
         'complete': 'vollständig', 'complete_ctf': 'vollständig (CTF wird angewendet)',

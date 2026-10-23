@@ -9,7 +9,9 @@ Apply them proactively, without needing to be reminded.
   the compact user-facing page (purpose, install/patcher usage, SETUP menu overview, credits, license);
   all technical details live in the topic files under `docs/` (index at the end of the README). Put
   technical changes in the matching `docs/*.md` file, and touch the README only when essential user
-  information changes. Also check the Autobuild Release Notes, which are the version history. The release notes are the `body` of the "Create GitHub
+  information changes. The version history is `docs/changelog.md`: every change that triggers an Autobuild
+  adds an entry at the top (`## r<N>: <title>`, N = newest release number + 1); the release workflow uses its title
+  for the release name. Also check the fixed text of the Autobuild Release Notes, the `body` of the "Create GitHub
   release" step in `.github/workflows/build.yml`.
 - `selfupdate.py` is the patcher's self-update (issue #89, standard library only): it finds the newest
   release from the redirect of `releases/latest`, downloads `Nuked-SC55-P256-Patcher-r<N>-<system>` from
