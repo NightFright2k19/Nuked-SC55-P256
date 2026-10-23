@@ -7,6 +7,7 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 ## r63: XG mode for the SC-8820 (2026-10-23)
 
 - New **XG** entry in SETUP > Send Reset of the SC-8820: files written for Yamaha XG play with fitting sounds. Bank Select and Program Change are translated (XG drum kits to SC-8820 drum sets, drum parts on other channels), XG System On and Master Volume are understood, other XG SysEx is dropped. XG variation banks and XG effects are not translated yet [#95].
+- Fixed a rare hang or very long render when events held back after a reset (such as the one after XG System On) were released late: their time offset could underflow. Applies to all models.
 
 ## r62: Clearer hints for unreadable or damaged ROM files (2026-10-23)
 

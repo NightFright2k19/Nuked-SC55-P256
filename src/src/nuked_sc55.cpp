@@ -997,11 +997,15 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	for (; released < held_events.size(); ++released) {
 		auto& h = held_events[released];
 		if (h.frame >= render_frame_count + num_render_frames) break;
+		// An event held in the block where the hold ends (its frame is before this block) is due at once:
+		// a negative offset would wrap to ~4 billion frames and the unit would emulate for ever (seen with
+		// an XG file whose XG System On is followed closely by notes)
+		const auto offset = static_cast<uint32_t>(h.frame > render_frame_count ? h.frame - render_frame_count : 0);
 		if (h.midi.header.type == CLAP_EVENT_MIDI_SYSEX) {
 			h.sysex.buffer = h.bytes.data();
-			block_events.push_back({&h.sysex.header, static_cast<uint32_t>(h.frame - render_frame_count)});
+			block_events.push_back({&h.sysex.header, offset});
 		} else {
-			block_events.push_back({&h.midi.header, static_cast<uint32_t>(h.frame - render_frame_count)});
+			block_events.push_back({&h.midi.header, offset});
 		}
 	}
 	for (uint32_t i = 0; i < num_events; ++i) {
