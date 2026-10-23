@@ -146,11 +146,35 @@ jobs:
       - name: List assets
         run: ls -la assets
 
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: docs/changelog.md
+          sparse-checkout-cone-mode: false
+
+      - name: Release title from the version history
+        id: title
+        env:
+          REVISION: ${{ needs.version.outputs.revision }}
+        run: |
+          set -euo pipefail
+          name="Autobuild r${REVISION}"
+          # The top entry of docs/changelog.md is "## r<N>: <title> (<date>)"; it names this release if N matches.
+          top=$(grep -m1 '^## r[0-9]' docs/changelog.md || true)
+          if [[ "$top" =~ ^##\ r${REVISION}:\ (.*)$ ]]; then
+            title="${BASH_REMATCH[1]}"
+            title="${title% (*)}"
+            name="${name}: ${title}"
+          else
+            echo "::warning::docs/changelog.md has no top entry for r${REVISION}"
+          fi
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ needs.version.outputs.tag }}
-          name: Autobuild r${{ needs.version.outputs.revision }}
+          name: ${{ steps.title.outputs.name }}
           prerelease: false
           makeLatest: true
           artifacts: assets/*
@@ -178,6 +202,7 @@ jobs:
             - The plugins end up in `Plugins/CLAP` and `Plugins/VST2` next to the patcher.
             - The files are not signed: Windows SmartScreen and macOS Gatekeeper warn on the first start. See docs/patcher.md ("The patcher") for how to start it anyway.
             - The generated plugins contain your ROMs. Do not share them.
+            - What changed in each version: [docs/changelog.md](https://github.com/${{ github.repository }}/blob/main/docs/changelog.md) (the patcher links to it: **What's new?**).
             - Once you have a release patcher running, it checks for newer Autobuilds itself and offers to update with one click (**Update**, left of **Show details**). See docs/patcher.md ("The patcher") for details and how to turn the check off.
 
       - name: Remove the Pre-release label from older Autobuild releases (left over from earlier workflow versions)

@@ -79,6 +79,7 @@ All choices are stored in the project by your host. The full table of entries is
 
 ## Documentation
 
+- [Version history](docs/changelog.md): what changed in each Autobuild
 - [Changes compared to Nuked-SC55-CLAP](docs/changes.md)
 - [Supported models and ROM sets](docs/roms.md)
 - [Plug-in reference](docs/plugins.md): names, IDs, plug-in state, environment variables
@@ -91,7 +92,7 @@ All choices are stored in the project by your host. The full table of entries is
 - [Known limitations and issues](docs/known-issues.md)
 - [Development and test tools](docs/development.md)
 
-**Version history:** news about new versions is in the release notes of each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P256/releases).
+**Version history:** [docs/changelog.md](docs/changelog.md) lists what changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P256/releases); the patcher links to it (**What's new?**).
 
 ---
 
