@@ -57,7 +57,7 @@ Every plug-in has an editor panel (918 x 280 px) in the style of its hardware mo
 **SETUP** opens a menu with these entries (which ones appear depends on the model; the menu language follows Windows, German or English):
 
 - **Max polyphony:** the voice limit of the plug-in. Units above the limit receive no new notes; a lower limit saves CPU.
-- **Send Reset:** sends an MT-32, GM, GS (or GM2) reset to the module.
+- **Send Reset:** sends an MT-32, GM, GS (or GM2) reset to the module. On the SC-8820, **XG** turns on an [XG mode](docs/models.md#xg-mode-sc-8820) that translates Yamaha XG files.
 - **All notes off:** stops all sounding notes.
 - **Tone map** (SC-88, SC-88 Pro, SC-8820, SC-8850): chooses the instrument map for all parts. **System Mode** (SC-88, SC-88 Pro): Mode 1 or Mode 2.
 - **Device** (MT-32 / CM-32L): switches between MT-32 (old), MT-32 (new) and CM-32L.
