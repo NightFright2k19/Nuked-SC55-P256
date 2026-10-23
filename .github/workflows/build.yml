@@ -137,6 +137,13 @@ jobs:
     needs: [version, build]
     runs-on: ubuntu-24.04
     steps:
+      # Checkout first: it cleans the workspace and would delete the downloaded assets.
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: docs/changelog.md
+          sparse-checkout-cone-mode: false
+
       - name: Download patchers
         uses: actions/download-artifact@v4
         with:
@@ -145,12 +152,6 @@ jobs:
 
       - name: List assets
         run: ls -la assets
-
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          sparse-checkout: docs/changelog.md
-          sparse-checkout-cone-mode: false
 
       - name: Release title from the version history
         id: title
