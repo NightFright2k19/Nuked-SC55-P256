@@ -25,9 +25,10 @@ if [ ! -d "$GM/.git" ]; then
     set -- $m; fetch source/3rdparty/$1 "$(git config -f /tmp/gm_modules --get submodule.source/3rdparty/$1.url)" $2
   done
   fetch source/3rdparty/lunasvg/plutovg https://github.com/sammycage/plutovg.git 5e4712cf873b0c7829a4a6157763e2ad3ac49164
-  echo "[3/5] Patches (voice counter, ROM set from memory, MinGW)"
+  echo "[3/5] Patches (voice counter, ROM set from memory, MinGW, asmjit init)"
   git apply "$S/third_party/88emu/88emu-nuked-poly.patch"
   (cd source/cpu/dsp56300 && git apply "$S/third_party/88emu/dsp56300-mingw.patch")
+  (cd source/cpu/dsp56300/source/asmjit && git apply "$S/third_party/88emu/asmjit-thread-safe-init.patch")
 fi
 cd "$GM"
 OPTS="-DCMAKE_BUILD_TYPE=Release -Dgearmulator_BUILD_JUCEPLUGIN=off -Dgearmulator_BUILD_JUCEPLUGIN_CLAP=off \
