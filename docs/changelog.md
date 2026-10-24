@@ -4,6 +4,10 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r64: XG effects calibrated against the S-MU2000 (2026-10-24)
+
+- XG mode of the SC-8820: every XG reverb type now gets the GS reverb type, time and level that matched an S-MU2000 recording best, the XG defaults (Hall 1, Chorus 1) are set after XG System On, and the unsupported variation send (CC 94) is dropped as the S-MU2000 plays no delay from it [#95].
+
 ## r63: XG mode for the SC-8820 (2026-10-23)
 
 - New **XG** entry in SETUP > Send Reset of the SC-8820: files written for Yamaha XG play with fitting sounds. Bank Select and Program Change are translated (XG drum kits to SC-8820 drum sets, drum parts on other channels), XG System On and Master Volume are understood, XG reverb / chorus type and return and the part sends are translated to the GS effects, other XG SysEx is dropped. XG variation banks play as their basic voice [#95].
