@@ -1373,10 +1373,8 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 				// XG mode: Bank Select is held back and sent as GS bank / map with the Program Change
 				XgTranslate::Out xo;
 				xg.Short(midi_event->data, len, port, xo);
-				if (!xo.pass) {
-					for (int i = 0; i < xo.count; ++i) EmitXg(xo.m[static_cast<size_t>(i)], port, render_frame);
-					break;
-				}
+				for (int i = 0; i < xo.count; ++i) EmitXg(xo.m[static_cast<size_t>(i)], port, render_frame);
+				if (!xo.pass) break; // else the message itself follows the translator's own messages
 			}
 #endif
 			state_log.AddShort(midi_event->data, port);
