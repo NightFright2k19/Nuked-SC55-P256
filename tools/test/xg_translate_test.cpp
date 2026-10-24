@@ -56,7 +56,15 @@ int main()
 	Cc(t, 2, 32, 16, o); CHECK(!o.pass && o.count == 0);
 	Pc(t, 2, 24, o);
 	CHECK(!o.pass && o.count == 3);
-	CHECK(Is(o.m[0], {0xb2, 0, 0}) && Is(o.m[1], {0xb2, 32, 4}) && Is(o.m[2], {0xc2, 24}));
+	CHECK(Is(o.m[0], {0xb2, 0, MelodyVoice(0, 16, 24).variation}) && Is(o.m[1], {0xb2, 32, 4}) && Is(o.m[2], {0xc2, 24}));
+
+	// voice table: sorted, every entry found; an unlisted voice plays as the basic voice; SFX voices change program
+	for (size_t i = 1; i < kVoiceTable.size(); ++i)
+		CHECK(kVoiceTable[i - 1].lsb * 128 + kVoiceTable[i - 1].prog < kVoiceTable[i].lsb * 128 + kVoiceTable[i].prog);
+	for (const auto& e : kVoiceTable) CHECK(MelodyVoice(0, e.lsb, e.prog).variation == e.variation && e.variation < 64);
+	CHECK(MelodyVoice(0, 0, 24).variation == 0 && MelodyVoice(0, 0, 24).prog == 24);
+	CHECK(MelodyVoice(0, 127, 5).variation == 0);
+	CHECK(MelodyVoice(64, 0, 3).prog == kSfxTable[3][1] || kSfxTable[3][0] == 0xff);
 
 	// other controllers pass
 	Cc(t, 2, 7, 100, o); CHECK(o.pass);

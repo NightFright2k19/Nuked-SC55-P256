@@ -14,7 +14,8 @@
 //  - GM On / GM Off / GM2 On / GS Reset from the host end XG mode.
 //  - XG effects: reverb type / return, chorus type / return and the part sends are translated to the
 //    GS reverb / chorus macros and CC 91 / 93; the XG variation and insertion effects are dropped.
-// Not translated yet: the XG variation banks (LSB) fall back to the basic voice.
+//  - XG variation voices (LSB) and SFX voices (MSB 64) go to the SC-8820 variation measured closest to an
+//    S-MU2000 recording (xg_voice_table.h); voices without a clearly closer variation play as the basic voice.
 //
 // Pure functions of the incoming message and the translator's own per-part state, so it can be
 // tested without an emulator (tools/test/xg_translate_test.cpp).
@@ -24,6 +25,8 @@
 #include <cstdint>
 #include <initializer_list>
 #include <span>
+
+#include "xg_voice_table.h"
 
 namespace XgTranslate {
 
@@ -89,9 +92,29 @@ constexpr uint8_t SfxKit(int prog)
 	}
 }
 
-// GS variation (Bank Select MSB of the SC-8820) for an XG melody voice. The XG variation banks
-// (LSB) are not mapped yet: every voice falls back to its basic voice (variation 0).
-constexpr uint8_t Variation(int /*xg_msb*/, int /*xg_lsb*/, int /*prog*/) { return 0; }
+// SC-8820 voice (variation = Bank Select MSB, program) for an XG melody voice (bank MSB 0 / LSB) or SFX voice
+// (MSB 64): from the measured table in xg_voice_table.h, else the basic voice of the same program.
+struct Voice {
+	uint8_t variation, prog;
+};
+constexpr Voice MelodyVoice(int xg_msb, int xg_lsb, int prog)
+{
+	if (xg_msb == 64) {
+		const auto& e = kSfxTable[static_cast<size_t>(prog & 0x7f)];
+		return e[0] == 0xff ? Voice{0, static_cast<uint8_t>(prog)} : Voice{e[0], e[1]};
+	}
+	if (xg_msb != 0 || xg_lsb == 0) return {0, static_cast<uint8_t>(prog)};
+	size_t lo = 0, hi = kVoiceTable.size(); // binary search on (lsb, prog)
+	const int key = xg_lsb * 128 + prog;
+	while (lo < hi) {
+		const size_t mid = (lo + hi) / 2;
+		const int k      = kVoiceTable[mid].lsb * 128 + kVoiceTable[mid].prog;
+		if (k == key) return {kVoiceTable[mid].variation, static_cast<uint8_t>(prog)};
+		if (k < key) lo = mid + 1;
+		else hi = mid;
+	}
+	return {0, static_cast<uint8_t>(prog)};
+}
 
 // GS reverb settings for an XG reverb type (MSB, LSB); macro -1 = no matching type. Measured against S-MU2000
 // recordings of every type (tools: decay curve of a snare hit, fitted over GS macro x time x level; error under 1.5 dB
@@ -193,9 +216,10 @@ public:
 			out.Add({static_cast<uint8_t>(0xc0 | ch8), bank == 127 ? DrumKit(prog) : SfxKit(prog)});
 		} else {
 			if (rhythm[part]) SetRhythm(part, ch, 0, out);
-			out.Add({static_cast<uint8_t>(0xb0 | ch8), 0, Variation(bank, lsb[part], prog)});
+			const Voice v = MelodyVoice(bank, lsb[part], prog);
+			out.Add({static_cast<uint8_t>(0xb0 | ch8), 0, v.variation});
 			out.Add({static_cast<uint8_t>(0xb0 | ch8), 32, kSc8820Map});
-			out.Add({static_cast<uint8_t>(0xc0 | ch8), static_cast<uint8_t>(prog)});
+			out.Add({static_cast<uint8_t>(0xc0 | ch8), v.prog});
 		}
 	}
 

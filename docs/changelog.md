@@ -4,6 +4,10 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r66: XG variation and SFX voices for the SC-8820 (2026-10-24)
+
+- XG mode of the SC-8820: XG variation voices (bank LSB) and SFX voices (bank MSB 64) now play the SC-8820 variation that was measured closest to an S-MU2000 recording of the voice, where one is clearly closer than the basic voice (1146 + 126 voices) [#95].
+
 ## r65: Thread-safe asmjit initialization in the 88emu models (2026-10-24)
 
 - SC-88, SC-88 Pro, SC-8820, SC-8850 and MT-32 / CM-32L: the one-time CPU detection of the JIT library (asmjit) is thread-safe now. The units boot in parallel in `Activate()`, and the first JIT runtime of the process could be created by several threads at once; the values were always identical, so the race was harmless, but ThreadSanitizer reported it for the SC-8850 and MT-32 [#88][#104]. Sanitizer runs (TSan, ASan + UBSan) of all five models are clean now, and the editors of all seven plug-ins keep their GDI and USER handles constant over 500 open / close rounds on Windows. The templates of the two Nuked SC-55 plug-ins differ from r64 only in the build date.
