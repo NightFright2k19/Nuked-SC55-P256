@@ -38,7 +38,7 @@ struct Msg {
 };
 
 struct Out {
-	std::array<Msg, 4> m{};
+	std::array<Msg, 8> m{};
 	int count = 0;
 	bool pass = false; // send the incoming message unchanged
 	void Add(std::initializer_list<uint8_t> bytes)
@@ -93,19 +93,25 @@ constexpr uint8_t SfxKit(int prog)
 // (LSB) are not mapped yet: every voice falls back to its basic voice (variation 0).
 constexpr uint8_t Variation(int /*xg_msb*/, int /*xg_lsb*/, int /*prog*/) { return 0; }
 
-// GS reverb macro (40 01 30) for an XG reverb type (MSB, LSB); -1 = no matching GS type.
-// GS: 0 Room 1, 1 Room 2, 2 Room 3, 3 Hall 1, 4 Hall 2, 5 Plate. XG LSB counts the sub types in order.
-constexpr int ReverbMacro(int msb, int lsb)
+// GS reverb settings for an XG reverb type (MSB, LSB); macro -1 = no matching type. Measured against S-MU2000
+// recordings of every type (tools: decay curve of a snare hit, fitted over GS macro x time x level; error under 1.5 dB
+// except Tunnel 2 dB and Canyon 15 dB, whose decay is longer than the GS reverb can reach).
+// GS macro (40 01 30): 0 Room 1, 1 Room 2, 2 Room 3, 3 Hall 1, 4 Hall 2, 5 Plate; time = 40 01 34, level = 40 01 33.
+struct Reverb {
+	int macro, time, level;
+};
+constexpr Reverb ReverbPreset(int msb, int lsb)
 {
 	switch (msb) {
-	case 1: return lsb == 0 ? 3 : 4;                  // Hall 1, Hall 2
-	case 2: return lsb == 0 ? 0 : (lsb == 1 ? 1 : 2); // Room 1-3
-	case 3: return lsb == 0 ? 3 : 4;                  // Stage 1, 2 -> Hall 1, 2
-	case 4: return 5;                                 // Plate
-	case 16: return 2;                                // White Room
-	case 17: case 18: return 4;                       // Tunnel, Canyon
-	case 19: return 0;                                // Basement
-	default: return -1;
+	case 1: return lsb == 0 ? Reverb{4, 48, 96} : Reverb{3, 80, 48};                  // Hall 1, Hall 2
+	case 2: return lsb == 0 ? Reverb{0, 24, 96} : Reverb{0, 64, 96};                  // Room 1, Room 2 / 3
+	case 3: return lsb == 0 ? Reverb{3, 64, 64} : Reverb{4, 24, 96};                  // Stage 1, 2
+	case 4: return Reverb{5, 96, 64};                                                 // Plate
+	case 16: return Reverb{2, 48, 64};                                                // White Room
+	case 17: return Reverb{3, 96, 96};                                                // Tunnel
+	case 18: return Reverb{3, 112, 96};                                               // Canyon
+	case 19: return Reverb{0, 24, 64};                                                // Basement
+	default: return Reverb{-1, 0, 0};
 	}
 }
 
@@ -134,11 +140,16 @@ public:
 		enabled = true;
 		Reset();
 	}
+	// the XG defaults (Hall 1 reverb, Chorus 1) are sent with the first channel message after a reset: the GS Reset
+	// that XG System On becomes holds back the host's events, so these follow it in order
 
 	// XG default state (XG System On): channel 10 is the drum part, bank 0 everywhere, protect on
 	void Reset()
 	{
 		protect = true;
+		rev_pending = cho_pending = true;
+		rev_base = ReverbPreset(1, 0).level;
+		rev_return = 64;
 		for (int p = 0; p < kMaxParts; ++p) {
 			const bool drum = (p % 16) == 9;
 			msb[p]    = drum ? 127 : 0;
@@ -154,6 +165,12 @@ public:
 		out.pass  = true;
 		if (!enabled || len < 2 || port < 0 || port >= kMaxPorts) return;
 		const int status = d[0] & 0xf0, ch = d[0] & 0x0f, part = port * 16 + ch;
+		if (rev_pending) SendReverb(1, 0, out);
+		if (cho_pending) SendChorus(0x41, 0, out);
+		if (status == 0xb0 && len >= 3 && d[1] == 94) { // variation send: the S-MU2000 plays no variation delay, the GS delay would
+			out.pass = false;
+			return;
+		}
 		if (status == 0xb0 && len >= 3 && (d[1] == 0 || d[1] == 32)) {
 			out.pass = false; // held back until the next Program Change
 			if (d[1] == 32) {
@@ -213,13 +230,12 @@ public:
 		} else if (a1 == 0x00 && a2 == 0x00 && a3 == 0x04) { // Master Volume -> GS 40 00 04
 			out.AddDt1(0x40, 0x00, 0x04, data & 0x7f);
 		} else if (a1 == 0x02 && a2 == 0x01 && a3 == 0x00 && m.size() >= 10) { // Reverb Type (MSB, LSB)
-			const int t = ReverbMacro(m[7] & 0x7f, m[8] & 0x7f);
-			if (t >= 0) out.AddDt1(0x40, 0x01, 0x30, static_cast<uint8_t>(t));
+			SendReverb(m[7] & 0x7f, m[8] & 0x7f, out);
 		} else if (a1 == 0x02 && a2 == 0x01 && a3 == 0x20 && m.size() >= 10) { // Chorus Type (MSB, LSB)
-			const int t = ChorusMacro(m[7] & 0x7f, m[8] & 0x7f);
-			if (t >= 0) out.AddDt1(0x40, 0x01, 0x38, static_cast<uint8_t>(t));
+			SendChorus(m[7] & 0x7f, m[8] & 0x7f, out);
 		} else if (a1 == 0x02 && a2 == 0x01 && a3 == 0x0c) { // Reverb Return -> GS Reverb Level
-			out.AddDt1(0x40, 0x01, 0x33, data & 0x7f);
+			rev_return = data & 0x7f;
+			out.AddDt1(0x40, 0x01, 0x33, ReverbLevel());
 		} else if (a1 == 0x02 && a2 == 0x01 && a3 == 0x2c) { // Chorus Return -> GS Chorus Level
 			out.AddDt1(0x40, 0x01, 0x3a, data & 0x7f);
 		} else if (a1 == 0x08 && a2 < 16 && (a3 == 0x12 || a3 == 0x13)) { // Part Chorus / Reverb Send -> CC 93 / 91
@@ -233,6 +249,29 @@ public:
 	}
 
 private:
+	uint8_t ReverbLevel() const
+	{
+		const int v = rev_base * rev_return / 64;
+		return static_cast<uint8_t>(v > 127 ? 127 : v);
+	}
+	// reverb / chorus type: GS macro (and, for the reverb, time and level fitted to the XG type)
+	void SendReverb(int msb, int lsb, Out& out)
+	{
+		const Reverb r = ReverbPreset(msb, lsb);
+		rev_pending    = false;
+		if (r.macro < 0) return;
+		rev_base = r.level;
+		out.AddDt1(0x40, 0x01, 0x30, static_cast<uint8_t>(r.macro));
+		out.AddDt1(0x40, 0x01, 0x34, static_cast<uint8_t>(r.time));
+		out.AddDt1(0x40, 0x01, 0x33, ReverbLevel());
+	}
+	void SendChorus(int msb, int lsb, Out& out)
+	{
+		const int t = ChorusMacro(msb, lsb);
+		cho_pending = false;
+		if (t >= 0) out.AddDt1(0x40, 0x01, 0x38, static_cast<uint8_t>(t));
+	}
+
 	// GS "Use for Rhythm Part" (40 1x 15): 0 = normal part, 1 = drum part (map 1), 2 = drum part (map 2)
 	void SetRhythm(int part, int ch, int mode, Out& out)
 	{
@@ -242,6 +281,8 @@ private:
 
 	bool enabled = false;
 	bool protect = true;
+	bool rev_pending = false, cho_pending = false; // XG default effect not sent yet
+	int rev_base = 96, rev_return = 64;            // GS reverb level of the current type, XG reverb return
 	std::array<uint8_t, kMaxParts> msb{}, lsb{};
 	std::array<bool, kMaxParts> rhythm{};
 };

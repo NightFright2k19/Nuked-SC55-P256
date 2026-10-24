@@ -1406,7 +1406,7 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 				xg.SysEx(msg, port, xo);
 				if (!xo.pass) {
 					if (xo.count == 0) break; // an XG message the SC-8820 does not understand
-					if (xo.m[0].b[0] < 0xf0) { // translated to channel messages (part sends)
+					if (!StateLog::IsReset({xo.m[0].b.data(), xo.m[0].n})) { // channel messages and settings: no reset follows
 						for (int i = 0; i < xo.count; ++i) EmitXg(xo.m[static_cast<size_t>(i)], port, render_frame);
 						break;
 					}
@@ -2226,6 +2226,9 @@ void NukedSc55::EmitXg(const XgTranslate::Msg& m, const uint8_t port, const uint
 {
 	if (m.b[0] == 0xf0) {
 		const std::span<const uint8_t> msg{m.b.data(), m.n};
+#ifdef NUKED_SC55_DEVICE_8820
+		TrackGsGm(msg);
+#endif
 		state_log.AddSysEx(msg, port);
 		QueueMidi(router.RouteSysEx(msg, port), msg.data(), msg.size(), render_frame, port);
 	} else {
