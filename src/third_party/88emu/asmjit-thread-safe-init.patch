@@ -1,0 +1,103 @@
+diff --git a/src/asmjit/core/cpuinfo.cpp b/src/asmjit/core/cpuinfo.cpp
+index 9f33112..89eaa1d 100644
+--- a/src/asmjit/core/cpuinfo.cpp
++++ b/src/asmjit/core/cpuinfo.cpp
+@@ -3,6 +3,7 @@
+ // See asmjit.h or LICENSE.md for license and copyright information
+ // SPDX-License-Identifier: Zlib
+ 
++#include <mutex>
+ #include "../core/api-build_p.h"
+ #include "../core/cpuinfo.h"
+ #include "../core/support.h"
+@@ -1154,31 +1155,31 @@ static ASMJIT_FAVOR_SIZE void detectARMCpu(CpuInfo& cpu) noexcept {
+ // CpuInfo - Detect - Host
+ // =======================
+ 
+-static uint32_t cpuInfoInitialized;
+-static CpuInfo cpuInfoGlobal(Globals::NoInit);
+-
+-const CpuInfo& CpuInfo::host() noexcept {
+-  // This should never cause a problem as the resulting information should always be the same. In the worst case we
+-  // would just overwrite it non-atomically.
+-  if (!cpuInfoInitialized) {
+-    CpuInfo cpuInfoLocal;
++static CpuInfo detectHostCpuInfo() noexcept {
++  CpuInfo cpuInfoLocal;
+ 
+-    cpuInfoLocal._arch = Arch::kHost;
+-    cpuInfoLocal._subArch = SubArch::kHost;
++  cpuInfoLocal._arch = Arch::kHost;
++  cpuInfoLocal._subArch = SubArch::kHost;
+ 
+ #if ASMJIT_ARCH_X86
+-    detectX86Cpu(cpuInfoLocal);
++  detectX86Cpu(cpuInfoLocal);
+ #elif ASMJIT_ARCH_ARM
+-    detectARMCpu(cpuInfoLocal);
++  detectARMCpu(cpuInfoLocal);
+ #else
+-    #pragma message("[asmjit] Disabling runtime CPU detection - unsupported OS/CPU combination (Unknown CPU)")
++  #pragma message("[asmjit] Disabling runtime CPU detection - unsupported OS/CPU combination (Unknown CPU)")
+ #endif
+ 
+-    cpuInfoLocal._hwThreadCount = detectHWThreadCount();
+-    cpuInfoGlobal = cpuInfoLocal;
+-    cpuInfoInitialized = 1;
+-  }
++  cpuInfoLocal._hwThreadCount = detectHWThreadCount();
++  return cpuInfoLocal;
++}
++
++static std::once_flag cpuInfoOnce;
++static CpuInfo cpuInfoGlobal(Globals::NoInit);
+ 
++const CpuInfo& CpuInfo::host() noexcept {
++  // Initialized once, thread-safe (several threads may create their first JitRuntime at the same time).
++  // (std::call_once: asmjit is built with -fno-threadsafe-statics, so a function-local static would not be safe.)
++  std::call_once(cpuInfoOnce, [] { cpuInfoGlobal = detectHostCpuInfo(); });
+   return cpuInfoGlobal;
+ }
+ 
+diff --git a/src/asmjit/core/virtmem.cpp b/src/asmjit/core/virtmem.cpp
+index 08278e4..9ab9bc3 100644
+--- a/src/asmjit/core/virtmem.cpp
++++ b/src/asmjit/core/virtmem.cpp
+@@ -3,6 +3,7 @@
+ // See asmjit.h or LICENSE.md for license and copyright information
+ // SPDX-License-Identifier: Zlib
+ 
++#include <mutex>
+ #include "../core/api-build_p.h"
+ #ifndef ASMJIT_NO_JIT
+ 
+@@ -777,18 +778,19 @@ void flushInstructionCache(void* p, size_t size) noexcept {
+ // Virtual Memory - Memory Info
+ // ============================
+ 
+-Info info() noexcept {
+-  static std::atomic<uint32_t> vmInfoInitialized;
+-  static Info vmInfo;
++static Info detectInfo() noexcept {
++  Info localMemInfo;
++  getVMInfo(localMemInfo);
++  return localMemInfo;
++}
+ 
+-  if (!vmInfoInitialized.load()) {
+-    Info localMemInfo;
+-    getVMInfo(localMemInfo);
+-
+-    vmInfo = localMemInfo;
+-    vmInfoInitialized.store(1u);
+-  }
++static std::once_flag vmInfoOnce;
++static Info vmInfo;
+ 
++Info info() noexcept {
++  // Initialized once, thread-safe (several threads may create their first JitAllocator at the same time).
++  // (std::call_once: asmjit is built with -fno-threadsafe-statics, so a function-local static would not be safe.)
++  std::call_once(vmInfoOnce, [] { vmInfo = detectInfo(); });
+   return vmInfo;
+ }
+ 
