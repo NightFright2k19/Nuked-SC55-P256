@@ -6,7 +6,7 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 ## r66: XG variation voices and insertion effects for the SC-8820 (2026-10-24)
 
-- XG mode of the SC-8820: XG variation voices (bank LSB) and SFX voices (bank MSB 64) now play the SC-8820 variation that was measured closest to an S-MU2000 recording of the voice, where one is clearly closer than the basic voice or that made S-MU2000 recordings of songs come closer (1154 + 126 voices) [#95].
+- XG mode of the SC-8820: XG variation voices (bank LSB) and SFX voices (bank MSB 64) now play the SC-8820 variation that was measured closest to an S-MU2000 recording of the voice, where one is clearly closer than the basic voice or that made S-MU2000 recordings of songs come closer (1152 + 126 voices) [#95].
 - XG mode of the SC-8820: the XG variation effect as insertion effect on a part now uses the GS insertion effect of that part. Distortion, Overdrive, Amp Simulator, Auto Wah, the delays and the 3-Band EQ get the GS type and settings that matched S-MU2000 recordings best; the default effect messages after XG System On are no longer lost when the first message is a controller that passes unchanged [#95].
 
 ## r65: Thread-safe asmjit initialization in the 88emu models (2026-10-24)
