@@ -56,7 +56,15 @@ int main()
 	Cc(t, 2, 32, 16, o); CHECK(!o.pass && o.count == 0);
 	Pc(t, 2, 24, o);
 	CHECK(!o.pass && o.count == 3);
-	CHECK(Is(o.m[0], {0xb2, 0, 0}) && Is(o.m[1], {0xb2, 32, 4}) && Is(o.m[2], {0xc2, 24}));
+	CHECK(Is(o.m[0], {0xb2, 0, MelodyVoice(0, 16, 24).variation}) && Is(o.m[1], {0xb2, 32, 4}) && Is(o.m[2], {0xc2, 24}));
+
+	// voice table: sorted, every entry found; an unlisted voice plays as the basic voice; SFX voices change program
+	for (size_t i = 1; i < kVoiceTable.size(); ++i)
+		CHECK(kVoiceTable[i - 1].lsb * 128 + kVoiceTable[i - 1].prog < kVoiceTable[i].lsb * 128 + kVoiceTable[i].prog);
+	for (const auto& e : kVoiceTable) CHECK(MelodyVoice(0, e.lsb, e.prog).variation == e.variation && e.variation < 64);
+	CHECK(MelodyVoice(0, 0, 24).variation == 0 && MelodyVoice(0, 0, 24).prog == 24);
+	CHECK(MelodyVoice(0, 127, 5).variation == 0);
+	CHECK(MelodyVoice(64, 0, 3).prog == kSfxTable[3][1] || kSfxTable[3][0] == 0xff);
 
 	// other controllers pass
 	Cc(t, 2, 7, 100, o); CHECK(o.pass);
@@ -104,6 +112,28 @@ int main()
 	Sx(t, {0xf0, 0x43, 0x10, 0x4c, 0x02, 0x01, 0x2c, 0x30, 0xf7}, o); CHECK(o.count == 1 && o.m[0].b[7] == 0x3a && o.m[0].b[8] == 0x30);
 	Sx(t, {0xf0, 0x43, 0x10, 0x4c, 0x08, 0x03, 0x13, 0x45, 0xf7}, o); CHECK(!o.pass && o.count == 1 && Is(o.m[0], {0xb3, 91, 0x45}));
 	Sx(t, {0xf0, 0x43, 0x10, 0x4c, 0x08, 0x0a, 0x12, 0x20, 0xf7}, o); CHECK(o.count == 1 && Is(o.m[0], {0xba, 93, 0x20}));
+
+	// insertion effect: the variation block on part 3 as insertion -> GS EFX on part 3 (block 4)
+	Sx(t, {0xf0, 0x43, 0x10, 0x4c, 0x02, 0x01, 0x40, 0x49, 0x00, 0xf7}, o); CHECK(!o.pass && o.count == 0); // Distortion, no part yet
+	Sx(t, {0xf0, 0x43, 0x10, 0x4c, 0x02, 0x01, 0x5b, 0x03, 0xf7}, o);
+	CHECK(o.count == 6 && Is(o.m[0], {0xf0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x03, 0x00, 0x01, 0x10, 0x2c, 0xf7}) &&
+	      o.m[1].b[7] == 0x03 && o.m[1].b[8] == 80 && o.m[2].b[7] == 0x16 && o.m[2].b[8] == 28);
+	CHECK(o.m[3].b[7] == 0x17 && o.m[3].b[8] == 0x45 && o.m[4].b[7] == 0x18 && o.m[4].b[8] == 0); // part 3 sends
+	CHECK(Is(o.m[5], {0xf0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x44, 0x22, 0x01, 0x59, 0xf7}));
+	Cc(t, 3, 91, 10, o); CHECK(o.pass && o.count == 1 && o.m[0].b[7] == 0x17 && o.m[0].b[8] == 10); // follows the part send
+	Cc(t, 4, 91, 10, o); CHECK(o.pass && o.count == 0);
+	// 3-Band EQ: type, low freq, low gain, hi gain, M1 freq, M1 Q, M1 gain, M2 gain, sends, assign; then a parameter
+	Sx(t, {0xf0, 0x43, 0x10, 0x4c, 0x02, 0x01, 0x40, 0x4c, 0x00, 0xf7}, o);
+	CHECK(o.count == 11 && o.m[0].b[8] == 0x01 && o.m[0].b[9] == 0x00 && o.m[2].b[8] == 70 && o.m[4].b[8] == EqMidFreq(34));
+	Sx(t, {0xf0, 0x43, 0x10, 0x4c, 0x02, 0x01, 0x42, 0x00, 0x3f, 0xf7}, o);
+	CHECK(o.count == 7 && o.m[1].b[7] == 0x04 && o.m[1].b[8] == 63);
+	CHECK(EqMidFreq(34) == 54 && EqMidFreq(0) == 0 && EqMidFreq(127) == 127 && EqQ(18) == 2);
+	// a type without a GS counterpart (Phaser) and the system connection switch the part off (40 44 22 00)
+	Sx(t, {0xf0, 0x43, 0x10, 0x4c, 0x02, 0x01, 0x40, 0x48, 0x00, 0xf7}, o);
+	CHECK(o.count == 1 && Is(o.m[0], {0xf0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x44, 0x22, 0x00, 0x5a, 0xf7}));
+	Sx(t, {0xf0, 0x43, 0x10, 0x4c, 0x02, 0x01, 0x40, 0x4e, 0x00, 0xf7}, o); CHECK(o.count == 7); // Auto Wah on again
+	Sx(t, {0xf0, 0x43, 0x10, 0x4c, 0x02, 0x01, 0x5a, 0x01, 0xf7}, o); CHECK(o.count == 1 && o.m[0].b[8] == 0);
+	Cc(t, 3, 91, 20, o); CHECK(o.pass && o.count == 0);
 
 	// second MIDI input (port B): own part state
 	Cc(t, 0, 0, 127, o, 1); Pc(t, 0, 0, o, 1);
