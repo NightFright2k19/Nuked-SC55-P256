@@ -115,6 +115,13 @@ def context():
             if os.path.exists(f):
                 ctx.load_verify_locations(f)
                 break
+    # Added on top of the system store (which keeps company root certificates working): the system store may lack
+    # a root certificate (Windows loads them lazily), which fails with "unable to get issuer certificate".
+    try:
+        import certifi
+        ctx.load_verify_locations(certifi.where())
+    except Exception:
+        pass
     return ctx
 
 
