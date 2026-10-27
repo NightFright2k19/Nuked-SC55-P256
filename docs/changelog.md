@@ -4,6 +4,10 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r67: Update Gearmulator (88emu) to ef93259 (2026-10-26)
+
+- Newer 88emu core base, which brings SC-880 support to the 88emu library; audio of the SC-88 Pro is bit-identical, CPU time in the polyphony test is unchanged within measurement noise. The SC-880 itself is not offered as a model yet. Patches adapted to the new `sc88pro` board (variant-dependent SRAM size).
+
 ## r66: XG variation voices and insertion effects for the SC-8820 (2026-10-24)
 
 - XG mode of the SC-8820: XG variation voices (bank LSB) and SFX voices (bank MSB 64) now play the SC-8820 variation that was measured closest to an S-MU2000 recording of the voice, where one is clearly closer than the basic voice or that made S-MU2000 recordings of songs come closer (1152 + 125 voices) [#95].
