@@ -15,6 +15,7 @@ on:
       - 'patcher.py'
       - 'patcher_i18n.py'
       - 'selfupdate.py'
+      - 'src/**'
       - '.github/workflows/build.yml'
   workflow_dispatch:
 
@@ -83,7 +84,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install PyInstaller
-        run: python -m pip install --upgrade pip pyinstaller python-bidi arabic-reshaper   # bidi/reshaper: right-to-left texts on Linux
+        run: python -m pip install --upgrade pip pyinstaller certifi python-bidi arabic-reshaper   # bidi/reshaper: right-to-left texts on Linux
 
       - name: Build patcher
         env:
@@ -102,7 +103,7 @@ jobs:
             --add-data "icons:icons" \
             ${ICON[@]+"${ICON[@]}"} \
             --hidden-import p256_builder --hidden-import patcher_i18n --hidden-import patcher_version \
-            --hidden-import selfupdate \
+            --hidden-import selfupdate --hidden-import certifi \
             patcher.py
           ls -la dist
 
