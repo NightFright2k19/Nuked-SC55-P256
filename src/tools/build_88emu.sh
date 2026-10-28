@@ -4,7 +4,7 @@
 # usage: build_88emu.sh <target folder> <plug-in source folder>      (takes about 8-10 min, 1 core)
 set -e
 GM=${1:?Zielordner}; S=${2:?Plugin-Quellen}
-GM_COMMIT=${GM_COMMIT:-ef93259d52c198c69c195d1b584ff898972187c2} # default: recorded state
+GM_COMMIT=${GM_COMMIT:-967ff0cb12c523633f50799e34ce64761daaa403} # default: recorded state
 fetch() { # <path> <url> <commit>
   rm -rf "$1"; git init -q "$1"; (cd "$1" && git remote add origin "$2" && git fetch -q --depth 1 origin "$3" && git checkout -q FETCH_HEAD)
 }
