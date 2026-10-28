@@ -4,6 +4,10 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r68: Update Gearmulator (88emu) to 967ff0c (2026-10-28)
+
+- Newer 88emu core base with more accurate sound on the SC-88, SC-88 Pro, SC-8820 and SC-8850: envelope steps, volume smoothing, effect sends and samples that loop past their end on the XP chip, delay memory precision and the effect multiplier and input on the LSP effect chip, DRAM page mode and refresh in the CPU timing of the SC-8820 and SC-8850, and the port 1 input pins of the H8/532. The sound of these models changes slightly (level within 0.3 dB, octave bands within 0.4 dB in the comparison renders); the SC-8820 needs about 12 % more CPU time, the other models are unchanged within measurement noise. The MT-32 / CM-32L and the SC-55 plug-ins sound the same. The templates of the 88emu plug-ins are rebuilt.
+
 ## r67: Update Gearmulator (88emu) to ef93259, patcher update with incomplete certificates (2026-10-27)
 
 - Newer 88emu core base, which brings SC-880 support to the 88emu library; audio of the SC-88 Pro is bit-identical, CPU time in the polyphony test is unchanged within measurement noise. The SC-880 itself is not offered as a model yet. Patches adapted to the new `sc88pro` board (variant-dependent SRAM size).
