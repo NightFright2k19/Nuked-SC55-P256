@@ -285,7 +285,7 @@ index 363de6c..8570101 100644
  		Lcd&       lcd()       { return m_lcd; }
  		const Lcd& lcd() const { return m_lcd; }
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8820.cpp b/source/ronaldo/88emu/88lib/boards/sc8820.cpp
-index e115eb1..a144822 100644
+index bce6e72..1431172 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8820.cpp
 +++ b/source/ronaldo/88emu/88lib/boards/sc8820.cpp
 @@ -5,9 +5,21 @@ namespace emu88Lib
@@ -370,7 +370,7 @@ index 5773748..49f2a88 100644
  		sh2::Machine m_machine{sh2::ChipModel::SH7016, 2};
  		std::array<std::vector<uint8_t>, 2> m_waves;
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8850.cpp b/source/ronaldo/88emu/88lib/boards/sc8850.cpp
-index 0aa2451..284567f 100644
+index 25d8c01..01311f5 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8850.cpp
 +++ b/source/ronaldo/88emu/88lib/boards/sc8850.cpp
 @@ -3,6 +3,9 @@
@@ -525,7 +525,7 @@ index 1ac9850..4641ad9 100644
  		std::array<bool, 2> m_xpEnabled{};
  		std::array<int32_t, 8> m_xp0SdiaInput{};
 diff --git a/source/ronaldo/88emu/88lib/boards/sc88pro.cpp b/source/ronaldo/88emu/88lib/boards/sc88pro.cpp
-index d9057a2..3f9203c 100644
+index c2e812d..dc44310 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc88pro.cpp
 +++ b/source/ronaldo/88emu/88lib/boards/sc88pro.cpp
 @@ -1,3 +1,6 @@
@@ -535,7 +535,7 @@ index d9057a2..3f9203c 100644
  #include "88lib/boards/sc88pro.h"
  
  #include "88lib/rom/rom.h"
-@@ -24,6 +27,24 @@ namespace emu88Lib
+@@ -26,6 +29,24 @@ namespace emu88Lib
  		constexpr uint32_t MidiBaud = 31250;
  		constexpr uint32_t g_powerOnMidiDelay = g_sampleRate;
  
@@ -560,7 +560,7 @@ index d9057a2..3f9203c 100644
  		std::vector<uint8_t> decodeWaveRom(const std::vector<uint8_t>& _raw)
  		{
  			if(_raw.size() != Sc88Pro::WaveRomSize)
-@@ -38,7 +59,8 @@ namespace emu88Lib
+@@ -40,7 +61,8 @@ namespace emu88Lib
  	                 const bool _factoryReset, const Variant _variant)
  		: m_rom(std::move(_firmware))
  		, m_sram(_variant == Variant::Sc880 ? Sc880SramSize : SramSize, 0)
@@ -571,7 +571,7 @@ index d9057a2..3f9203c 100644
  		, m_subMcu([this](Sc88SubMcu::Record&& _r) { m_midiInQueue.emplace_back(std::move(_r)); },
  		           SmSysExStage, SmCommand - SmSysExStage)
 diff --git a/source/ronaldo/88emu/88lib/boards/sc88pro.h b/source/ronaldo/88emu/88lib/boards/sc88pro.h
-index e2698a4..430447d 100644
+index e40ec7a..ca55f3c 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc88pro.h
 +++ b/source/ronaldo/88emu/88lib/boards/sc88pro.h
 @@ -2,8 +2,10 @@
@@ -585,10 +585,10 @@ index e2698a4..430447d 100644
  #include <utility>
  #include <vector>
  
-@@ -203,6 +205,18 @@ namespace emu88Lib
- 		// 2 MiB images, so the image size cannot tell them apart.
- 		enum class Variant : uint8_t { Sc88Pro, Sk88Pro, Sc880 };
- 
+@@ -199,6 +201,17 @@ namespace emu88Lib
+ 	class Sc88Pro
+ 	{
+ 	public:
 +		// Nuked SC-55 Poly: sounding voices (amp envelope != 0) of the XP tone generator
 +		int activeVoiceCount() const
 +		{
@@ -598,13 +598,12 @@ index e2698a4..430447d 100644
 +			return n;
 +		}
 +		// Nuked SC-55 Poly: firmware work RAM (pages C0-C7, 0x0000-0xFFFF) for the panel sync
-+		uint8_t peekWorkRam(const uint32_t _addr) const { return _addr < m_sram.size() ? m_sram[_addr] : uint8_t(0); }
++		uint8_t peekWorkRam(const uint32_t _addr) const { return _addr < SramSize ? m_sram[_addr] : uint8_t(0); }
 +
-+
- 		// External interrupt pins as this board wires them. The gate array
- 		// shares IRQ0 through its own status register; the XP is one line over.
- 		enum IrqLine : int { IrqGateArray = 0, IrqXp = 1, IrqSubMcu = 2 };
-@@ -294,6 +308,13 @@ namespace emu88Lib
+ 		// The product the board is built into. The SK-88Pro and the SC-880 both run
+ 		// 2 MiB images, so the image size cannot tell them apart.
+ 		enum class Variant : uint8_t { Sc88Pro, Sk88Pro, Sc880 };
+@@ -294,6 +307,13 @@ namespace emu88Lib
  
  		bool usesSerialMidi() const { return m_serialMidi; }
  		size_t midiInBacklog() const { return m_midiInQueue.size() + (m_midiMailboxFull ? 1u : 0u); }
@@ -618,7 +617,7 @@ index e2698a4..430447d 100644
  
  		// Bytes the firmware has transmitted, per SCI channel.
  		const std::vector<uint8_t>& serialOut(uint8_t _ch) const { return m_serialOut[_ch & 1]; }
-@@ -379,7 +400,10 @@ namespace emu88Lib
+@@ -383,7 +403,10 @@ namespace emu88Lib
  
  		std::vector<uint8_t> m_rom;
  		std::vector<uint8_t> m_sram;
@@ -996,7 +995,7 @@ index 642e7ce..0ce7843 100644
  #ifdef __cplusplus
  }
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.cpp b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-index 3a9d9b1..7cf39c3 100644
+index c8f3b85..c3f09f9 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 @@ -27,8 +27,6 @@ namespace emu88Lib
@@ -1078,7 +1077,7 @@ index 3a9d9b1..7cf39c3 100644
  			m_nextPanelCommandSample = m_renderedSamples + g_minimumPanelEdgeSamples;
  		}
  		else if(command.type == PanelCommandType::Mv30Panel)
-@@ -640,6 +668,8 @@ namespace emu88Lib
+@@ -641,6 +669,8 @@ namespace emu88Lib
  			first.displayOn = (lcd.displayMode() & 0x0c) != 0;
  			lcd.renderMono(first.mono);
  		}
@@ -1087,7 +1086,7 @@ index 3a9d9b1..7cf39c3 100644
  		if(m_mv30)
  			m_mv30->readParts(m_mv30PartsScratch);
  		std::unique_lock lock(m_displayMutex, std::try_to_lock);
-@@ -804,3 +834,52 @@ namespace emu88Lib
+@@ -805,3 +835,52 @@ namespace emu88Lib
  			m_activeChannels &= ~channelMask;
  	}
  }
@@ -1141,7 +1140,7 @@ index 3a9d9b1..7cf39c3 100644
 +	}
 +}
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.h b/source/ronaldo/88emu/88lib/hardwareDevice.h
-index eb2b1bd..c46d56d 100644
+index 40655af..1d281e1 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.h
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.h
 @@ -39,6 +39,8 @@ namespace emu88Lib
