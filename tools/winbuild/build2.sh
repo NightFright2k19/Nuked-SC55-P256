@@ -1,6 +1,6 @@
 # Graphics folder of the 88emu player (Gearmulator, recorded state); without a 88emu build only fetch the graphics
 gm_assets() {
- local G=${GM:-/home/claude/wb/gearmulator} C=967ff0cb12c523633f50799e34ce64761daaa403 P=source/ronaldo/88emu/88emuplayer/assets
+ local G=${GM:-/home/claude/wb/gearmulator} C=7f9a9806b7b3326379a39a2008c6dc92519191df P=source/ronaldo/88emu/88emuplayer/assets
  if [ ! -f $G/$P/sc55_panel.png ]; then
   G=/home/claude/wb/gm_assets
   if [ ! -f $G/$P/sc55_panel.png ]; then
