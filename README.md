@@ -30,7 +30,7 @@ The plug-ins are made from your own ROM files with the **patcher**; no compiler 
 > [!IMPORTANT]
 > **Linux:** the Linux patcher creates **native Linux x64 CLAP plug-ins** (no VST2). They have the same editor panel and SETUP menu as on Windows (X11; under Wayland through XWayland) and need **libX11** and glibc 2.35 or newer (Ubuntu 22.04, Debian 12 or newer) ([#112](https://github.com/NightFright2k19/Nuked-SC55-P256/issues/112)).
 >
-> **macOS:** the macOS patcher creates **native CLAP plug-in bundles** for its architecture (Apple Silicon or Intel; macOS 11 or newer, no VST2). They have **no editor window yet**: the host shows its generic parameter view ([#112](https://github.com/NightFright2k19/Nuked-SC55-P256/issues/112)). Install them into `~/Library/Audio/Plug-Ins/CLAP/`.
+> **macOS:** the macOS patcher creates **native CLAP plug-in bundles** for its architecture (Apple Silicon or Intel; macOS 11 or newer, no VST2). They have the **same editor panel and SETUP menu** as on Windows (the menu is a native macOS menu); playback on a real Mac is not confirmed yet ([#112](https://github.com/NightFright2k19/Nuked-SC55-P256/issues/112)). Install them into `~/Library/Audio/Plug-Ins/CLAP/`.
 
 Everything for which a complete ROM set is found is built (MT-32 / CM-32L, SC-55 v1.21, SC-55mk2 v1.01, SC-88, SC-88 Pro, SC-8820, SC-8850). The patcher is not signed, so Windows SmartScreen and macOS Gatekeeper warn on the first start; see [Patcher and builder](docs/patcher.md) for how to start it anyway, for its self-update and for the command line options.
 
@@ -51,7 +51,7 @@ Everything for which a complete ROM set is found is built (MT-32 / CM-32L, SC-55
 | Emu-SC8820 (with SC-D70 interface) | `Emu-SC8820` |
 | Emu-SC8850 | `Emu-SC8850` |
 
-CLAP and VST2 are the **same file** with two entry points (Windows). On Linux there is a native CLAP plug-in with the same editor; on macOS a native CLAP bundle without editor so far. Plug-in IDs, voice counts and the plug-in state are listed in the [plug-in reference](docs/plugins.md).
+CLAP and VST2 are the **same file** with two entry points (Windows). On Linux there is a native CLAP plug-in with the same editor; on macOS a native CLAP bundle with the same editor. Plug-in IDs, voice counts and the plug-in state are listed in the [plug-in reference](docs/plugins.md).
 
 ---
 

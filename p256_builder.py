@@ -6,7 +6,7 @@ Nuked SC-55 / Emu SC-88 / SC-8820 / SC-8850 / MT-32 P256 - Plugin Builder
 Creates the single-file plugins from the ROM-less templates in "templates" (without ROMs and
 without space reserved for them; the script inserts the ROMs): CLAP + VST2 for Windows x64 from
 "templates", CLAP for Linux x64 from "templates/linux-x64" and CLAP bundles for macOS from
-"templates/macos-arm64" (Apple Silicon) or "templates/macos-x64" (Intel) (issue #112; no editor on macOS yet)
+"templates/macos-arm64" (Apple Silicon) or "templates/macos-x64" (Intel) (issue #112)
 and your own ROM files in the "roms" folder (subfolders are searched as well,
 filenames do not matter - identification is based on the contents via SHA-256).
 
