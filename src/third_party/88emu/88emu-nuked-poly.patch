@@ -827,7 +827,7 @@ index 9ccf846..fc6335a 100644
 +{
 +	if (!context || !buffer) return 0;
 +	const size_t n = std::min(size, context->outBytes.size());
-+	std::memcpy(buffer, context->outBytes.data(), n);
++	if (n) std::memcpy(buffer, context->outBytes.data(), n);
 +	context->outBytes.erase(context->outBytes.begin(), context->outBytes.begin() + static_cast<std::ptrdiff_t>(n));
 +	return n;
 +}
