@@ -2,10 +2,14 @@
 // Front panels from the 88emu player art (SC-55/SC-55mkII, SC-88, SC-88 Pro, SC-8850) with
 // the firmware-driven LCD on top, plus the polyphony (VOICES / UNITS) display.
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(NUKED_SC55_X11_EDITOR)
 
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#else
+#include "win32_x11.h" // Linux (issue #112): the Win32/GDI subset of this editor on X11
+#endif
 
 #include <algorithm>
 #include <vector>
@@ -309,6 +313,8 @@ HMENU BuildPreviewMenu(NukedSc55& p, wchar_t* label, size_t label_len)
 }
 #endif
 
+void HandleSetupCommand(Editor& e, int cmd);
+
 void ShowSetupMenu(Editor& e)
 {
     NukedSc55& p   = *e.plugin;
@@ -470,6 +476,10 @@ void ShowSetupMenu(Editor& e)
 
     RECT r;
     GetWindowRect(e.hwnd, &r);
+#ifndef _WIN32
+    // Linux: the menu does not block the host; TrackPopupMenu returns 0 and the choice arrives here
+    x11menu::SetHandler(e.hwnd, [&e](int chosen) { HandleSetupCommand(e, chosen); });
+#endif
     e.menu_open = true;
     InvalidateRect(e.hwnd, nullptr, FALSE);
 #if defined(NUKED_SC55_DEVICE_8850)
@@ -494,7 +504,13 @@ void ShowSetupMenu(Editor& e)
 #endif
     e.menu_open = false;
     DestroyMenu(m);
+    HandleSetupCommand(e, cmd);
+}
 
+// Command of the SETUP menu (0: closed without a choice)
+void HandleSetupCommand(Editor& e, int cmd)
+{
+    NukedSc55& p = *e.plugin;
     if (cmd >= 300 && cmd <= 427) {
 #ifdef NUKED_SC55_ENGINE_88PRO
         p.preview_note = cmd - 300; // stored in the plugin state
@@ -720,6 +736,20 @@ void Destroy(void* ed)
     delete e;
 }
 
+#ifndef _WIN32
+void Idle(void* ed)
+{
+    auto* e = static_cast<Editor*>(ed);
+    if (e && e->hwnd) w32x::Idle(e->hwnd);
+}
+
+int IdleFd(void* ed)
+{
+    auto* e = static_cast<Editor*>(ed);
+    return e && e->hwnd ? w32x::ConnectionFd(e->hwnd) : -1;
+}
+#endif
+
 bool RenderToBuffer(void* ed, unsigned int* pixels)
 {
     auto* e = static_cast<Editor*>(ed);
@@ -749,4 +779,4 @@ bool RenderToBuffer(void* ed, unsigned int* pixels)
 
 } // namespace editor
 
-#endif // _WIN32
+#endif // _WIN32 || NUKED_SC55_X11_EDITOR

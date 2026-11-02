@@ -16,7 +16,7 @@ Plug-in names and IDs, the plug-in state and the configuration options. Part of 
 
 - The file names contain no spaces or dots (some hosts and drivers dislike them); the display names in the host stay "Nuked-SC55 v1.21", "Nuked-SC55 MkII" and "Emu-SC88 Pro". The SC-55 models keep the name "Nuked" (Nuked core); all models on the 88emu core are named "Emu" (since issue #79; before: "Nuked-SC88" etc., same plug-in IDs).
 - Both formats are the **same file** with two entry points (`clap_entry` and `VSTPluginMain`). The builder writes it twice, once as `.clap` and once as `.dll`.
-- **Linux (issue #112):** a native ELF shared object that exports only `clap_entry` (no VST2, no editor yet); same CLAP IDs, so projects move between Windows and Linux. libstdc++ and libgcc are linked in; it needs glibc 2.35 or newer.
+- **Linux (issue #112):** a native ELF shared object that exports only `clap_entry` (no VST2; the editor is an X11 window and needs libX11); same CLAP IDs, so projects move between Windows and Linux. libstdc++ and libgcc are linked in; it needs glibc 2.35 or newer.
 - Category: instrument/synth; flags: editor, replacing, program chunks. VST2 vendor `Emu MT-32 P256` (MT-32 / CM-32L), `Nuked SC-55 P256` (SC-55; SC-88 and SC-88 Pro: `Emu SC-88 P256`, SC-8820: `Emu SC-8820 P256`, SC-8850: `Emu SC-8850 P256`).
 - The IDs of the plug-ins never changed since the first version, so projects stay compatible. Hosts may show a new vendor after a rescan.
 - Windows version info: product name, description and internal name are the display name; file and product version are the build date (`2026.10.07` is stored as `2026,10,7,0` numerically, which Windows shows as `2026.10.7.0`).

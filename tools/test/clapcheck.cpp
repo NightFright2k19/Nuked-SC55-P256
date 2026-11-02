@@ -1,6 +1,6 @@
 // Linux CLAP check for the native plug-ins (issue #112): loads a .clap with dlopen, lists the plug-ins of the
-// factory, and for each one plays 256 notes for a few seconds, reports the RMS of the last second, checks that no GUI
-// extension is offered (no Linux editor yet) and that the state can be saved and loaded.
+// factory, and for each one plays 256 notes for a few seconds, reports the RMS of the last second, checks that the GUI
+// extension offers the X11 editor and that the state can be saved and loaded.
 // Build: g++ -O2 -std=c++17 -I<plug-in sources>/include tools/test/clapcheck.cpp -ldl -o clapcheck
 // Usage: clapcheck <plugin.clap> [seconds]   (ROMs are inside the plug-in; exit code 0 = all plug-ins sound)
 #include "clap/clap.h"
@@ -71,7 +71,8 @@ int main(int argc, char** argv) {
 			if (b * B >= (secs - 1) * 48000) { for (uint32_t i = 0; i < B; i++) ss += L[i] * L[i] + R[i] * R[i]; cnt += 2 * B; }
 		}
 		const double rms = sqrt(ss / std::max(cnt, 1L));
-		const bool gui = p->get_extension(p, CLAP_EXT_GUI) != nullptr;
+		auto g = (const clap_plugin_gui_t*)p->get_extension(p, CLAP_EXT_GUI);
+		const bool gui = g && g->is_api_supported(p, CLAP_WINDOW_API_X11, false);
 		auto st = (const clap_plugin_state_t*)p->get_extension(p, CLAP_EXT_STATE);
 		bool state_ok = false;
 		if (st) {
@@ -80,8 +81,8 @@ int main(int argc, char** argv) {
 			state_ok = st->save(p, &os) && !blob.empty() && st->load(p, &is);
 		}
 		printf("  %s (%s): RMS %.4f, compute %.1f s for %.0f s audio, gui %s, state %s\n", d->id, d->name, rms, tp, secs,
-		       gui ? "OFFERED" : "none", state_ok ? "ok" : "FAILED");
-		if (!(rms > 1e-4) || !state_ok) bad++;
+		       gui ? "x11" : "MISSING", state_ok ? "ok" : "FAILED");
+		if (!(rms > 1e-4) || !state_ok || !gui) bad++;
 		p->stop_processing(p); p->deactivate(p); p->destroy(p);
 	}
 	entry->deinit();
