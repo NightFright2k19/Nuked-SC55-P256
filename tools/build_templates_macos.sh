@@ -53,6 +53,8 @@ CC=clang
 $CC -O2 -c -mmacosx-version-min=$NK_MACOS_MIN -DFLOATING_POINT $SPX -DEXPORT= -Iinc -Iinc/speex -I"$W/speexdsp/libspeexdsp" "$W/speexdsp/libspeexdsp/resample.c" -o resample.o
 $CC -O2 -c -mmacosx-version-min=$NK_MACOS_MIN "$S/src/nuked-sc55/sha/sha224-256.c" -o sha.o
 
+# the build functions filter the compiler output through grep (no match = exit code 1); the count below checks
+set +e +o pipefail
 export S NK_TARGET=macos CXX=${CXX:-clang++} OUTDIR=out_tpl GM=$W/gearmulator LIBW=$LIB
 . "$R/tools/winbuild/build2.sh"
 NK_SLOT_CAP=3506176 build "Nuked-SC55_v121" "Nuked-SC55 v1.21" 3 0x53355033 2 "SC-55 v1.21"
