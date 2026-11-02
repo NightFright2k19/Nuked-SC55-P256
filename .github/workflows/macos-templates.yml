@@ -98,11 +98,11 @@ jobs:
           set -uo pipefail
           clang++ -O2 -std=c++17 -fobjc-arc -I src/include tools/test/clapgui_mac.mm -framework Cocoa -o clapgui_mac
           mkdir -p previews/${{ matrix.arch }}
-          # SETUP button of each panel (editor coordinates)
+          # SETUP button of each panel (editor coordinates); clapgui_mac stops itself after 20 s (no timeout on macOS)
           for m in "Nuked-SC55_v121 848 255" "Nuked-SC55_MkII 848 255" "Emu-SC88 328 255" "Emu-SC88_Pro 328 255" \
                    "Emu-SC8820 856 252" "Emu-SC8850 848 255" "Emu-MT32 856 241"; do
             set -- $m
-            timeout 60 ./clapgui_mac "build-macos/tpl/out_tpl/$1.dylib" "previews/${{ matrix.arch }}/$1" $2 $3 || echo "$1: exit $?"
+            ./clapgui_mac "build-macos/tpl/out_tpl/$1.dylib" "previews/${{ matrix.arch }}/$1" $2 $3 || echo "$1: exit $?"
           done
           ls -la previews/${{ matrix.arch }}
 
