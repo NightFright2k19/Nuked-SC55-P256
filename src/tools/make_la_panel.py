@@ -17,8 +17,8 @@ from PIL import Image, ImageDraw, ImageFont
 W, H, S, FRONT = 918, 280, 3, 196
 VSCALE = 0.9                     # VOICES box scale (issue #79; editor_mt32.inc scales its contents the same way)
 LOGO_BASE = 257                  # baseline of the name in the lower strip (editor_mt32.inc: click area above it)
-DJ = "/usr/share/fonts/truetype/dejavu/DejaVuSans"
-MONO = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf"
+DJ = __import__("os").environ.get("NK_DEJAVU_DIR", "/usr/share/fonts/truetype/dejavu") + "/DejaVuSans"  # NK_DEJAVU_DIR: font folder elsewhere (macOS)
+MONO = __import__("os").environ.get("NK_DEJAVU_DIR", "/usr/share/fonts/truetype/dejavu") + "/DejaVuSansMono-Bold.ttf"
 # MT-32 LCD (panel pixels): 20 cells; the GUI draws the characters (editor_mt32.inc uses the same numbers)
 LX0, LY0, LX1, LY1 = 190, 100, 418, 140
 CELL_X0, CELL_W = 4, 11          # 20 cells at whole pixels (issue #79)

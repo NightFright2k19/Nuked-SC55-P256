@@ -23,7 +23,7 @@ build88o() {
     $S/src/nuked-sc55/backend/*.cpp $S/src/nuked-sc55/common/*.cpp \
     $S/src/nuked_sc55.cpp $S/src/plugin.cpp $NK_PLAT_SRC \
     gen/roms_88o.cpp gen/panel88o.cpp gen/sprites88o.cpp $RES resample.o sha.o $LIBW \
-    -O3 -flto -shared -o "$O/$F.$NK_EXT" $NK_LINK -Wl,--gc-sections -s \
+    -O3 -flto -shared -o "$O/$F.$NK_EXT" $NK_LINK $NK_STRIP \
     $NK_LIBS88 2>&1 | grep -E "error|undefined" | head -20
   nk_finish "$O" "$F"
 }

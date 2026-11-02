@@ -1,0 +1,128 @@
+name: macOS templates
+
+# Builds the ROM-free macOS CLAP templates (issue #112) on the macOS runners, one job per architecture
+# (tools/build_templates_macos.sh), checks that each template loads after it was filled (with random data, no
+# ROMs) and its signature renewed like the patcher does (codesign --verify), and uploads them as the artifact "templates-macos-<arch>".
+# The templates are then committed to templates/macos-arm64 and templates/macos-x64 by hand; the Autobuild
+# (build.yml) only bundles what is in the repository. There are no ROMs in this workflow.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feat/issue-112-macos*']
+    paths:
+      - 'src/**'
+      - 'tools/winbuild/*.sh'
+      - 'tools/build_templates_macos.sh'
+      - 'tools/test/clapcheck.cpp'
+      - '.github/workflows/macos-templates.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-templates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  templates:
+    name: Templates ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15,       arch: arm64 }
+          - { os: macos-15-intel, arch: x64 }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install tools
+        run: |
+          brew install cairo
+          python -m pip install --upgrade pip pillow cairosvg
+
+      - name: Cache Gearmulator build
+        uses: actions/cache@v4
+        with:
+          path: build-macos/gearmulator
+          key: gm-${{ matrix.os }}-${{ hashFiles('src/tools/build_88emu.sh', 'src/third_party/88emu/*.patch') }}
+
+      - name: Build templates
+        run: |
+          export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix)/lib"   # cairosvg finds libcairo
+          bash tools/build_templates_macos.sh
+
+      - name: Check that the templates load
+        run: |
+          set -euo pipefail
+          clang++ -O2 -std=c++17 -I src/include tools/test/clapcheck.cpp -o clapcheck
+          mkdir -p check
+          for t in templates/macos-${{ matrix.arch }}/*.p256tpl; do
+            n=$(basename "$t" .p256tpl)
+            # filled with 1 MB of random data instead of ROMs (the check only loads and creates the plug-ins), once
+            # with the signature renewed by p256_builder.macho_resign (what the patcher does) and once without
+            python - "$t" "check/$n" << 'PY'
+          import os, sys
+          sys.path.insert(0, ".")
+          import p256_builder as b
+          data = b.fill_template(open(sys.argv[1], "rb").read(), [(0, os.urandom(1 << 20))], "check")
+          print(sys.argv[2], b.verify_plugin(data))
+          open(sys.argv[2], "wb").write(b.macho_resign(data))
+          open(sys.argv[2] + "-unsigned", "wb").write(data)
+          PY
+            file "check/$n"
+            if [ "${{ matrix.arch }}" = arm64 ]; then
+              # the renewed signature must be valid, the old one invalid (pages are checked when they are read, so a
+              # load alone would not notice the stale ROM pages)
+              codesign --verify --verbose "check/$n"
+              if codesign --verify "check/$n-unsigned" 2> /dev/null; then
+                echo "unexpected: the old signature is still valid, so the check proves nothing" >&2; exit 1
+              fi
+            fi
+            ./clapcheck "check/$n" --load
+          done
+
+      - name: Upload templates
+        uses: actions/upload-artifact@v4
+        with:
+          name: templates-macos-${{ matrix.arch }}
+          path: templates/macos-${{ matrix.arch }}/*.p256tpl
+          if-no-files-found: error
+
+  commit:
+    name: Commit templates
+    needs: templates
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Download templates
+        uses: actions/download-artifact@v4
+        with:
+          pattern: templates-macos-*
+
+      - name: Commit changed templates
+        run: |
+          set -euo pipefail
+          for a in arm64 x64; do
+            rm -rf templates/macos-$a && mkdir -p templates/macos-$a
+            cp templates-macos-$a/*.p256tpl templates/macos-$a/
+          done
+          git add templates/macos-arm64 templates/macos-x64
+          if git diff --cached --quiet; then echo "templates unchanged"; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "macOS templates from the macOS runners (run ${{ github.run_id }})"
+          git push origin HEAD:${{ github.ref_name }}

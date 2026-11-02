@@ -25,12 +25,12 @@ The plug-ins are made from your own ROM files with the **patcher**; no compiler 
 1. Download the **patcher** for your system from the [Releases](https://github.com/NightFright2k19/Nuked-SC55-P256/releases) page (Windows, Linux, macOS Apple Silicon or macOS Intel). The newest Autobuild is at the top and marked **Latest**.
 2. Put it in a folder together with your ROM files (subfolders are searched, file names do not matter; the files needed per model are listed in [Supported models and ROM sets](docs/roms.md)).
 3. Start it, check the list of found models and click **Patch**.
-4. Copy the results from `Plugins/CLAP/*.clap` and/or `Plugins/VST2/*.dll` (Windows; the Linux patcher creates only `Plugins/CLAP/*.clap`) to your plug-in folders (see [Using the plug-ins](#using-the-plug-ins)).
+4. Copy the results from `Plugins/CLAP/*.clap` and/or `Plugins/VST2/*.dll` (Windows; the Linux and macOS patchers create only `Plugins/CLAP/*.clap`) to your plug-in folders (see [Using the plug-ins](#using-the-plug-ins)).
 
 > [!IMPORTANT]
 > **Linux:** the Linux patcher creates **native Linux x64 CLAP plug-ins** (no VST2). They have the same editor panel and SETUP menu as on Windows (X11; under Wayland through XWayland) and need **libX11** and glibc 2.35 or newer (Ubuntu 22.04, Debian 12 or newer) ([#112](https://github.com/NightFright2k19/Nuked-SC55-P256/issues/112)).
 >
-> **macOS:** only the **patcher** runs natively there. The plug-ins it generates are still **Windows x64 builds** and do not load in a macOS host. Native macOS plug-ins are planned (#112).
+> **macOS:** the macOS patcher creates **native CLAP plug-in bundles** for its architecture (Apple Silicon or Intel; macOS 11 or newer, no VST2). They have **no editor window yet**: the host shows its generic parameter view ([#112](https://github.com/NightFright2k19/Nuked-SC55-P256/issues/112)). Install them into `~/Library/Audio/Plug-Ins/CLAP/`.
 
 Everything for which a complete ROM set is found is built (MT-32 / CM-32L, SC-55 v1.21, SC-55mk2 v1.01, SC-88, SC-88 Pro, SC-8820, SC-8850). The patcher is not signed, so Windows SmartScreen and macOS Gatekeeper warn on the first start; see [Patcher and builder](docs/patcher.md) for how to start it anyway, for its self-update and for the command line options.
 
@@ -51,7 +51,7 @@ Everything for which a complete ROM set is found is built (MT-32 / CM-32L, SC-55
 | Emu-SC8820 (with SC-D70 interface) | `Emu-SC8820` |
 | Emu-SC8850 | `Emu-SC8850` |
 
-CLAP and VST2 are the **same file** with two entry points (Windows). On Linux there is a native CLAP plug-in with the same editor; the patcher also runs on macOS, where it still creates the Windows plug-ins. Plug-in IDs, voice counts and the plug-in state are listed in the [plug-in reference](docs/plugins.md).
+CLAP and VST2 are the **same file** with two entry points (Windows). On Linux there is a native CLAP plug-in with the same editor; on macOS a native CLAP bundle without editor so far. Plug-in IDs, voice counts and the plug-in state are listed in the [plug-in reference](docs/plugins.md).
 
 ---
 
@@ -74,7 +74,7 @@ All choices are stored in the project by your host. The full table of entries is
 
 ## Using the plug-ins
 
-- **Install the CLAP file** into one of the standard locations, for example `C:\Program Files\Common Files\CLAP\` or `%LOCALAPPDATA%\Programs\CLAP\` (Windows), `~/.clap/` or `/usr/lib/clap/` (Linux). **VST2** (Windows only): copy the `.dll` into the VST2 folder of your host.
+- **Install the CLAP file** into one of the standard locations, for example `C:\Program Files\Common Files\CLAP\` or `%LOCALAPPDATA%\Programs\CLAP\` (Windows), `~/.clap/` or `/usr/lib/clap/` (Linux), `~/Library/Audio/Plug-Ins/CLAP/` (macOS; the `.clap` is a folder, copy it as a whole). **VST2** (Windows only): copy the `.dll` into the VST2 folder of your host.
 - **DAW:** load the plug-in as an instrument and send MIDI to it. For GM/GS/XG songs, a GS reset (or GM on) at the start is sent to all units as usual.
 - **Falcosoft:** the plug-ins are meant to work with the [Falcosoft MIDI Player](https://falcosoft.hu/) and the Falcosoft VST MIDI Driver, which makes a VST instrument available as a system MIDI device (DOS games in DOSBox, Windows games). The MIDI Player is also a good second opinion for the LCD: its "Midi Text" and "Visualization" dialogs show the same text and bitmap messages.
 - **Which one:** SC-55 v1.21 is the classic DOS game sound (Doom, Duke Nukem 3D and many others), SC-55mk2 with CTF is the later model with the SC-55 tones as fallback, SC-88 Pro offers the larger sound set and can switch back to the SC-55 and SC-88 maps.

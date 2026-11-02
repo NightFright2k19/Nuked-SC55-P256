@@ -29,7 +29,7 @@ SETUP = (652, 31, 744, 54)
 
 base = '--base' in sys.argv
 all_on = '--all-on' in sys.argv
-DJ = "/usr/share/fonts/truetype/dejavu/DejaVuSans"
+DJ = __import__("os").environ.get("NK_DEJAVU_DIR", "/usr/share/fonts/truetype/dejavu") + "/DejaVuSans"  # NK_DEJAVU_DIR: font folder elsewhere (macOS)
 def F(sz, st=""): return ImageFont.truetype(DJ + st + ".ttf", int(sz * S))
 def X(v): return int(round(v * S))
 def lerp(a, b, t): return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))

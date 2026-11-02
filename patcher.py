@@ -34,15 +34,17 @@ TEMPLATES = CODE / 'templates'
 
 
 def template_kind() -> str:
-    """'windows' or 'linux' (p256_builder.plugin_kind of the bundled templates); selects the '_linux' texts."""
+    """'windows', 'linux', 'macos-arm64' or 'macos-x64' (p256_builder.plugin_kind of the bundled templates); selects
+    the '_linux' and '_macos' texts."""
     try:
         with next(TEMPLATES.glob('*.p256tpl')).open('rb') as f:
-            return builder.plugin_kind(f.read(4))
+            return builder.plugin_kind(f.read(8))
     except (StopIteration, OSError):
         return 'windows'
 
 
 KIND = template_kind()
+SYSTEM_NAME = {'macos-arm64': 'macOS Apple Silicon', 'macos-x64': 'macOS Intel'}   # {system} in the '_macos' texts
 ICONS = CODE / 'icons'
 ICON_FILES = ('patcher_16.png', 'patcher_32.png', 'patcher.png')   # window icon (Tk picks the best size)
 PLUGINS = HERE / 'Plugins'
@@ -136,7 +138,9 @@ def selftest(out: Path | None = None) -> int:
         assert tpl.is_file(), f'template missing: {tpl}'
         data = builder.fill_template(tpl.read_bytes(), [(loc, b'\0' * 64) for loc, _ in parts], title)
         assert data.count(builder.MAGIC) == 1, f'template broken: {tpl}'
-        assert builder.verify_plugin(data) == KIND, f'template of another system: {tpl}'   # Windows PE or Linux ELF
+        assert builder.verify_plugin(data) == KIND, f'template of another system: {tpl}'   # Windows PE, Linux ELF, Mach-O
+        if KIND.startswith('macos'):
+            assert builder.verify_plugin(builder.macho_resign(data)) == KIND, f'signature not renewed: {tpl}'
     assert len(builder.apply_ctf(bytes(524288))) == 524288
     for f in ICON_FILES:
         assert (ICONS / f).is_file(), f'icon missing: {ICONS / f}'
@@ -188,9 +192,11 @@ def main_window():
     q = queue.Queue()
 
     def T(key, width=0, **kw):
-        if KIND == 'linux' and key + '_linux' in TEXT['en']:
+        if KIND.startswith('macos') and key + '_macos' in TEXT['en']:
+            key += '_macos'
+        elif KIND != 'windows' and key + '_linux' in TEXT['en']:
             key += '_linux'
-        text = TEXT[st['lang']].get(key, TEXT['en'][key]).format(**kw)
+        text = TEXT[st['lang']].get(key, TEXT['en'][key]).format(system=SYSTEM_NAME.get(KIND, ''), **kw)
         return shape_rtl(text, width) if st['lang'] in RTL else text
 
     shown = {code: shape_rtl(name) if code in RTL else name for code, name in LANGUAGES.items()}
