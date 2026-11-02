@@ -20,6 +20,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: macos-templates-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   templates:
     name: Templates ${{ matrix.arch }}
@@ -94,3 +98,31 @@ jobs:
           name: templates-macos-${{ matrix.arch }}
           path: templates/macos-${{ matrix.arch }}/*.p256tpl
           if-no-files-found: error
+
+  commit:
+    name: Commit templates
+    needs: templates
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Download templates
+        uses: actions/download-artifact@v4
+        with:
+          pattern: templates-macos-*
+
+      - name: Commit changed templates
+        run: |
+          set -euo pipefail
+          for a in arm64 x64; do
+            rm -rf templates/macos-$a && mkdir -p templates/macos-$a
+            cp templates-macos-$a/*.p256tpl templates/macos-$a/
+          done
+          git add templates/macos-arm64 templates/macos-x64
+          if git diff --cached --quiet; then echo "templates unchanged"; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "macOS templates from the macOS runners (run ${{ github.run_id }})"
+          git push origin HEAD:${{ github.ref_name }}
