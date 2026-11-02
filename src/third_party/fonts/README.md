@@ -1,6 +1,6 @@
 # Fonts of the Linux editor (issue #112)
 
-The Linux editor (`src/gui/win32_x11.cpp`) cannot use the Windows fonts of the panels, so it embeds these
+The Linux and macOS editors (`src/gui/win32_gdi.cpp`) cannot use the Windows fonts of the panels, so it embeds these
 fonts unmodified (`.incbin`, about 1.1 MB together; unmodified, so the font names and licenses stay as they are).
 
 | File | Replaces (Windows) | Source | License |

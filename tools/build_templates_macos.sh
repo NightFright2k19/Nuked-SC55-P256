@@ -2,7 +2,7 @@
 # Builds the ROM-free macOS CLAP templates (issue #112) for the architecture of the Mac it runs on (arm64 or
 # x86_64) into templates/macos-arm64/ or templates/macos-x64/ of the repository. Same sources, build functions
 # and ROM areas as the Windows and Linux templates (tools/winbuild/build*.sh, NK_TARGET=macos in
-# winbuild/target.sh): Apple clang, CLAP only, no editor yet. Runs on the GitHub Actions macOS runners
+# winbuild/target.sh): Apple clang, CLAP only, editor on Cocoa. Runs on the GitHub Actions macOS runners
 # (.github/workflows/macos-templates.yml); there is no cross-build from Linux.
 # Needs: Xcode command line tools, cmake, python3 with Pillow and cairosvg (cairo from Homebrew), git, curl.
 # Work folder: $WORK (default build-macos/ in the repository; Gearmulator, speexdsp, fonts and objects).

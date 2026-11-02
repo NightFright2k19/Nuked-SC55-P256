@@ -1,16 +1,18 @@
 #pragma once
-// The Win32/GDI subset of the plug-in editor (editor_win32.cpp and the editor_*.inc files) for Linux / X11
-// (issue #112). The editor code stays the same on both systems: windows, device contexts, bitmaps, brushes,
-// pens and fonts are implemented here on top of 32-bit BGRA memory bitmaps (software drawing, same pixel
-// format as the Windows DIB sections), the window is an X11 child window of the host's window, text uses
-// embedded fonts (Liberation Sans for Arial / Segoe UI, DejaVu Sans Mono for Consolas; stb_truetype), and
-// popup menus are drawn by this file in X11 popup windows.
+// The Win32/GDI subset of the plug-in editor (editor_win32.cpp and the editor_*.inc files) for Linux / X11 and
+// macOS / Cocoa (issue #112). The editor code stays the same on all systems: device contexts, bitmaps, brushes,
+// pens and fonts are implemented on top of 32-bit BGRA memory bitmaps (win32_gdi.cpp: software drawing, same
+// pixel format as the Windows DIB sections; text with embedded fonts, Liberation Sans for Arial / Segoe UI and
+// DejaVu Sans Mono for Consolas, through stb_truetype). The window is a child of the host's window: an X11 window
+// (win32_x11.cpp) or an NSView (win32_cocoa.mm).
 //
 // Differences to Win32 that the editor relies on being handled:
-//  * The host drives the window: editor::Idle() (called from the CLAP timer / file descriptor callbacks on
-//    the host's main thread) dispatches the X events, WM_TIMER and WM_PAINT to the window procedure.
-//  * TrackPopupMenu with TPM_RETURNCMD returns 0 at once and shows the menu without blocking the host;
-//    the chosen command arrives later through the handler set with x11menu::SetHandler.
+//  * Linux: the host drives the window: editor::Idle() (called from the CLAP timer / file descriptor callbacks on
+//    the host's main thread) dispatches the X events, WM_TIMER and WM_PAINT to the window procedure. macOS: the
+//    view gets its events from AppKit; timers are NSTimers on the main run loop.
+//  * TrackPopupMenu with TPM_RETURNCMD returns 0; the chosen command arrives through the handler set with
+//    popupmenu::SetHandler. Linux: later (the menu is drawn by win32_x11.cpp and does not block the host);
+//    macOS: from the native NSMenu, before TrackPopupMenu returns.
 // Only what the editor uses is implemented; everything is local to the plug-in (no symbol is exported).
 
 #include <algorithm>
@@ -183,7 +185,7 @@ enum : UINT { TPM_LEFTALIGN = 0x0, TPM_RIGHTALIGN = 0x8, TPM_TOPALIGN = 0x0, TPM
 BOOL GetClassInfoA(HINSTANCE, LPCSTR name, WNDCLASSA* wc);
 WORD RegisterClassA(const WNDCLASSA* wc);
 HWND CreateWindowExA(DWORD ex, LPCSTR cls, LPCSTR title, DWORD style, int x, int y, int w, int h, HWND parent,
-                     HMENU menu, HINSTANCE inst, void* param); // parent: the X11 window id of the host
+                     HMENU menu, HINSTANCE inst, void* param); // parent: the host's X11 window id / NSView
 BOOL DestroyWindow(HWND w);
 BOOL ShowWindow(HWND w, int cmd);
 LRESULT DefWindowProcA(HWND, UINT, WPARAM, LPARAM);
@@ -197,7 +199,7 @@ BOOL EndPaint(HWND w, const PAINTSTRUCT* ps);
 HWND SetCapture(HWND w);
 BOOL ReleaseCapture();
 BOOL TrackMouseEvent(TRACKMOUSEEVENT* t);
-BOOL GetWindowRect(HWND w, RECT* r);          // screen (X11 root window) coordinates
+BOOL GetWindowRect(HWND w, RECT* r);          // screen coordinates (top left origin)
 BOOL ScreenToClient(HWND w, POINT* p);
 DWORD GetTickCount();
 WORD GetUserDefaultUILanguage();              // from LC_ALL / LC_MESSAGES / LANG
@@ -244,13 +246,13 @@ BOOL AppendMenuW(HMENU m, UINT flags, UINT_PTR id, LPCWSTR text);
 BOOL DestroyMenu(HMENU m);
 int TrackPopupMenu(HMENU m, UINT flags, int x, int y, int reserved, HWND owner, const RECT* r);
 
-namespace x11menu {
+namespace popupmenu {
 // Called once with the chosen command (0: closed without a choice) after a TrackPopupMenu of this window.
 void SetHandler(HWND owner, std::function<void(int)> handler);
-} // namespace x11menu
+} // namespace popupmenu
 
 namespace w32x {
-// Dispatches the pending X events, timers and paints of all windows and menus of this connection
+// Linux: dispatches the pending X events, timers and paints of all windows and menus of this connection
 // (CLAP timer / fd callbacks). Returns the X connection's file descriptor (-1 if none).
 int Idle(HWND w);
 int ConnectionFd(HWND w);

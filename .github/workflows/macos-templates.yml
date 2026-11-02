@@ -2,9 +2,10 @@ name: macOS templates
 
 # Builds the ROM-free macOS CLAP templates (issue #112) on the macOS runners, one job per architecture
 # (tools/build_templates_macos.sh), checks that each template loads after it was filled (with random data, no
-# ROMs) and its signature renewed like the patcher does (codesign --verify), and uploads them as the artifact "templates-macos-<arch>".
-# The templates are then committed to templates/macos-arm64 and templates/macos-x64 by hand; the Autobuild
-# (build.yml) only bundles what is in the repository. There are no ROMs in this workflow.
+# ROMs) and its signature renewed like the patcher does (codesign --verify), takes screenshots of each editor
+# (tools/test/clapgui_mac.mm) and uploads both as artifacts. The commit job then commits the templates to
+# templates/macos-arm64 and templates/macos-x64 of the branch and publishes the screenshots to the branch
+# preview/<branch>; the Autobuild (build.yml) only bundles what is in the repository. There are no ROMs in this workflow.
 
 on:
   workflow_dispatch:
@@ -15,6 +16,7 @@ on:
       - 'tools/winbuild/*.sh'
       - 'tools/build_templates_macos.sh'
       - 'tools/test/clapcheck.cpp'
+      - 'tools/test/clapgui_mac.mm'
       - '.github/workflows/macos-templates.yml'
 
 permissions:
@@ -92,6 +94,26 @@ jobs:
             ./clapcheck "check/$n" --load
           done
 
+      - name: Editor screenshots
+        run: |
+          set -uo pipefail
+          clang++ -O2 -std=c++17 -fobjc-arc -I src/include tools/test/clapgui_mac.mm -framework Cocoa -o clapgui_mac
+          mkdir -p previews/${{ matrix.arch }}
+          # SETUP button of each panel (editor coordinates); clapgui_mac stops itself after 20 s (no timeout on macOS)
+          for m in "Nuked-SC55_v121 848 255" "Nuked-SC55_MkII 848 255" "Emu-SC88 328 255" "Emu-SC88_Pro 328 255" \
+                   "Emu-SC8820 856 252" "Emu-SC8850 848 255" "Emu-MT32 856 241"; do
+            set -- $m
+            ./clapgui_mac "build-macos/tpl/out_tpl/$1.dylib" "previews/${{ matrix.arch }}/$1" $2 $3 || echo "$1: exit $?"
+          done
+          ls -la previews/${{ matrix.arch }}
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: previews-macos-${{ matrix.arch }}
+          path: previews/${{ matrix.arch }}/*.png
+          if-no-files-found: warn
+
       - name: Upload templates
         uses: actions/upload-artifact@v4
         with:
@@ -109,10 +131,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Download templates
+      - name: Download templates and screenshots
         uses: actions/download-artifact@v4
         with:
-          pattern: templates-macos-*
+          pattern: '*-macos-*'
 
       - name: Commit changed templates
         run: |
@@ -126,3 +148,16 @@ jobs:
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -m "macOS templates from the macOS runners (run ${{ github.run_id }})"
           git push origin HEAD:${{ github.ref_name }}
+
+      - name: Publish screenshots
+        # to the branch preview/<branch> (replaced each time), for looking at them without downloading artifacts
+        run: |
+          set -euo pipefail
+          ls -d previews-macos-* > /dev/null 2>&1 || { echo "no screenshots"; exit 0; }
+          mkdir ../pv && cd ../pv && git init -q && git checkout -q -b preview
+          for d in "$GITHUB_WORKSPACE"/previews-macos-*; do mkdir -p "$(basename "$d")" && cp "$d"/*.png "$(basename "$d")/" || true; done
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Editor screenshots from the macOS runners (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" \
+            HEAD:refs/heads/preview/${{ github.ref_name }}

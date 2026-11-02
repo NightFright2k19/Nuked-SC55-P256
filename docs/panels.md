@@ -4,7 +4,7 @@ Panels of the SC-55 models, LCD details and the complete SETUP menu reference. P
 
 ## Panels and controls
 
-All panels run on Windows (Win32/GDI) and Linux (X11, the same code through `src/gui/win32_x11.cpp`), 918 x 280 px, 30 frames per second, and read the engine only through atomics.
+All panels run on Windows (Win32/GDI), Linux (X11) and macOS (Cocoa), the same code through the Win32 shim of `src/gui/win32_gdi.cpp` with `win32_x11.cpp` or `win32_cocoa.mm`, 918 x 280 px, 30 frames per second, and read the engine only through atomics.
 
 ### SC-55 / SC-55mkII panel (918 x 280 px)
 

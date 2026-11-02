@@ -4,6 +4,12 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r74: Editor for the macOS plug-ins (2026-11-02)
+
+- The native **macOS CLAP** plug-ins now have the **same editor panel** as on Windows and Linux (#112): an NSView that the host embeds, 918 x 280 points, 30 frames per second, on Apple Silicon and Intel. The **SETUP menu** is a native macOS menu with the same entries.
+- The text uses the embedded fonts of the Linux editor (Liberation Sans, DejaVu Sans Mono). Playback and the editor on a real Mac are not confirmed yet; the editor was tested on the GitHub macOS runners only (no ROMs there).
+- Code: the Win32 shim of the Linux editor is split into `src/gui/win32_gdi.cpp` (drawing, fonts, menu model; shared) and the window parts `win32_x11.cpp` and the new `win32_cocoa.mm`; `win32_x11.h` is now `win32_shim.h`, `x11menu::SetHandler` is now `popupmenu::SetHandler`. The Linux templates are rebuilt from the split code (no change in behaviour). Test host `tools/test/clapgui_mac.mm`; the macOS workflow publishes editor screenshots to `preview/<branch>`.
+
 ## r73: Native macOS CLAP plug-ins (2026-11-02)
 
 - The **macOS patchers** now create native **CLAP** plug-in bundles of all seven models instead of the Windows files (#112): Apple Silicon (arm64) and Intel (x86_64), each patcher for its own architecture, macOS 11 or newer. No VST2 and no editor window yet: hosts show their generic parameter view. Same CLAP IDs as on Windows and Linux.

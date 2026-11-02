@@ -1,6 +1,6 @@
 // CLAP check for the native Linux and macOS plug-ins (issue #112): loads a plug-in binary with dlopen, lists the
 // plug-ins of the factory, and for each one plays 256 notes for a few seconds, reports the RMS of the last second,
-// checks that the GUI extension offers the X11 editor (Linux) and that the state can be saved and loaded.
+// checks that the GUI extension offers the X11 editor (Linux) or the Cocoa editor (macOS) and that the state can be saved and loaded.
 // Build: g++ -O2 -std=c++17 -I<plug-in sources>/include tools/test/clapcheck.cpp -ldl -o clapcheck
 // Usage: clapcheck <plugin binary> [seconds]   (ROMs are inside the plug-in; exit code 0 = all plug-ins sound)
 //        clapcheck <plugin binary> --load      (no ROMs needed: only loads, lists and creates the plug-ins; used
@@ -85,9 +85,8 @@ int main(int argc, char** argv) {
 		const bool gui = g && g->is_api_supported(p, CLAP_WINDOW_API_X11, false);
 		const char* gui_label = gui ? "x11" : "MISSING";
 #else
-		const bool gui = true;   // no editor on macOS yet
-		const char* gui_label = g ? "offered" : "none";
-		(void)g;
+		const bool gui = g && g->is_api_supported(p, CLAP_WINDOW_API_COCOA, false);
+		const char* gui_label = gui ? "cocoa" : "MISSING";
 #endif
 		auto st = (const clap_plugin_state_t*)p->get_extension(p, CLAP_EXT_STATE);
 		bool state_ok = false;

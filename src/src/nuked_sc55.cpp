@@ -17,7 +17,7 @@
 
 #include "nuked-sc55/common/rom_loader.h"
 #include "nuked_sc55.h"
-#if defined(_WIN32) || defined(NUKED_SC55_X11_EDITOR)
+#if defined(_WIN32) || defined(NUKED_SC55_X11_EDITOR) || defined(NUKED_SC55_COCOA_EDITOR)
 #include "gui/editor.h"
 #endif
 #ifdef NUKED_SC55_EMBED_ROMS
@@ -558,7 +558,7 @@ void NukedSc55::KeepPowerOnState(const EMU_Options& opts)
 
 void NukedSc55::Shutdown()
 {
-#if defined(_WIN32) || defined(NUKED_SC55_X11_EDITOR)
+#if defined(_WIN32) || defined(NUKED_SC55_X11_EDITOR) || defined(NUKED_SC55_COCOA_EDITOR)
 	if (editor) {
 		editor::Destroy(editor);
 		editor = nullptr;
