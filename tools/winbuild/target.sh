@@ -33,7 +33,7 @@ case "${NK_TARGET:-windows}" in
     # Export only clap_entry; libc++ is part of macOS. NK_MACOS_MIN: oldest macOS that loads the plug-in.
     NK_EXT=dylib
     NK_PLAT_SRC=""
-    NK_LINK="-mmacosx-version-min=${NK_MACOS_MIN:-11.0} -fPIC -pthread -Wl,-exported_symbol,_clap_entry -Wl,-undefined,error"
+    NK_LINK="-mmacosx-version-min=${NK_MACOS_MIN:-11.0} -fPIC -pthread -Wl,-exported_symbol,_clap_entry"
     NK_LIBS="-framework CoreFoundation"
     NK_LIBS88="-framework CoreFoundation"
     NK_STRIP="-Wl,-dead_strip -Wl,-x" ;;
