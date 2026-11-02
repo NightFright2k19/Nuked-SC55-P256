@@ -25,10 +25,10 @@ The plug-ins are made from your own ROM files with the **patcher**; no compiler 
 1. Download the **patcher** for your system from the [Releases](https://github.com/NightFright2k19/Nuked-SC55-P256/releases) page (Windows, Linux, macOS Apple Silicon or macOS Intel). The newest Autobuild is at the top and marked **Latest**.
 2. Put it in a folder together with your ROM files (subfolders are searched, file names do not matter; the files needed per model are listed in [Supported models and ROM sets](docs/roms.md)).
 3. Start it, check the list of found models and click **Patch**.
+4. Copy the results from `Plugins/CLAP/*.clap` and/or `Plugins/VST2/*.dll` to your plug-in folders (see [Using the plug-ins](#using-the-plug-ins)).
+
 > [!IMPORTANT]
 > **Linux and macOS:** only the **patcher** runs natively there. The plug-ins it generates are still **Windows x64 builds** (`.clap` and `.dll` are Windows binaries) and do not load in a native Linux or macOS host. Native Linux and macOS plug-ins are planned ([#112](https://github.com/NightFright2k19/Nuked-SC55-P256/issues/112)).
-
-4. Copy the results from `Plugins/CLAP/*.clap` and/or `Plugins/VST2/*.dll` to your plug-in folders (see [Using the plug-ins](#using-the-plug-ins)).
 
 Everything for which a complete ROM set is found is built (MT-32 / CM-32L, SC-55 v1.21, SC-55mk2 v1.01, SC-88, SC-88 Pro, SC-8820, SC-8850). The patcher is not signed, so Windows SmartScreen and macOS Gatekeeper warn on the first start; see [Patcher and builder](docs/patcher.md) for how to start it anyway, for its self-update and for the command line options.
 
