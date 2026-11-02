@@ -5,7 +5,8 @@ Nuked SC-55 / Emu SC-88 / SC-8820 / SC-8850 / MT-32 P256 - Plugin Builder
 
 Creates the single-file plugins from the ROM-less templates in "templates" (without ROMs and
 without space reserved for them; the script inserts the ROMs): CLAP + VST2 for Windows x64 from
-"templates", CLAP for Linux x64 from "templates/linux-x64" (issue #112; Linux has no editor window yet)
+"templates", CLAP for Linux x64 from "templates/linux-x64" and CLAP bundles for macOS from
+"templates/macos-arm64" (Apple Silicon) or "templates/macos-x64" (Intel) (issue #112; no editor on macOS yet)
 and your own ROM files in the "roms" folder (subfolders are searched as well,
 filenames do not matter - identification is based on the contents via SHA-256).
 
@@ -23,10 +24,14 @@ Everything for which a complete ROM set is found will be built.
 SC-55mk2: If only the original rom2 (512 KB) is available, the CTF patch (Capital Tone
 Fallback) is applied during the build; the result is checked against the known CTF checksum.
 
-Usage:  python p256_builder.py [--target windows|linux]   (Python 3.8 or newer, no additional packages)
-        Without --target the plugins are built for the running system (Linux, otherwise Windows).
+Usage:  python p256_builder.py [--target windows|linux|macos-arm64|macos-x64]
+        (Python 3.8 or newer, no additional packages)
+        Without --target the plugins are built for the running system (Linux, macOS of the running
+        architecture, otherwise Windows).
         Windows plugins: output/CLAP/<name>.clap and output/VST2/<name>.dll (the same file twice).
         Linux plugins:   output/CLAP/<name>.clap only.
+        macOS plugins:   output/CLAP/<name>.clap only, a bundle folder (Contents/MacOS/<name>); the
+                         code signature of the template is renewed after the ROMs are inserted.
 
 Releases use the patcher (patcher.py), which runs these same functions; this script is kept
 for development and for building from the repository.
@@ -34,6 +39,8 @@ for development and for building from the repository.
 import base64
 import hashlib
 import os
+import platform
+import shutil
 import struct
 import sys
 import zlib
@@ -42,8 +49,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROMS, TEMPLATES, OUTPUT = HERE / "roms", HERE / "templates", HERE / "output"
 # Template folder per target system (issue #112). The release patcher carries only the templates of its own system,
-# directly in its "templates" folder; the kind of plugin follows from the template file itself (PE or ELF).
-TARGET_TEMPLATES = {"windows": TEMPLATES, "linux": TEMPLATES / "linux-x64"}
+# directly in its "templates" folder; the kind of plugin follows from the template file itself (PE, ELF or Mach-O).
+TARGET_TEMPLATES = {"windows": TEMPLATES, "linux": TEMPLATES / "linux-x64",
+                    "macos-arm64": TEMPLATES / "macos-arm64", "macos-x64": TEMPLATES / "macos-x64"}
+MACHO_CPU = {0x0100000C: "macos-arm64", 0x01000007: "macos-x64"}   # CPU_TYPE_ARM64, CPU_TYPE_X86_64
 MAGIC = b"NUKED-P256-ROMSLOT"
 
 # Known ROM files (SHA-256 -> model, role)
@@ -331,22 +340,145 @@ def verify_elf(data: bytes) -> None:
             raise ValueError(bad)
 
 
+def macho_commands(data: bytes):
+    """Load commands of a 64-bit little-endian Mach-O file: list of (cmd, offset). Raises ValueError if the file is
+    not one or its header and load commands do not lie inside the file."""
+    bad = "template is damaged (not a complete macOS plug-in)"
+    if len(data) < 32 or data[:4] != b"\xcf\xfa\xed\xfe":
+        raise ValueError(bad)
+    ncmds, sizeofcmds = struct.unpack_from("<2I", data, 16)
+    if 32 + sizeofcmds > len(data):
+        raise ValueError(bad)
+    cmds, at = [], 32
+    for _ in range(ncmds):
+        if at + 8 > 32 + sizeofcmds:
+            raise ValueError(bad)
+        cmd, size = struct.unpack_from("<2I", data, at)
+        if size < 8:
+            raise ValueError(bad)
+        cmds.append((cmd, at))
+        at += size
+    return cmds
+
+
+def verify_macho(data: bytes) -> None:
+    """Raises ValueError unless data is a complete 64-bit Mach-O shared library of a known CPU (all segments and the
+    code signature lie inside the file)."""
+    bad = "template is damaged (not a complete macOS plug-in)"
+    cmds = macho_commands(data)
+    cpu, _, filetype = struct.unpack_from("<3I", data, 4)
+    if cpu not in MACHO_CPU or filetype not in (6, 8):   # MH_DYLIB, MH_BUNDLE
+        raise ValueError(bad)
+    for cmd, at in cmds:
+        if cmd == 0x19:                                   # LC_SEGMENT_64: fileoff, filesize
+            fileoff, filesize = struct.unpack_from("<2Q", data, at + 40)
+        elif cmd == 0x1D:                                 # LC_CODE_SIGNATURE: dataoff, datasize
+            fileoff, filesize = struct.unpack_from("<2I", data, at + 8)
+        else:
+            continue
+        if fileoff + filesize > len(data):
+            raise ValueError(bad)
+
+
+def macho_resign(data: bytes) -> bytes:
+    """Renews the ad-hoc code signature of a Mach-O file after the ROMs were inserted: the page hashes of its code
+    directory are computed again (Apple Silicon only loads code whose pages match the signature; the linker signed the
+    template ad hoc). Files without a signature (Intel builds) are returned unchanged."""
+    out = bytearray(data)
+    for cmd, at in macho_commands(data):
+        if cmd != 0x1D:
+            continue
+        dataoff, datasize = struct.unpack_from("<2I", data, at + 8)
+        magic, _, count = struct.unpack_from(">3I", data, dataoff)
+        if magic != 0xFADE0CC0:                           # embedded signature super blob
+            raise ValueError("unknown code signature in the template")
+        for i in range(count):
+            slot, offset = struct.unpack_from(">2I", data, dataoff + 12 + 8 * i)
+            cd = dataoff + offset
+            if struct.unpack_from(">I", data, cd)[0] != 0xFADE0C02:   # only code directories carry page hashes
+                continue
+            hash_offset, _, _, n_code, code_limit = struct.unpack_from(">5I", data, cd + 16)
+            hash_size, hash_type, _, page_log = struct.unpack_from(">4B", data, cd + 36)
+            algo = {1: "sha1", 2: "sha256"}.get(hash_type)
+            if algo is None or hash_size != hashlib.new(algo).digest_size or code_limit > dataoff:
+                raise ValueError("unknown code signature in the template")
+            page = 1 << page_log if page_log else code_limit
+            for n in range(n_code):
+                digest = hashlib.new(algo, data[n * page:min((n + 1) * page, code_limit)]).digest()
+                out[cd + hash_offset + n * hash_size:cd + hash_offset + (n + 1) * hash_size] = digest
+    return bytes(out)
+
+
 def plugin_kind(data: bytes) -> str:
-    """"windows" (PE: CLAP + VST2 in one file) or "linux" (ELF: CLAP only); the template decides."""
-    return "linux" if data[:4] == b"\x7fELF" else "windows"
+    """"windows" (PE: CLAP + VST2 in one file), "linux" (ELF: CLAP only) or "macos-arm64" / "macos-x64" (Mach-O: CLAP
+    bundle only); the template decides."""
+    if data[:4] == b"\x7fELF":
+        return "linux"
+    if data[:4] == b"\xcf\xfa\xed\xfe" and len(data) >= 8:
+        return MACHO_CPU.get(struct.unpack_from("<I", data, 4)[0], "macos")
+    return "windows"
 
 
 def verify_plugin(data: bytes) -> str:
     """Checks a filled template as a complete plug-in of its kind and returns the kind (see plugin_kind)."""
     kind = plugin_kind(data)
-    (verify_elf if kind == "linux" else verify_pe)(data)
+    (verify_elf if kind == "linux" else verify_macho if kind.startswith("macos") else verify_pe)(data)
     return kind
 
 
 def output_paths(kind: str, tpl_name: str, output: Path):
-    """Files of one plug-in: Windows CLAP + VST2 (the same file twice), Linux CLAP only."""
-    subs = (("CLAP", ".clap"),) if kind == "linux" else (("CLAP", ".clap"), ("VST2", ".dll"))
+    """Files of one plug-in: Windows CLAP + VST2 (the same file twice), Linux CLAP only, macOS a CLAP bundle folder."""
+    subs = (("CLAP", ".clap"),) if kind == "linux" or kind.startswith("macos") else (("CLAP", ".clap"), ("VST2", ".dll"))
     return tuple(output / sub / f"{tpl_name}{ext}" for sub, ext in subs)
+
+
+def bundle_plist(name: str, title: str) -> bytes:
+    """Info.plist of a macOS CLAP bundle (one identifier per plug-in file)."""
+    ident = "net.nuked_sc55_poly_clap.bundle." + "".join(c if c.isalnum() else "-" for c in name.lower())
+    keys = [("CFBundleDevelopmentRegion", "English"), ("CFBundleExecutable", name), ("CFBundleIdentifier", ident),
+            ("CFBundleInfoDictionaryVersion", "6.0"), ("CFBundleName", name), ("CFBundleGetInfoString", title),
+            ("CFBundlePackageType", "BNDL"), ("CFBundleShortVersionString", "1.0"), ("CFBundleSignature", "????"),
+            ("CFBundleVersion", "1.0"), ("LSMinimumSystemVersion", "11.0")]
+    body = "".join(f"\t<key>{k}</key>\n\t<string>{v}</string>\n" for k, v in keys)
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+            f'<plist version="1.0">\n<dict>\n{body}\t<key>NSHighResolutionCapable</key>\n\t<true/>\n</dict>\n</plist>\n'
+            ).encode("utf-8")
+
+
+def write_bundle(plugin: bytes, target: Path, name: str, title: str) -> None:
+    """Writes a macOS CLAP bundle (<name>.clap/Contents/MacOS/<name>, Info.plist, PkgInfo). The new bundle is built
+    next to the target first; the old one is replaced only when the new one is complete."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp, old = target.with_name(target.name + ".new"), target.with_name(target.name + ".old")
+    for p in (tmp, old):
+        if p.is_dir() and not p.is_symlink():
+            shutil.rmtree(p)
+        elif p.exists() or p.is_symlink():
+            p.unlink()
+    try:
+        (tmp / "Contents" / "MacOS").mkdir(parents=True)
+        (tmp / "Contents" / "Info.plist").write_bytes(bundle_plist(name, title))
+        (tmp / "Contents" / "PkgInfo").write_bytes(b"BNDL????")
+        exe = tmp / "Contents" / "MacOS" / name
+        exe.write_bytes(plugin)
+        exe.chmod(0o755)
+        if target.exists() or target.is_symlink():
+            os.replace(target, old)
+        try:
+            os.replace(tmp, target)
+        except OSError:
+            if old.exists():
+                os.replace(old, target)
+            raise
+    except OSError as e:
+        e.filename = str(target)
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    if old.is_dir() and not old.is_symlink():
+        shutil.rmtree(old, ignore_errors=True)
+    elif old.exists():
+        old.unlink()
 
 
 def write_pair(plugin: bytes, targets):
@@ -443,8 +575,8 @@ def plan(found):
 
 
 def build_model(item, templates: Path = TEMPLATES, output: Path = OUTPUT):
-    """Builds one complete model -> paths written: (clap, vst2) for Windows, (clap,) for Linux. Raises ValueError on
-    failure."""
+    """Builds one complete model -> paths written: (clap, vst2) for Windows, (clap,) for Linux and macOS (a bundle
+    folder). Raises ValueError on failure."""
     key, tpl_name, title, parts = item["key"], item["file"], item["title"], item["parts"]
     tpl = templates / f"{tpl_name}.p256tpl"
     if not tpl.is_file():
@@ -460,19 +592,25 @@ def build_model(item, templates: Path = TEMPLATES, output: Path = OUTPUT):
                 raise ValueError("CTF patch did not produce the expected checksum")
         entries.append((location, blob))
     plugin = fill_template(tpl.read_bytes(), entries, title)
-    paths = output_paths(verify_plugin(plugin), tpl_name, output)
-    write_pair(plugin, paths)
+    kind = verify_plugin(plugin)
+    paths = output_paths(kind, tpl_name, output)
+    if kind.startswith("macos"):
+        write_bundle(macho_resign(plugin), paths[0], tpl_name, title)
+    else:
+        write_pair(plugin, paths)
     return paths
 
 
 def main() -> int:
     lenient_output()
     target = "linux" if sys.platform.startswith("linux") else "windows"
+    if sys.platform == "darwin":
+        target = "macos-arm64" if platform.machine() == "arm64" else "macos-x64"
     if "--target" in sys.argv[1:]:
         at = sys.argv.index("--target")
         target = sys.argv[at + 1] if at + 1 < len(sys.argv) else ""
         if target not in TARGET_TEMPLATES:
-            print("--target needs 'windows' or 'linux'")
+            print("--target needs 'windows', 'linux', 'macos-arm64' or 'macos-x64'")
             return 1
     templates = TARGET_TEMPLATES[target]
     print("Nuked SC-55 / Emu SC-88 / SC-8820 / SC-8850 / MT-32 P256 - Plugin Builder\n")

@@ -21,6 +21,8 @@ if sys.argv[1] == "--slot":
 #include <cstdint>
 #ifdef _WIN32
 #define NK_SECTION ".section .rdata,\\"dr\\"\\n"
+#elif defined(__APPLE__)
+#define NK_SECTION ".section __TEXT,__const\\n"
 #else
 #define NK_SECTION ".section .rodata\\n"
 #endif
@@ -56,7 +58,7 @@ for k, p in enumerate(pairs):
     table.append(f"\t{{{loc}, nk_rom{k}_b, nk_rom{k}_e}},")
 with open(out, "w") as f:
     f.write('#include "embedded_roms.h"\n\n')
-    f.write('#ifdef _WIN32\n#define NK_SECTION ".section .rdata,\\"dr\\"\\n"\n#else\n#define NK_SECTION ".section .rodata\\n"\n#endif\n')
+    f.write('#ifdef _WIN32\n#define NK_SECTION ".section .rdata,\\"dr\\"\\n"\n#elif defined(__APPLE__)\n#define NK_SECTION ".section __TEXT,__const\\n"\n#else\n#define NK_SECTION ".section .rodata\\n"\n#endif\n')
     f.write("asm(NK_SECTION\n" + "".join(f'    "{l.replace(chr(34), chr(92)+chr(34))}\\n"\n' for l in asm) + '    ".text\\n");\n\n')
     f.write("\n".join(decl) + "\n\n")
     f.write("const EmbeddedRom g_embedded_roms[] = {\n" + "\n".join(table) + "\n};\n")
