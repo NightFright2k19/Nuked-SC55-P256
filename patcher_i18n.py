@@ -35,12 +35,14 @@ LANGUAGES = {
     'ja': '日本語',
 }
 
-# Keys ending in '_linux' replace the plain key in the Linux patcher (native Linux plug-ins, issue #112).
+# Keys ending in '_linux' replace the plain key in the Linux and the macOS patcher (native plug-ins, issue #112); keys
+# ending in '_macos' replace both in the macOS patcher ({system}: macOS Apple Silicon or macOS Intel).
 TEXT = {
     'en': {
         'whats_new': "What's new?",
         'intro': 'Creates the plugins (CLAP + VST2, Windows x64) from your own ROM files.',
         'intro_linux': 'Creates the plugins (CLAP, Linux x64) from your own ROM files.',
+        'intro_macos': 'Creates the plugins (CLAP, {system}) from your own ROM files.',
         'files': 'ROM files', 'folder': 'Folder', 'browse': 'Change…',
         'complete': 'complete', 'complete_ctf': 'complete (CTF is applied)',
         'missing': 'incomplete, missing: {roles}', 'none': 'not found',
@@ -69,6 +71,7 @@ TEXT = {
         'whats_new': 'Was ist neu?',
         'intro': 'Erstellt die Plugins (CLAP + VST2, Windows x64) aus deinen eigenen ROM-Dateien.',
         'intro_linux': 'Erstellt die Plugins (CLAP, Linux x64) aus deinen eigenen ROM-Dateien.',
+        'intro_macos': 'Erstellt die Plugins (CLAP, {system}) aus deinen eigenen ROM-Dateien.',
         'files': 'ROM-Dateien', 'folder': 'Ordner', 'browse': 'Ändern…',
         'complete': 'vollständig', 'complete_ctf': 'vollständig (CTF wird angewendet)',
         'missing': 'unvollständig, es fehlt: {roles}', 'none': 'nicht gefunden',
@@ -96,6 +99,7 @@ TEXT = {
     'fr': {
         'intro': 'Crée les plugins (CLAP + VST2, Windows x64) à partir de vos propres fichiers ROM.',
         'intro_linux': 'Crée les plugins (CLAP, Linux x64) à partir de vos propres fichiers ROM.',
+        'intro_macos': 'Crée les plugins (CLAP, {system}) à partir de vos propres fichiers ROM.',
         'files': 'Fichiers ROM', 'folder': 'Dossier', 'browse': 'Modifier…',
         'complete': 'complet', 'complete_ctf': 'complet (le CTF est appliqué)',
         'missing': 'incomplet, manque : {roles}', 'none': 'introuvable',
@@ -123,6 +127,7 @@ TEXT = {
     'it': {
         'intro': 'Crea i plugin (CLAP + VST2, Windows x64) dai tuoi file ROM.',
         'intro_linux': 'Crea i plugin (CLAP, Linux x64) dai tuoi file ROM.',
+        'intro_macos': 'Crea i plugin (CLAP, {system}) dai tuoi file ROM.',
         'files': 'File ROM', 'folder': 'Cartella', 'browse': 'Cambia…',
         'complete': 'completo', 'complete_ctf': 'completo (viene applicato il CTF)',
         'missing': 'incompleto, manca: {roles}', 'none': 'non trovato',
@@ -150,6 +155,7 @@ TEXT = {
     'es': {
         'intro': 'Crea los plugins (CLAP + VST2, Windows x64) a partir de tus propios archivos ROM.',
         'intro_linux': 'Crea los plugins (CLAP, Linux x64) a partir de tus propios archivos ROM.',
+        'intro_macos': 'Crea los plugins (CLAP, {system}) a partir de tus propios archivos ROM.',
         'files': 'Archivos ROM', 'folder': 'Carpeta', 'browse': 'Cambiar…',
         'complete': 'completo', 'complete_ctf': 'completo (se aplica el CTF)',
         'missing': 'incompleto, falta: {roles}', 'none': 'no encontrado',
@@ -177,6 +183,7 @@ TEXT = {
     'pt': {
         'intro': 'Cria os plugins (CLAP + VST2, Windows x64) a partir dos seus próprios arquivos ROM.',
         'intro_linux': 'Cria os plugins (CLAP, Linux x64) a partir dos seus próprios arquivos ROM.',
+        'intro_macos': 'Cria os plugins (CLAP, {system}) a partir dos seus próprios arquivos ROM.',
         'files': 'Arquivos ROM', 'folder': 'Pasta', 'browse': 'Alterar…',
         'complete': 'completo', 'complete_ctf': 'completo (o CTF é aplicado)',
         'missing': 'incompleto, falta: {roles}', 'none': 'não encontrado',
@@ -204,6 +211,7 @@ TEXT = {
     'zh': {
         'intro': '使用您自己的 ROM 文件创建插件（CLAP + VST2，Windows x64）。',
         'intro_linux': '使用您自己的 ROM 文件创建插件（CLAP，Linux x64）。',
+        'intro_macos': '使用您自己的 ROM 文件创建插件（CLAP，{system}）。',
         'files': 'ROM 文件', 'folder': '文件夹', 'browse': '更改…',
         'complete': '完整', 'complete_ctf': '完整（将应用 CTF）',
         'missing': '不完整，缺少：{roles}', 'none': '未找到',
@@ -231,6 +239,7 @@ TEXT = {
     'hi': {
         'intro': 'आपकी अपनी ROM फ़ाइलों से प्लगइन (CLAP + VST2, Windows x64) बनाता है।',
         'intro_linux': 'आपकी अपनी ROM फ़ाइलों से प्लगइन (CLAP, Linux x64) बनाता है।',
+        'intro_macos': 'आपकी अपनी ROM फ़ाइलों से प्लगइन (CLAP, {system}) बनाता है।',
         'files': 'ROM फ़ाइलें', 'folder': 'फ़ोल्डर', 'browse': 'बदलें…',
         'complete': 'पूर्ण', 'complete_ctf': 'पूर्ण (CTF लागू किया जाएगा)',
         'missing': 'अपूर्ण, कमी: {roles}', 'none': 'नहीं मिला',
@@ -258,6 +267,7 @@ TEXT = {
     'bn': {
         'intro': 'আপনার নিজের ROM ফাইল থেকে প্লাগইন (CLAP + VST2, Windows x64) তৈরি করে।',
         'intro_linux': 'আপনার নিজের ROM ফাইল থেকে প্লাগইন (CLAP, Linux x64) তৈরি করে।',
+        'intro_macos': 'আপনার নিজের ROM ফাইল থেকে প্লাগইন (CLAP, {system}) তৈরি করে।',
         'files': 'ROM ফাইল', 'folder': 'ফোল্ডার', 'browse': 'পরিবর্তন…',
         'complete': 'সম্পূর্ণ', 'complete_ctf': 'সম্পূর্ণ (CTF প্রয়োগ করা হবে)',
         'missing': 'অসম্পূর্ণ, অনুপস্থিত: {roles}', 'none': 'পাওয়া যায়নি',
@@ -285,6 +295,7 @@ TEXT = {
     'ru': {
         'intro': 'Создаёт плагины (CLAP + VST2, Windows x64) из ваших собственных файлов ROM.',
         'intro_linux': 'Создаёт плагины (CLAP, Linux x64) из ваших собственных файлов ROM.',
+        'intro_macos': 'Создаёт плагины (CLAP, {system}) из ваших собственных файлов ROM.',
         'files': 'Файлы ROM', 'folder': 'Папка', 'browse': 'Изменить…',
         'complete': 'полный', 'complete_ctf': 'полный (будет применён CTF)',
         'missing': 'неполный, отсутствует: {roles}', 'none': 'не найден',
@@ -312,6 +323,7 @@ TEXT = {
     'ja': {
         'intro': 'お手持ちの ROM ファイルからプラグイン（CLAP + VST2、Windows x64）を作成します。',
         'intro_linux': 'お手持ちの ROM ファイルからプラグイン（CLAP、Linux x64）を作成します。',
+        'intro_macos': 'お手持ちの ROM ファイルからプラグイン（CLAP、{system}）を作成します。',
         'files': 'ROM ファイル', 'folder': 'フォルダー', 'browse': '変更…',
         'complete': '完全', 'complete_ctf': '完全（CTF を適用）',
         'missing': '不完全、不足：{roles}', 'none': '見つかりません',
@@ -339,6 +351,7 @@ TEXT = {
     'tr': {
         'intro': 'Kendi ROM dosyalarınızdan eklentileri (CLAP + VST2, Windows x64) oluşturur.',
         'intro_linux': 'Kendi ROM dosyalarınızdan eklentileri (CLAP, Linux x64) oluşturur.',
+        'intro_macos': 'Kendi ROM dosyalarınızdan eklentileri (CLAP, {system}) oluşturur.',
         'files': 'ROM dosyaları', 'folder': 'Klasör', 'browse': 'Değiştir…',
         'complete': 'tam', 'complete_ctf': 'tam (CTF uygulanacak)',
         'missing': 'eksik, bulunmayan: {roles}', 'none': 'bulunamadı',
@@ -366,6 +379,7 @@ TEXT = {
     'ar': {
         'intro': 'ينشئ الإضافات (CLAP + VST2، Windows x64) من ملفات ROM الخاصة بك.',
         'intro_linux': 'ينشئ الإضافات (CLAP، Linux x64) من ملفات ROM الخاصة بك.',
+        'intro_macos': 'ينشئ الإضافات (CLAP، {system}) من ملفات ROM الخاصة بك.',
         'files': 'ملفات ROM',
         'folder': 'المجلد',
         'browse': 'تغيير…',
@@ -400,6 +414,7 @@ TEXT = {
     'cs': {
         'intro': 'Vytvoří pluginy (CLAP + VST2, Windows x64) z vašich vlastních souborů ROM.',
         'intro_linux': 'Vytvoří pluginy (CLAP, Linux x64) z vašich vlastních souborů ROM.',
+        'intro_macos': 'Vytvoří pluginy (CLAP, {system}) z vašich vlastních souborů ROM.',
         'files': 'Soubory ROM',
         'folder': 'Složka',
         'browse': 'Změnit…',
@@ -434,6 +449,7 @@ TEXT = {
     'da': {
         'intro': 'Opretter plugins (CLAP + VST2, Windows x64) ud fra dine egne ROM-filer.',
         'intro_linux': 'Opretter plugins (CLAP, Linux x64) ud fra dine egne ROM-filer.',
+        'intro_macos': 'Opretter plugins (CLAP, {system}) ud fra dine egne ROM-filer.',
         'files': 'ROM-filer',
         'folder': 'Mappe',
         'browse': 'Skift…',
@@ -468,6 +484,7 @@ TEXT = {
     'nl': {
         'intro': 'Maakt de plug-ins (CLAP + VST2, Windows x64) van je eigen ROM-bestanden.',
         'intro_linux': 'Maakt de plug-ins (CLAP, Linux x64) van je eigen ROM-bestanden.',
+        'intro_macos': 'Maakt de plug-ins (CLAP, {system}) van je eigen ROM-bestanden.',
         'files': 'ROM-bestanden',
         'folder': 'Map',
         'browse': 'Wijzigen…',
@@ -502,6 +519,7 @@ TEXT = {
     'el': {
         'intro': 'Δημιουργεί τα πρόσθετα (CLAP + VST2, Windows x64) από τα δικά σας αρχεία ROM.',
         'intro_linux': 'Δημιουργεί τα πρόσθετα (CLAP, Linux x64) από τα δικά σας αρχεία ROM.',
+        'intro_macos': 'Δημιουργεί τα πρόσθετα (CLAP, {system}) από τα δικά σας αρχεία ROM.',
         'files': 'Αρχεία ROM',
         'folder': 'Φάκελος',
         'browse': 'Αλλαγή…',
@@ -536,6 +554,7 @@ TEXT = {
     'he': {
         'intro': 'יוצר את התוספים (CLAP + VST2, Windows x64) מקובצי ה-ROM שלך.',
         'intro_linux': 'יוצר את התוספים (CLAP, Linux x64) מקובצי ה-ROM שלך.',
+        'intro_macos': 'יוצר את התוספים (CLAP, {system}) מקובצי ה-ROM שלך.',
         'files': 'קובצי ROM',
         'folder': 'תיקייה',
         'browse': 'שינוי…',
@@ -570,6 +589,7 @@ TEXT = {
     'hu': {
         'intro': 'Létrehozza a bővítményeket (CLAP + VST2, Windows x64) a saját ROM-fájljaidból.',
         'intro_linux': 'Létrehozza a bővítményeket (CLAP, Linux x64) a saját ROM-fájljaidból.',
+        'intro_macos': 'Létrehozza a bővítményeket (CLAP, {system}) a saját ROM-fájljaidból.',
         'files': 'ROM-fájlok',
         'folder': 'Mappa',
         'browse': 'Módosítás…',
@@ -604,6 +624,7 @@ TEXT = {
     'id': {
         'intro': 'Membuat plugin (CLAP + VST2, Windows x64) dari file ROM milik Anda.',
         'intro_linux': 'Membuat plugin (CLAP, Linux x64) dari file ROM milik Anda.',
+        'intro_macos': 'Membuat plugin (CLAP, {system}) dari file ROM milik Anda.',
         'files': 'File ROM',
         'folder': 'Folder',
         'browse': 'Ubah…',
@@ -638,6 +659,7 @@ TEXT = {
     'ko': {
         'intro': '보유한 ROM 파일로 플러그인(CLAP + VST2, Windows x64)을 만듭니다.',
         'intro_linux': '보유한 ROM 파일로 플러그인(CLAP, Linux x64)을 만듭니다.',
+        'intro_macos': '보유한 ROM 파일로 플러그인(CLAP, {system})을 만듭니다.',
         'files': 'ROM 파일',
         'folder': '폴더',
         'browse': '변경…',
@@ -672,6 +694,7 @@ TEXT = {
     'fa': {
         'intro': 'افزونه\u200cها (CLAP + VST2، Windows x64) را از فایل\u200cهای ROM خودتان می\u200cسازد.',
         'intro_linux': 'افزونه\u200cها (CLAP، Linux x64) را از فایل\u200cهای ROM خودتان می\u200cسازد.',
+        'intro_macos': 'افزونه\u200cها (CLAP، {system}) را از فایل\u200cهای ROM خودتان می\u200cسازد.',
         'files': 'فایل\u200cهای ROM',
         'folder': 'پوشه',
         'browse': 'تغییر…',
@@ -706,6 +729,7 @@ TEXT = {
     'pl': {
         'intro': 'Tworzy wtyczki (CLAP + VST2, Windows x64) z Twoich własnych plików ROM.',
         'intro_linux': 'Tworzy wtyczki (CLAP, Linux x64) z Twoich własnych plików ROM.',
+        'intro_macos': 'Tworzy wtyczki (CLAP, {system}) z Twoich własnych plików ROM.',
         'files': 'Pliki ROM',
         'folder': 'Folder',
         'browse': 'Zmień…',
@@ -740,6 +764,7 @@ TEXT = {
     'ro': {
         'intro': 'Creează pluginurile (CLAP + VST2, Windows x64) din propriile fișiere ROM.',
         'intro_linux': 'Creează pluginurile (CLAP, Linux x64) din propriile fișiere ROM.',
+        'intro_macos': 'Creează pluginurile (CLAP, {system}) din propriile fișiere ROM.',
         'files': 'Fișiere ROM',
         'folder': 'Dosar',
         'browse': 'Schimbă…',
@@ -774,6 +799,7 @@ TEXT = {
     'sr': {
         'intro': 'Pravi dodatke (CLAP + VST2, Windows x64) od vaših sopstvenih ROM datoteka.',
         'intro_linux': 'Pravi dodatke (CLAP, Linux x64) od vaših sopstvenih ROM datoteka.',
+        'intro_macos': 'Pravi dodatke (CLAP, {system}) od vaših sopstvenih ROM datoteka.',
         'files': 'ROM datoteke',
         'folder': 'Fascikla',
         'browse': 'Promeni…',
@@ -808,6 +834,7 @@ TEXT = {
     'sv': {
         'intro': 'Skapar pluginen (CLAP + VST2, Windows x64) från dina egna ROM-filer.',
         'intro_linux': 'Skapar pluginen (CLAP, Linux x64) från dina egna ROM-filer.',
+        'intro_macos': 'Skapar pluginen (CLAP, {system}) från dina egna ROM-filer.',
         'files': 'ROM-filer',
         'folder': 'Mapp',
         'browse': 'Ändra…',
@@ -842,6 +869,7 @@ TEXT = {
     'th': {
         'intro': 'สร้างปลั๊กอิน (CLAP + VST2, Windows x64) จากไฟล์ ROM ของคุณเอง',
         'intro_linux': 'สร้างปลั๊กอิน (CLAP, Linux x64) จากไฟล์ ROM ของคุณเอง',
+        'intro_macos': 'สร้างปลั๊กอิน (CLAP, {system}) จากไฟล์ ROM ของคุณเอง',
         'files': 'ไฟล์ ROM',
         'folder': 'โฟลเดอร์',
         'browse': 'เปลี่ยน…',
@@ -876,6 +904,7 @@ TEXT = {
     'uk': {
         'intro': 'Створює плагіни (CLAP + VST2, Windows x64) з ваших власних файлів ROM.',
         'intro_linux': 'Створює плагіни (CLAP, Linux x64) з ваших власних файлів ROM.',
+        'intro_macos': 'Створює плагіни (CLAP, {system}) з ваших власних файлів ROM.',
         'files': 'Файли ROM',
         'folder': 'Папка',
         'browse': 'Змінити…',
@@ -910,6 +939,7 @@ TEXT = {
     'vi': {
         'intro': 'Tạo các plugin (CLAP + VST2, Windows x64) từ các tệp ROM của riêng bạn.',
         'intro_linux': 'Tạo các plugin (CLAP, Linux x64) từ các tệp ROM của riêng bạn.',
+        'intro_macos': 'Tạo các plugin (CLAP, {system}) từ các tệp ROM của riêng bạn.',
         'files': 'Tệp ROM',
         'folder': 'Thư mục',
         'browse': 'Thay đổi…',

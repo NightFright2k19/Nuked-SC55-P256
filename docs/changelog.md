@@ -4,6 +4,12 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r73: Native macOS CLAP plug-ins (2026-11-02)
+
+- The **macOS patchers** now create native **CLAP** plug-in bundles of all seven models instead of the Windows files (#112): Apple Silicon (arm64) and Intel (x86_64), each patcher for its own architecture, macOS 11 or newer. No VST2 and no editor window yet: hosts show their generic parameter view. Same CLAP IDs as on Windows and Linux.
+- After inserting the ROMs the builder renews the ad-hoc code signature itself (`p256_builder.macho_resign`), so no Xcode or `codesign` is needed. The patcher window says "CLAP, macOS Apple Silicon" or "CLAP, macOS Intel" and "folder CLAP".
+- Build: `NK_TARGET=macos`, `tools/build_templates_macos.sh`, run by the new workflow `macos-templates.yml` on the GitHub macOS runners; templates in `templates/macos-arm64` and `templates/macos-x64`. `clapcheck --load` checks loading without ROMs.
+
 ## r72: Editor for the Linux plug-ins (2026-11-02)
 
 - The native **Linux CLAP** plug-ins now have the **same editor panel and SETUP menu** as on Windows (#112): an X11 window that the host embeds, 918 x 280 px, 30 frames per second. They need libX11 (part of every Linux desktop; under Wayland through XWayland).
