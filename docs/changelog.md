@@ -4,6 +4,12 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r71: Native Linux CLAP plug-ins (2026-11-02)
+
+- The **Linux patcher** now creates native **Linux x64 CLAP** plug-ins of all seven models instead of the Windows files (#112). No VST2 and no editor window yet: hosts show their generic parameter view. The plug-ins need glibc 2.35 or newer (Ubuntu 22.04, Debian 12 or newer). Same CLAP IDs as on Windows.
+- The patcher window on Linux says "CLAP, Linux x64" and "folder CLAP"; the Windows patcher is unchanged. The macOS patcher still creates the Windows plug-ins.
+- Builder: `p256_builder.py` builds the Linux plug-ins on Linux (`--target windows|linux`); templates in `templates/linux-x64`. Build: `NK_TARGET=linux` in the template build functions, `tools/build_templates_linux.sh`, check host `tools/test/clapcheck.cpp`.
+
 ## r70: Document that Linux and macOS plug-ins are not native yet (2026-11-02)
 
 - Documentation only: the README, the patcher page and the Autobuild release notes now state that the Linux and macOS patchers run natively but still generate Windows x64 plug-ins; native plug-ins are tracked in issue #112.

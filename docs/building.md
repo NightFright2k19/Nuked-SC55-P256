@@ -29,6 +29,14 @@ tools/build_88emu.sh <target folder> <plug-in source folder>
 
 fetches Gearmulator in the pinned state, applies the patches in `third_party/88emu/`, and builds `lib88emu.a` for Linux and Windows/MinGW plus the ROM preparation tool `romdump`. The Windows build needs several MinGW adjustments, which the script handles (`wincase/Windows.h`, `Memory.h`, a replacement for `shlobj_core.h`, `-D_WIN32_WINNT=0x0A00 -DNTDDI_VERSION=0x0A000005`, `-include cstdint`). Boot of the units is parallel with embedded ROMs; with ROM files it is serial because the file scan is not thread-safe.
 
+### Native Linux templates (issue #112)
+
+`tools/build_templates_linux.sh` (workbench) builds the seven ROM-free Linux x64 CLAP templates with the same build functions as the Windows templates (`tools/winbuild/build*.sh`), switched by `NK_TARGET=linux` (`tools/winbuild/target.sh`): native `g++`, `-fPIC`, libstdc++/libgcc linked statically, only `clap_entry` exported (version script), no editor, no VST2 entry point and no version resource. The 88emu models link the Linux `lib88emu.a` of `build_88emu.sh` (`build88/`, position-independent). Copy the results from `out/templates-linux-x64/` to `templates/linux-x64/`.
+
+- **glibc baseline 2.35:** with glibc 2.38 headers, `strtol`, `strtoul` and `sscanf` become the C23 symbols `__isoc23_*`; `tools/winbuild/glibc_compat.c` forwards them to the old versions, so the plug-ins load on Ubuntu 22.04 / Debian 12 and newer. Check with `objdump -T <file> | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1`.
+- **Check:** `tools/test/clapcheck.cpp` (`g++ -O2 -std=c++17 -I src/include tools/test/clapcheck.cpp -ldl -o clapcheck`) loads a built `.clap` with `dlopen`, plays 256 notes, and checks the sound, that no GUI is offered, and the state round trip.
+- The Windows build is unchanged by `NK_TARGET` (default `windows`): templates built with the old and the new scripts on the same day differ only in the PE link time stamps and checksum.
+
 ### macOS
 
-`build-macos.sh` comes from the original project; macOS has not been tested with the P256 changes. The editor (Win32/GDI) and the single-file builds are Windows-only.
+`build-macos.sh` comes from the original project; macOS has not been tested with the P256 changes. The editor (Win32/GDI) is Windows-only, and there are no macOS single-file templates yet (issue #112).

@@ -3,8 +3,9 @@
 """
 Nuked SC-55 / Emu SC-88 / SC-8820 / SC-8850 / MT-32 P256 - Plugin Builder
 
-Creates the single-file plugins (CLAP + VST2, Windows x64) from the ROM-less templates in
-"templates" (without ROMs and without space reserved for them; the script inserts the ROMs)
+Creates the single-file plugins from the ROM-less templates in "templates" (without ROMs and
+without space reserved for them; the script inserts the ROMs): CLAP + VST2 for Windows x64 from
+"templates", CLAP for Linux x64 from "templates/linux-x64" (issue #112; Linux has no editor window yet)
 and your own ROM files in the "roms" folder (subfolders are searched as well,
 filenames do not matter - identification is based on the contents via SHA-256).
 
@@ -22,7 +23,10 @@ Everything for which a complete ROM set is found will be built.
 SC-55mk2: If only the original rom2 (512 KB) is available, the CTF patch (Capital Tone
 Fallback) is applied during the build; the result is checked against the known CTF checksum.
 
-Usage:  python p256_builder.py          (Python 3.8 or newer, no additional packages)
+Usage:  python p256_builder.py [--target windows|linux]   (Python 3.8 or newer, no additional packages)
+        Without --target the plugins are built for the running system (Linux, otherwise Windows).
+        Windows plugins: output/CLAP/<name>.clap and output/VST2/<name>.dll (the same file twice).
+        Linux plugins:   output/CLAP/<name>.clap only.
 
 Releases use the patcher (patcher.py), which runs these same functions; this script is kept
 for development and for building from the repository.
@@ -37,6 +41,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROMS, TEMPLATES, OUTPUT = HERE / "roms", HERE / "templates", HERE / "output"
+# Template folder per target system (issue #112). The release patcher carries only the templates of its own system,
+# directly in its "templates" folder; the kind of plugin follows from the template file itself (PE or ELF).
+TARGET_TEMPLATES = {"windows": TEMPLATES, "linux": TEMPLATES / "linux-x64"}
 MAGIC = b"NUKED-P256-ROMSLOT"
 
 # Known ROM files (SHA-256 -> model, role)
@@ -305,6 +312,43 @@ def verify_pe(data: bytes) -> None:
         raise ValueError(bad)
 
 
+def verify_elf(data: bytes) -> None:
+    """Raises ValueError unless data is a complete 64-bit little-endian x86-64 ELF shared object (program headers,
+    section headers and the file contents of all segments lie inside the file)."""
+    bad = "template is damaged (not a complete Linux plug-in)"
+    if len(data) < 64 or data[:4] != b"\x7fELF" or data[4] != 2 or data[5] != 1:
+        raise ValueError(bad)
+    e_type, e_machine = struct.unpack_from("<2H", data, 16)
+    if e_type != 3 or e_machine != 62:  # ET_DYN, EM_X86_64
+        raise ValueError(bad)
+    phoff, shoff = struct.unpack_from("<2Q", data, 32)
+    phentsize, phnum, shentsize, shnum = struct.unpack_from("<4H", data, 54)
+    if phoff + phentsize * phnum > len(data) or shoff + shentsize * shnum > len(data):
+        raise ValueError(bad)
+    for i in range(phnum):
+        offset, _, _, filesz = struct.unpack_from("<4Q", data, phoff + phentsize * i + 8)
+        if offset + filesz > len(data):
+            raise ValueError(bad)
+
+
+def plugin_kind(data: bytes) -> str:
+    """"windows" (PE: CLAP + VST2 in one file) or "linux" (ELF: CLAP only); the template decides."""
+    return "linux" if data[:4] == b"\x7fELF" else "windows"
+
+
+def verify_plugin(data: bytes) -> str:
+    """Checks a filled template as a complete plug-in of its kind and returns the kind (see plugin_kind)."""
+    kind = plugin_kind(data)
+    (verify_elf if kind == "linux" else verify_pe)(data)
+    return kind
+
+
+def output_paths(kind: str, tpl_name: str, output: Path):
+    """Files of one plug-in: Windows CLAP + VST2 (the same file twice), Linux CLAP only."""
+    subs = (("CLAP", ".clap"),) if kind == "linux" else (("CLAP", ".clap"), ("VST2", ".dll"))
+    return tuple(output / sub / f"{tpl_name}{ext}" for sub, ext in subs)
+
+
 def write_pair(plugin: bytes, targets):
     """Writes the same file to all targets so that either all of them are replaced or none (a failure leaves the old
     files untouched): first temporary files, then each old file is moved aside and the new one put in its place; on an
@@ -399,7 +443,8 @@ def plan(found):
 
 
 def build_model(item, templates: Path = TEMPLATES, output: Path = OUTPUT):
-    """Builds one complete model -> (clap path, vst2 path). Raises ValueError on failure."""
+    """Builds one complete model -> paths written: (clap, vst2) for Windows, (clap,) for Linux. Raises ValueError on
+    failure."""
     key, tpl_name, title, parts = item["key"], item["file"], item["title"], item["parts"]
     tpl = templates / f"{tpl_name}.p256tpl"
     if not tpl.is_file():
@@ -415,14 +460,21 @@ def build_model(item, templates: Path = TEMPLATES, output: Path = OUTPUT):
                 raise ValueError("CTF patch did not produce the expected checksum")
         entries.append((location, blob))
     plugin = fill_template(tpl.read_bytes(), entries, title)
-    verify_pe(plugin)
-    paths = tuple(output / sub / f"{tpl_name}{ext}" for sub, ext in (("CLAP", ".clap"), ("VST2", ".dll")))
+    paths = output_paths(verify_plugin(plugin), tpl_name, output)
     write_pair(plugin, paths)
     return paths
 
 
 def main() -> int:
     lenient_output()
+    target = "linux" if sys.platform.startswith("linux") else "windows"
+    if "--target" in sys.argv[1:]:
+        at = sys.argv.index("--target")
+        target = sys.argv[at + 1] if at + 1 < len(sys.argv) else ""
+        if target not in TARGET_TEMPLATES:
+            print("--target needs 'windows' or 'linux'")
+            return 1
+    templates = TARGET_TEMPLATES[target]
     print("Nuked SC-55 / Emu SC-88 / SC-8820 / SC-8850 / MT-32 P256 - Plugin Builder\n")
     if not ROMS.is_dir():
         print(f"Folder missing: {ROMS}\n-> Put your ROM files there (subfolders are allowed).")
@@ -444,12 +496,12 @@ def main() -> int:
                 print(f"[--] {title}: no ROMs found")
             continue
         try:
-            build_model(item)
+            paths = build_model(item, templates)
         except Exception as e:  # a failure of one model must not stop the others
             print(f"[!!] {title}: {e if isinstance(e, (ValueError, OSError)) else f'{type(e).__name__}: {e}'}")
             continue
         ctf_note = " (CTF patch will be applied)" if item["ctf"] else ""
-        print(f"[ok] {title}{ctf_note}: output/CLAP/{tpl_name}.clap, output/VST2/{tpl_name}.dll")
+        print(f"[ok] {title}{ctf_note}: {', '.join(p.relative_to(HERE).as_posix() for p in paths)}")
         for _, role in item["parts"]:
             print(f"       {role:8} <- {item['have'][role].relative_to(HERE)}")
         built += 1

@@ -1,7 +1,9 @@
 name: Nuked-SC55 P256 Autobuild
 
 # Releases contain the patcher (patcher.py frozen with PyInstaller, templates inside) for Windows,
-# Linux and macOS (Apple Silicon and Intel). The patcher runs the functions of p256_builder.py,
+# Linux and macOS (Apple Silicon and Intel). Each patcher carries only the templates of the plug-ins it
+# creates (issue #112): Linux the native Linux x64 CLAP templates (templates/linux-x64), Windows and macOS
+# the Windows x64 templates (templates/*.p256tpl; native macOS plug-ins do not exist yet). The patcher runs the functions of p256_builder.py,
 # so it always produces the same plugins as the Python script, which stays in the repository
 # for development.
 
@@ -92,6 +94,13 @@ jobs:
         run: |
           set -euo pipefail
           echo "VERSION = '$REVISION'" > patcher_version.py
+          # templates of this patcher, flat in its "templates" folder (see the note at the top)
+          rm -rf bundle_templates && mkdir bundle_templates
+          case "${{ runner.os }}" in
+            Linux) cp templates/linux-x64/*.p256tpl bundle_templates/ ;;
+            *)     cp templates/*.p256tpl bundle_templates/ ;;
+          esac
+          ls -la bundle_templates
           ICON=()   # file icon of the executable / app: Windows .ico, macOS .icns (Linux has none; the window icon is set in patcher.py)
           case "${{ runner.os }}" in
             Windows) ICON=(--icon icons/patcher.ico) ;;
@@ -99,7 +108,7 @@ jobs:
           esac
           python -m PyInstaller --onefile --windowed --noconfirm --clean \
             --name Nuked-SC55-P256-Patcher \
-            --add-data "templates:templates" \
+            --add-data "bundle_templates:templates" \
             --add-data "icons:icons" \
             ${ICON[@]+"${ICON[@]}"} \
             --hidden-import p256_builder --hidden-import patcher_i18n --hidden-import patcher_version \
@@ -182,9 +191,10 @@ jobs:
           artifacts: assets/*
           artifactErrorsFailBuild: true
           body: |
-            The **Nuked SC-55 P256 Patcher** creates the **Emu-MT32**, **Nuked-SC55** and **Emu-SC88/SC8820/SC8850** CLAP/VST2 plugins (Windows x64) from your own ROM files. The templates are built in; no Python needed.
+            The **Nuked SC-55 P256 Patcher** creates the **Emu-MT32**, **Nuked-SC55** and **Emu-SC88/SC8820/SC8850** CLAP/VST2 plugins (Windows x64; on Linux native CLAP plugins) from your own ROM files. The templates are built in; no Python needed.
 
-            > **Linux and macOS:** only the patcher runs natively there. The generated plugins are still Windows x64 builds and do not load in a native Linux or macOS host. Native Linux/macOS plugins are planned (issue #112).
+            > **Linux:** the Linux patcher creates native Linux x64 CLAP plugins (no VST2, no editor window yet; glibc 2.35 or newer).
+            > **macOS:** only the patcher runs natively there. The generated plugins are still Windows x64 builds and do not load in a macOS host. Native macOS plugins are planned (issue #112).
 
             **SUPPORTED ROMS**
             - MT-32 (old 1.x, new 2.x) and CM-32L (one plugin, device chosen in the SETUP menu or by clicking the name; built when at least one of the three sets is complete)
@@ -203,7 +213,7 @@ jobs:
             **INSTRUCTIONS**
             - Put the patcher in a folder together with your ROM files (subfolders are fine, file names do not matter). It can also be pointed to another folder.
             - Start it, check the list of found models, click **Patch**.
-            - The plugins end up in `Plugins/CLAP` and `Plugins/VST2` next to the patcher.
+            - The plugins end up in `Plugins/CLAP` and `Plugins/VST2` next to the patcher (Linux: `Plugins/CLAP` only).
             - The files are not signed: Windows SmartScreen and macOS Gatekeeper warn on the first start. See docs/patcher.md ("The patcher") for how to start it anyway.
             - The generated plugins contain your ROMs. Do not share them.
             - What changed in each version: [docs/changelog.md](https://github.com/${{ github.repository }}/blob/main/docs/changelog.md) (the patcher links to it: **What's new?**).

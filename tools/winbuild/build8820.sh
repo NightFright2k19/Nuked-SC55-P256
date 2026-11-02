@@ -21,15 +21,15 @@ build8820() {
   python3 $S/tools/gen_blob.py gen/lit8820d.cpp nk_lit8820d gen/lit8820d.bgra
   VER_STR=$(date +%Y.%m.%d); VER_NUM=$(date +%Y,%-m,%-d,0)
   sed -e "s/@NAME@/$N/g" -e "s/@FILE@/$F.dll/g" -e "s/@VER_STR@/$VER_STR/g" -e "s/@VER_NUM@/$VER_NUM/g" -e "s/@VENDOR@/Emu SC-8820 P256/g" -e "s/@COMMENT@/Roland SC-8820 emulation (88emu), 256 voices./g" $S/src/vst2/version.rc.in > gen/ver_8820.rc
-  x86_64-w64-mingw32-windres gen/ver_8820.rc -O coff -o gen/ver_8820.o
+  RES=$(nk_res gen/ver_8820)
   $CXX -O3 -flto -std=c++23 -DNDEBUG -DNUKED_SC55_ENGINE_88PRO -DNUKED_SC55_DEVICE_8820 -DNUKED_SC55_POLY_TARGET_VOICES=256 \
     -DNUKED_SC55_ONLY_MODEL=9 -DNUKED_SC55_EMBED_ROMS -DNUKED_SC55_VST2_ID=0x53383230 \
     "-DNUKED_SC55_VST2_NAME=\"$N\"" "-DNUKED_SC55_DISPLAY_NAME=\"$N\"" \
     -ffunction-sections -fdata-sections -I$S/include -I$S/src -I. -Iinc -I$GM/source/ronaldo/88emu/88lib \
     $S/src/nuked-sc55/backend/*.cpp $S/src/nuked-sc55/common/*.cpp \
-    $S/src/nuked_sc55.cpp $S/src/plugin.cpp $S/src/vst2/vst2_entry.cpp $S/src/gui/editor_win32.cpp \
-    gen/roms_8820.cpp gen/panel8820p.cpp gen/lit8820p.cpp gen/panel8820d.cpp gen/lit8820d.cpp gen/ver_8820.o resample.o sha.o $LIBW \
-    -O3 -flto -shared -o "$O/$F.dll" -static -static-libgcc -static-libstdc++ -Wl,--gc-sections -s \
-    -lgdi32 -luser32 -lmsimg32 -lshlwapi -lole32 -luuid -lshell32 -lwinmm 2>&1 | grep -E "error|undefined" | head -20
-  cp "$O/$F.dll" "$O/$F.clap"
+    $S/src/nuked_sc55.cpp $S/src/plugin.cpp $NK_PLAT_SRC \
+    gen/roms_8820.cpp gen/panel8820p.cpp gen/lit8820p.cpp gen/panel8820d.cpp gen/lit8820d.cpp $RES resample.o sha.o $LIBW \
+    -O3 -flto -shared -o "$O/$F.$NK_EXT" $NK_LINK -Wl,--gc-sections -s \
+    $NK_LIBS88 2>&1 | grep -E "error|undefined" | head -20
+  nk_finish "$O" "$F"
 }
