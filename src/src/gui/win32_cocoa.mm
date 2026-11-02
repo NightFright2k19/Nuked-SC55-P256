@@ -9,11 +9,17 @@
 
 #if defined(__APPLE__) && defined(NUKED_SC55_COCOA_EDITOR)
 
-#include "win32_shim_impl.h"
-
 #import <Cocoa/Cocoa.h>
 #include <objc/message.h>
 #include <objc/runtime.h>
+
+// Cocoa and the shim both define BOOL (Objective-C: bool / signed char; Win32: int) and Polygon (QuickDraw type,
+// GDI function): the shim's names are renamed in this file. Only the spelling changes; C++ symbols are named by
+// their types, so the functions still match win32_gdi.cpp and editor_win32.cpp.
+typedef BOOL ObjcBool;
+#define BOOL W32Bool
+#define Polygon W32Polygon
+#include "win32_shim_impl.h"
 
 #include <chrono>
 #include <cmath>
@@ -92,9 +98,9 @@ POINT ScreenPoint(NSPoint p) { return POINT{(LONG)std::floor(p.x), (LONG)std::fl
 
 // --- view methods ------------------------------------------------------------------------------------------------
 
-BOOL ViewIsFlipped(id, SEL) { return YES; }
-BOOL ViewAcceptsFirstMouse(id, SEL, NSEvent*) { return YES; }
-BOOL ViewIsOpaque(id, SEL) { return YES; }
+ObjcBool ViewIsFlipped(id, SEL) { return YES; }
+ObjcBool ViewAcceptsFirstMouse(id, SEL, NSEvent*) { return YES; }
+ObjcBool ViewIsOpaque(id, SEL) { return YES; }
 
 void ViewDrawRect(id self, SEL, NSRect)
 {
