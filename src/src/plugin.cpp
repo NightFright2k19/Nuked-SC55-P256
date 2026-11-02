@@ -238,10 +238,13 @@ static const clap_plugin_state_t extension_state = {
 // Plugin classes
 //////////////////////////////////////////////////////////////////////////////
 
-#if defined(_WIN32) || defined(NUKED_SC55_X11_EDITOR)
+#if defined(_WIN32) || defined(NUKED_SC55_X11_EDITOR) || defined(NUKED_SC55_COCOA_EDITOR)
 #include "gui/editor.h"
 #ifdef _WIN32
 #define NUKED_SC55_WINDOW_API CLAP_WINDOW_API_WIN32
+#elif defined(NUKED_SC55_COCOA_EDITOR)
+// macOS (issue #112): NSView added to the host's view; AppKit delivers its events and timers
+#define NUKED_SC55_WINDOW_API CLAP_WINDOW_API_COCOA
 #else
 // Linux (issue #112): X11 child window; the host drives it through the timer and posix fd extensions
 #define NUKED_SC55_WINDOW_API CLAP_WINDOW_API_X11
@@ -257,7 +260,7 @@ static NukedSc55* Engine(const clap_plugin_t* plugin)
 	return static_cast<NukedSc55*>(plugin->plugin_data);
 }
 
-#ifndef _WIN32
+#ifdef NUKED_SC55_X11_EDITOR
 // Editor events: a 33 ms host timer (animation, as SetTimer on Windows) and the X connection's file descriptor
 // (mouse input without delay). Both callbacks come on the host's main thread.
 struct X11Host {
@@ -337,7 +340,7 @@ static const clap_plugin_gui_t extension_gui = {
         },
         .destroy = [](const clap_plugin_t* plugin) {
 	        auto ns = Engine(plugin);
-#ifndef _WIN32
+#ifdef NUKED_SC55_X11_EDITOR
 	        X11Stop(plugin);
 #endif
 	        if (ns->editor) {
@@ -365,6 +368,8 @@ static const clap_plugin_gui_t extension_gui = {
 	        auto ns = Engine(plugin);
 #ifdef _WIN32
 	        return ns->editor && editor::Open(ns->editor, window->win32);
+#elif defined(NUKED_SC55_COCOA_EDITOR)
+	        return ns->editor && editor::Open(ns->editor, window->cocoa);
 #else
 	        if (!ns->editor || !editor::Open(ns->editor, reinterpret_cast<void*>(static_cast<uintptr_t>(window->x11))))
 		        return false;
@@ -388,7 +393,7 @@ static const clap_plugin_gui_t extension_gui = {
 
 static const void* get_extension(const clap_plugin* plugin, const char* id)
 {
-#if defined(_WIN32) || defined(NUKED_SC55_X11_EDITOR)
+#if defined(_WIN32) || defined(NUKED_SC55_X11_EDITOR) || defined(NUKED_SC55_COCOA_EDITOR)
 	if (strcmp(id, CLAP_EXT_GUI) == 0) {
 		return &extension_gui;
 	}

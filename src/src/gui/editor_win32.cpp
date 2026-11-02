@@ -2,13 +2,13 @@
 // Front panels from the 88emu player art (SC-55/SC-55mkII, SC-88, SC-88 Pro, SC-8850) with
 // the firmware-driven LCD on top, plus the polyphony (VOICES / UNITS) display.
 
-#if defined(_WIN32) || defined(NUKED_SC55_X11_EDITOR)
+#if defined(_WIN32) || defined(NUKED_SC55_X11_EDITOR) || defined(NUKED_SC55_COCOA_EDITOR)
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #else
-#include "win32_x11.h" // Linux (issue #112): the Win32/GDI subset of this editor on X11
+#include "win32_shim.h" // Linux and macOS (issue #112): the Win32/GDI subset of this editor
 #endif
 
 #include <algorithm>
@@ -477,8 +477,9 @@ void ShowSetupMenu(Editor& e)
     RECT r;
     GetWindowRect(e.hwnd, &r);
 #ifndef _WIN32
-    // Linux: the menu does not block the host; TrackPopupMenu returns 0 and the choice arrives here
-    x11menu::SetHandler(e.hwnd, [&e](int chosen) { HandleSetupCommand(e, chosen); });
+    // Linux and macOS: TrackPopupMenu returns 0 and the choice arrives here (Linux: later, the menu does not block
+    // the host; macOS: before TrackPopupMenu returns, from the native menu)
+    popupmenu::SetHandler(e.hwnd, [&e](int chosen) { HandleSetupCommand(e, chosen); });
 #endif
     e.menu_open = true;
     InvalidateRect(e.hwnd, nullptr, FALSE);
@@ -736,7 +737,7 @@ void Destroy(void* ed)
     delete e;
 }
 
-#ifndef _WIN32
+#ifdef NUKED_SC55_X11_EDITOR
 void Idle(void* ed)
 {
     auto* e = static_cast<Editor*>(ed);
@@ -779,4 +780,4 @@ bool RenderToBuffer(void* ed, unsigned int* pixels)
 
 } // namespace editor
 
-#endif // _WIN32 || NUKED_SC55_X11_EDITOR
+#endif // _WIN32 || NUKED_SC55_X11_EDITOR || NUKED_SC55_COCOA_EDITOR
