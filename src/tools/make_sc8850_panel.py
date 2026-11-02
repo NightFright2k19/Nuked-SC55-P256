@@ -10,7 +10,7 @@ src, out = sys.argv[1], sys.argv[2]
 im = Image.open(src).convert("RGB")
 im = im.resize((918, 280), Image.LANCZOS)
 d = ImageDraw.Draw(im)
-DEJAVU = "/usr/share/fonts/truetype/dejavu/DejaVuSans"
+DEJAVU = __import__("os").environ.get("NK_DEJAVU_DIR", "/usr/share/fonts/truetype/dejavu") + "/DejaVuSans"  # NK_DEJAVU_DIR: font folder elsewhere (macOS)
 def font(sz, style=""):
     try: return ImageFont.truetype(DEJAVU + style + ".ttf", sz)
     except OSError: return ImageFont.load_default()
