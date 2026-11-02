@@ -2,6 +2,7 @@
 # Fetches Gearmulator (88emu, GPLv3) in the state in use, applies the Nuked-SC55-Poly patches and builds
 # lib88emu.a for Linux (tests) and Windows/MinGW (plug-ins) as well as the ROM preparation tool romdump.
 # usage: build_88emu.sh <target folder> <plug-in source folder>      (takes about 8-10 min, 1 core)
+# GM_NATIVE_ONLY=1: only the library of the machine itself (build88/; macOS templates, issue #112).
 set -e
 GM=${1:?Zielordner}; S=${2:?Plugin-Quellen}
 GM_COMMIT=${GM_COMMIT:-7f9a9806b7b3326379a39a2008c6dc92519191df} # default: recorded state
@@ -34,9 +35,10 @@ cd "$GM"
 OPTS="-DCMAKE_BUILD_TYPE=Release -Dgearmulator_BUILD_JUCEPLUGIN=off -Dgearmulator_BUILD_JUCEPLUGIN_CLAP=off \
  -Dgearmulator_SYNTH_OSIRUS=off -Dgearmulator_SYNTH_OSTIRUS=off -Dgearmulator_SYNTH_VAVRA=off -Dgearmulator_SYNTH_XENIA=off \
  -Dgearmulator_SYNTH_NODALRED2X=off -Dgearmulator_SYNTH_JE8086=off -Dgearmulator_SYNTH_88EMU=on -Dgearmulator_COMPONENT_DSPBRIDGE=off"
-echo "[4/5] Linux library"
+echo "[4/5] Native library (Linux, or macOS)"
 cmake -S . -B build88 $OPTS >/dev/null
-cmake --build build88 --target 88emu_bundle -j2 2>&1 | grep -E " error|Error [0-9]" || true
+cmake --build build88 --target 88emu_bundle -j${GM_JOBS:-2} 2>&1 | grep -E " error|Error [0-9]" || true
+if [ -n "${GM_NATIVE_ONLY:-}" ]; then ls -la build88/source/ronaldo/88emu/88lib/lib88emu.a; echo "done: $GM"; exit 0; fi
 echo "[5/5] Windows library (MinGW: header spelling, shlobj_core, Win10 API, cstdint)"
 mkdir -p wincase && ln -sf /usr/x86_64-w64-mingw32/include/windows.h wincase/Windows.h && ln -sf /usr/x86_64-w64-mingw32/include/memory.h wincase/Memory.h
 echo '#include <shlobj.h>' > wincase/shlobj_core.h

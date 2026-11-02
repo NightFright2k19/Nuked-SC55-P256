@@ -35,7 +35,7 @@ for loc, (_, r) in enumerate(next(m for m in b.MODELS if m[0] == 'la')[3]):
     $S/src/nuked_sc55.cpp $S/src/plugin.cpp $NK_PLAT_SRC \
     gen/roms_mt32.cpp gen/panelmt32.cpp gen/litmt32.cpp gen/panelcm32l.cpp gen/litcm32l.cpp gen/glassmt32.cpp gen/namemt32v2.cpp \
     $RES resample.o sha.o $LIBW \
-    -O3 -flto -shared -o "$O/$F.$NK_EXT" $NK_LINK -Wl,--gc-sections -s \
+    -O3 -flto -shared -o "$O/$F.$NK_EXT" $NK_LINK $NK_STRIP \
     $NK_LIBS88 2>&1 | grep -E "error|undefined" | head -20
   nk_finish "$O" "$F"
 }

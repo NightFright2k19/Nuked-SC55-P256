@@ -31,5 +31,5 @@ build(){ F="$1"; N="$2"; M=$3; ID=$4; RS=$5; RN=$6; shift 6
   -DNUKED_SC55_VST2_ID=$ID "-DNUKED_SC55_VST2_NAME=\"$N\"" "-DNUKED_SC55_DISPLAY_NAME=\"$N\"" \
   -ffunction-sections -fdata-sections -I$S/include -I$S/src -I. -Iinc $(ls $S/src/nuked-sc55/backend/*.cpp $S/src/nuked-sc55/common/*.cpp) \
   $S/src/nuked_sc55.cpp $S/src/plugin.cpp $NK_PLAT_SRC gen/roms_$M.cpp gen/panel55_$M.cpp gen/sprites55.cpp $RES resample.o sha.o \
-  -O3 -flto -shared -o "$O/$F.$NK_EXT" $NK_LINK -Wl,--gc-sections -s $NK_LIBS 2>&1 | grep -iE "error" | head
+  -O3 -flto -shared -o "$O/$F.$NK_EXT" $NK_LINK $NK_STRIP $NK_LIBS 2>&1 | grep -iE "error" | head
  nk_finish "$O" "$F"; }

@@ -1,8 +1,10 @@
-// Linux CLAP check for the native plug-ins (issue #112): loads a .clap with dlopen, lists the plug-ins of the
-// factory, and for each one plays 256 notes for a few seconds, reports the RMS of the last second, checks that the GUI
-// extension offers the X11 editor and that the state can be saved and loaded.
+// CLAP check for the native Linux and macOS plug-ins (issue #112): loads a plug-in binary with dlopen, lists the
+// plug-ins of the factory, and for each one plays 256 notes for a few seconds, reports the RMS of the last second,
+// checks that the GUI extension offers the X11 editor (Linux) and that the state can be saved and loaded.
 // Build: g++ -O2 -std=c++17 -I<plug-in sources>/include tools/test/clapcheck.cpp -ldl -o clapcheck
-// Usage: clapcheck <plugin.clap> [seconds]   (ROMs are inside the plug-in; exit code 0 = all plug-ins sound)
+// Usage: clapcheck <plugin binary> [seconds]   (ROMs are inside the plug-in; exit code 0 = all plug-ins sound)
+//        clapcheck <plugin binary> --load      (no ROMs needed: only loads, lists and creates the plug-ins; used
+//                                              by the macOS template build, which has no ROMs)
 #include "clap/clap.h"
 #include <dlfcn.h>
 #include <chrono>
@@ -33,7 +35,8 @@ static int64_t is_read(const clap_istream_t*, void* d, uint64_t n) {
 
 int main(int argc, char** argv) {
 	if (argc < 2) { puts("usage: clapcheck <plugin.clap> [seconds]"); return 1; }
-	const double secs = argc > 2 ? atof(argv[2]) : 5.0;
+	const bool load_only = argc > 2 && strcmp(argv[2], "--load") == 0;
+	const double secs = argc > 2 && !load_only ? atof(argv[2]) : 5.0;
 	void* h = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
 	if (!h) { printf("dlopen failed: %s\n", dlerror()); return 1; }
 	auto entry = (const clap_plugin_entry_t*)dlsym(h, "clap_entry");
@@ -45,9 +48,15 @@ int main(int argc, char** argv) {
 	int bad = 0;
 	const uint32_t count = f->get_plugin_count(f);
 	printf("%u plug-in(s)\n", count);
+	if (count == 0) bad++;
 	for (uint32_t n = 0; n < count; n++) {
 		const auto* d = f->get_plugin_descriptor(f, n);
 		auto p = f->create_plugin(f, &host, d->id);
+		if (load_only) {
+			printf("  %s (%s): created %s\n", d->id, d->name, p ? "ok" : "FAILED");
+			if (p) p->destroy(p); else bad++;
+			continue;
+		}
 		if (!p || !p->init(p)) { printf("  %s: init failed\n", d->id); bad++; continue; }
 		const uint32_t B = 256;
 		if (!p->activate(p, 48000, 1, B)) { printf("  %s: activate failed\n", d->id); bad++; continue; }
@@ -72,7 +81,14 @@ int main(int argc, char** argv) {
 		}
 		const double rms = sqrt(ss / std::max(cnt, 1L));
 		auto g = (const clap_plugin_gui_t*)p->get_extension(p, CLAP_EXT_GUI);
+#ifdef __linux__
 		const bool gui = g && g->is_api_supported(p, CLAP_WINDOW_API_X11, false);
+		const char* gui_label = gui ? "x11" : "MISSING";
+#else
+		const bool gui = true;   // no editor on macOS yet
+		const char* gui_label = g ? "offered" : "none";
+		(void)g;
+#endif
 		auto st = (const clap_plugin_state_t*)p->get_extension(p, CLAP_EXT_STATE);
 		bool state_ok = false;
 		if (st) {
@@ -81,7 +97,7 @@ int main(int argc, char** argv) {
 			state_ok = st->save(p, &os) && !blob.empty() && st->load(p, &is);
 		}
 		printf("  %s (%s): RMS %.4f, compute %.1f s for %.0f s audio, gui %s, state %s\n", d->id, d->name, rms, tp, secs,
-		       gui ? "x11" : "MISSING", state_ok ? "ok" : "FAILED");
+		       gui_label, state_ok ? "ok" : "FAILED");
 		if (!(rms > 1e-4) || !state_ok || !gui) bad++;
 		p->stop_processing(p); p->deactivate(p); p->destroy(p);
 	}

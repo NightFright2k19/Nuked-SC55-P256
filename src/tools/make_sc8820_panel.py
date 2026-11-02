@@ -26,7 +26,7 @@ all_on = '--all-on' in sys.argv
 base = '--base' in sys.argv
 pro = True   # issue #87: the Basic panel was removed, only the layout with the part display is left (--pro is accepted and ignored)
 im = Image.new('RGB', (W*S, H*S)); d = ImageDraw.Draw(im)
-DJ = "/usr/share/fonts/truetype/dejavu/DejaVuSans"
+DJ = __import__("os").environ.get("NK_DEJAVU_DIR", "/usr/share/fonts/truetype/dejavu") + "/DejaVuSans"  # NK_DEJAVU_DIR: font folder elsewhere (macOS)
 def F(sz, st=""): return ImageFont.truetype(DJ + st + ".ttf", int(sz*S))
 def X(v): return int(round(v*S))
 def lerp(a, b, t): return tuple(int(a[i] + (b[i]-a[i])*t) for i in range(3))
