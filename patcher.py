@@ -5,7 +5,8 @@
 # so both always produce byte-identical plugins.
 # * ROM files are searched in the patcher's folder (subfolders included) by SHA-256, or in a
 #   folder the user chooses. 'Patch' builds every complete model into the folder 'Plugins' next
-#   to the patcher (Plugins/CLAP, Plugins/VST2).
+#   to the patcher (Plugins/CLAP, Plugins/VST2). The templates decide the kind of plug-in (issue #112): Windows
+#   templates give CLAP + VST2 for Windows x64, the Linux patcher carries Linux templates and gives CLAP only.
 # * patcher --build [folder]: same without a window (prints like p256_builder.py).
 # * patcher --selftest: checks the bundled templates (used by the release workflow); --selftest-out <file>
 #   also writes the result to a file (a windowed exe prints nothing, used by the self-update's own test).
@@ -30,6 +31,18 @@ except ImportError:
     VERSION = 'dev'
 
 TEMPLATES = CODE / 'templates'
+
+
+def template_kind() -> str:
+    """'windows' or 'linux' (p256_builder.plugin_kind of the bundled templates); selects the '_linux' texts."""
+    try:
+        with next(TEMPLATES.glob('*.p256tpl')).open('rb') as f:
+            return builder.plugin_kind(f.read(4))
+    except (StopIteration, OSError):
+        return 'windows'
+
+
+KIND = template_kind()
 ICONS = CODE / 'icons'
 ICON_FILES = ('patcher_16.png', 'patcher_32.png', 'patcher.png')   # window icon (Tk picks the best size)
 PLUGINS = HERE / 'Plugins'
@@ -86,13 +99,13 @@ def build(items, log):
     failed = []
     for item in items:
         try:
-            builder.build_model(item, TEMPLATES, PLUGINS)
+            paths = builder.build_model(item, TEMPLATES, PLUGINS)
         except Exception as e:                  # also unexpected errors: the patcher must not freeze
             log(f"[!!] {item['title']}: {e if isinstance(e, (ValueError, OSError)) else f'{type(e).__name__}: {e}'}\n")
             failed.append(item['title'])
             continue
         note = ' (CTF patch applied)' if item['ctf'] else ''
-        log(f"[ok] {item['title']}{note}: Plugins/CLAP/{item['file']}.clap, Plugins/VST2/{item['file']}.dll\n")
+        log(f"[ok] {item['title']}{note}: {', '.join(p.relative_to(PLUGINS.parent).as_posix() for p in paths)}\n")
         for _, role in item['parts']:
             log(f"       {role:8} <- {item['have'][role]}\n")
     return failed
@@ -122,7 +135,8 @@ def selftest(out: Path | None = None) -> int:
         tpl = TEMPLATES / f'{name}.p256tpl'
         assert tpl.is_file(), f'template missing: {tpl}'
         data = builder.fill_template(tpl.read_bytes(), [(loc, b'\0' * 64) for loc, _ in parts], title)
-        assert data.count(builder.MAGIC) == 1 and data[:2] == b'MZ', f'template broken: {tpl}'
+        assert data.count(builder.MAGIC) == 1, f'template broken: {tpl}'
+        assert builder.verify_plugin(data) == KIND, f'template of another system: {tpl}'   # Windows PE or Linux ELF
     assert len(builder.apply_ctf(bytes(524288))) == 524288
     for f in ICON_FILES:
         assert (ICONS / f).is_file(), f'icon missing: {ICONS / f}'
@@ -174,6 +188,8 @@ def main_window():
     q = queue.Queue()
 
     def T(key, width=0, **kw):
+        if KIND == 'linux' and key + '_linux' in TEXT['en']:
+            key += '_linux'
         text = TEXT[st['lang']].get(key, TEXT['en'][key]).format(**kw)
         return shape_rtl(text, width) if st['lang'] in RTL else text
 
