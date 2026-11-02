@@ -193,7 +193,7 @@ jobs:
           body: |
             The **Nuked SC-55 P256 Patcher** creates the **Emu-MT32**, **Nuked-SC55** and **Emu-SC88/SC8820/SC8850** CLAP/VST2 plugins (Windows x64; on Linux native CLAP plugins) from your own ROM files. The templates are built in; no Python needed.
 
-            > **Linux:** the Linux patcher creates native Linux x64 CLAP plugins (no VST2, no editor window yet; glibc 2.35 or newer).
+            > **Linux:** the Linux patcher creates native Linux x64 CLAP plugins (no VST2; same editor as on Windows; libX11 and glibc 2.35 or newer).
             > **macOS:** only the patcher runs natively there. The generated plugins are still Windows x64 builds and do not load in a macOS host. Native macOS plugins are planned (issue #112).
 
             **SUPPORTED ROMS**

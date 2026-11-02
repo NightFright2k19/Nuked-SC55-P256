@@ -1,7 +1,7 @@
 #!/bin/bash
 # Builds the ROM-free Linux x64 CLAP templates (issue #112) into out/templates-linux-x64/ of the workbench;
 # copy them to templates/linux-x64/ of the repository. Same sources and ROM areas as the Windows templates of
-# build_builder.sh, but native g++ (NK_TARGET=linux, see winbuild/target.sh): CLAP only, no editor yet.
+# build_builder.sh, but native g++ (NK_TARGET=linux, see winbuild/target.sh): CLAP only, editor on X11.
 # The 88emu models use the Linux lib88emu.a of build_88emu.sh (build88/; Gearmulator builds it position-independent).
 # Self-test: p256_builder.py --target linux with the workbench ROMs must report "N plugin(s) created";
 # then tools/test/clapcheck loads each plug-in through the CLAP entry and plays notes.

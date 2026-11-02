@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <string>
 
@@ -237,8 +238,16 @@ static const clap_plugin_state_t extension_state = {
 // Plugin classes
 //////////////////////////////////////////////////////////////////////////////
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(NUKED_SC55_X11_EDITOR)
 #include "gui/editor.h"
+#ifdef _WIN32
+#define NUKED_SC55_WINDOW_API CLAP_WINDOW_API_WIN32
+#else
+// Linux (issue #112): X11 child window; the host drives it through the timer and posix fd extensions
+#define NUKED_SC55_WINDOW_API CLAP_WINDOW_API_X11
+#include "clap/ext/timer-support.h"
+#include "clap/ext/posix-fd-support.h"
+#endif
 #ifndef NUKED_SC55_DISPLAY_NAME
 #define NUKED_SC55_GUI_NAME_FALLBACK 1
 #endif
@@ -248,17 +257,72 @@ static NukedSc55* Engine(const clap_plugin_t* plugin)
 	return static_cast<NukedSc55*>(plugin->plugin_data);
 }
 
+#ifndef _WIN32
+// Editor events: a 33 ms host timer (animation, as SetTimer on Windows) and the X connection's file descriptor
+// (mouse input without delay). Both callbacks come on the host's main thread.
+struct X11Host {
+	const clap_host_timer_support_t* timer = nullptr;
+	const clap_host_posix_fd_support_t* fd = nullptr;
+	clap_id timer_id = CLAP_INVALID_ID;
+	int fd_number    = -1;
+};
+static std::mutex x11_hosts_mx;
+static std::map<const NukedSc55*, X11Host> x11_hosts;
+
+static void X11Start(const clap_plugin_t* plugin)
+{
+	auto ns = Engine(plugin);
+	X11Host h;
+	h.timer = static_cast<const clap_host_timer_support_t*>(ns->Host()->get_extension(ns->Host(), CLAP_EXT_TIMER_SUPPORT));
+	h.fd    = static_cast<const clap_host_posix_fd_support_t*>(ns->Host()->get_extension(ns->Host(), CLAP_EXT_POSIX_FD_SUPPORT));
+	if (h.timer && h.timer->register_timer) h.timer->register_timer(ns->Host(), 33, &h.timer_id);
+	h.fd_number = editor::IdleFd(ns->editor);
+	if (h.fd && h.fd->register_fd && h.fd_number >= 0 &&
+	    !h.fd->register_fd(ns->Host(), h.fd_number, CLAP_POSIX_FD_READ))
+		h.fd_number = -1;
+	std::lock_guard lock(x11_hosts_mx);
+	x11_hosts[ns] = h;
+}
+
+static void X11Stop(const clap_plugin_t* plugin)
+{
+	auto ns = Engine(plugin);
+	X11Host h;
+	{
+		std::lock_guard lock(x11_hosts_mx);
+		auto it = x11_hosts.find(ns);
+		if (it == x11_hosts.end()) return;
+		h = it->second;
+		x11_hosts.erase(it);
+	}
+	if (h.timer && h.timer_id != CLAP_INVALID_ID) h.timer->unregister_timer(ns->Host(), h.timer_id);
+	if (h.fd && h.fd_number >= 0) h.fd->unregister_fd(ns->Host(), h.fd_number);
+}
+
+static const clap_plugin_timer_support_t extension_timer = {
+        .on_timer = [](const clap_plugin_t* plugin, clap_id) {
+	        if (auto ns = Engine(plugin); ns->editor) editor::Idle(ns->editor);
+        },
+};
+
+static const clap_plugin_posix_fd_support_t extension_posix_fd = {
+        .on_fd = [](const clap_plugin_t* plugin, int, clap_posix_fd_flags_t) {
+	        if (auto ns = Engine(plugin); ns->editor) editor::Idle(ns->editor);
+        },
+};
+#endif
+
 static const clap_plugin_gui_t extension_gui = {
         .is_api_supported = [](const clap_plugin_t*, const char* api, bool is_floating) -> bool {
-	        return std::strcmp(api, CLAP_WINDOW_API_WIN32) == 0 && !is_floating;
+	        return std::strcmp(api, NUKED_SC55_WINDOW_API) == 0 && !is_floating;
         },
         .get_preferred_api = [](const clap_plugin_t*, const char** api, bool* is_floating) -> bool {
-	        *api         = CLAP_WINDOW_API_WIN32;
+	        *api         = NUKED_SC55_WINDOW_API;
 	        *is_floating = false;
 	        return true;
         },
         .create = [](const clap_plugin_t* plugin, const char* api, bool is_floating) -> bool {
-	        if (std::strcmp(api, CLAP_WINDOW_API_WIN32) != 0 || is_floating) return false;
+	        if (std::strcmp(api, NUKED_SC55_WINDOW_API) != 0 || is_floating) return false;
 	        auto ns = Engine(plugin);
 	        if (!ns->editor) {
 #ifdef NUKED_SC55_DISPLAY_NAME
@@ -273,6 +337,9 @@ static const clap_plugin_gui_t extension_gui = {
         },
         .destroy = [](const clap_plugin_t* plugin) {
 	        auto ns = Engine(plugin);
+#ifndef _WIN32
+	        X11Stop(plugin);
+#endif
 	        if (ns->editor) {
 		        editor::Destroy(ns->editor);
 		        ns->editor = nullptr;
@@ -296,7 +363,15 @@ static const clap_plugin_gui_t extension_gui = {
         },
         .set_parent = [](const clap_plugin_t* plugin, const clap_window_t* window) -> bool {
 	        auto ns = Engine(plugin);
+#ifdef _WIN32
 	        return ns->editor && editor::Open(ns->editor, window->win32);
+#else
+	        if (!ns->editor || !editor::Open(ns->editor, reinterpret_cast<void*>(static_cast<uintptr_t>(window->x11))))
+		        return false;
+	        X11Stop(plugin);
+	        X11Start(plugin);
+	        return true;
+#endif
         },
         .set_transient = [](const clap_plugin_t*, const clap_window_t*) -> bool { return false; },
         .suggest_title = [](const clap_plugin_t*, const char*) {},
@@ -313,10 +388,14 @@ static const clap_plugin_gui_t extension_gui = {
 
 static const void* get_extension(const clap_plugin* plugin, const char* id)
 {
-#ifdef _WIN32
+#if defined(_WIN32) || defined(NUKED_SC55_X11_EDITOR)
 	if (strcmp(id, CLAP_EXT_GUI) == 0) {
 		return &extension_gui;
 	}
+#endif
+#if !defined(_WIN32) && defined(NUKED_SC55_X11_EDITOR)
+	if (strcmp(id, CLAP_EXT_TIMER_SUPPORT) == 0) return &extension_timer;
+	if (strcmp(id, CLAP_EXT_POSIX_FD_SUPPORT) == 0) return &extension_posix_fd;
 #endif
 	if (strcmp(id, CLAP_EXT_NOTE_PORTS) == 0) {
 		return &extension_note_ports;

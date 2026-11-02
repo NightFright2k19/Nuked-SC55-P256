@@ -97,6 +97,8 @@ public:
 	bool LoadState(const clap_istream_t* stream);
 	bool SaveState(const clap_ostream_t* stream);
 
+	const clap_host_t* Host() const { return host; } // the Linux editor asks it for the timer / fd extensions
+
 private:
 	std::filesystem::path path = {};
 
@@ -365,7 +367,7 @@ public:
 	const char* ModelName() const;
 	bool IsMk2() const { return model == Model::Sc55mk2_v1_01; }
 
-	void* editor = nullptr; // opaque GUI object (Windows only)
+	void* editor = nullptr; // opaque GUI object (Windows; Linux with NUKED_SC55_X11_EDITOR)
 
 	// Tone map of the SC-88 Pro (front-panel SC-55 MAP / SC-88 MAP), stored in
 	// the plugin state: 0 = SC-55, 1 = SC-88, 2 = SC-88 Pro (default = factory setting).

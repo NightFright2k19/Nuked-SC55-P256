@@ -28,7 +28,7 @@ The plug-ins are made from your own ROM files with the **patcher**; no compiler 
 4. Copy the results from `Plugins/CLAP/*.clap` and/or `Plugins/VST2/*.dll` (Windows; the Linux patcher creates only `Plugins/CLAP/*.clap`) to your plug-in folders (see [Using the plug-ins](#using-the-plug-ins)).
 
 > [!IMPORTANT]
-> **Linux:** the Linux patcher creates **native Linux x64 CLAP plug-ins** (no VST2). They have **no editor window yet**: the host shows its generic parameter view, and the SETUP menu and panel are not available ([#112](https://github.com/NightFright2k19/Nuked-SC55-P256/issues/112)). They need glibc 2.35 or newer (Ubuntu 22.04, Debian 12 or newer).
+> **Linux:** the Linux patcher creates **native Linux x64 CLAP plug-ins** (no VST2). They have the same editor panel and SETUP menu as on Windows (X11; under Wayland through XWayland) and need **libX11** and glibc 2.35 or newer (Ubuntu 22.04, Debian 12 or newer) ([#112](https://github.com/NightFright2k19/Nuked-SC55-P256/issues/112)).
 >
 > **macOS:** only the **patcher** runs natively there. The plug-ins it generates are still **Windows x64 builds** and do not load in a macOS host. Native macOS plug-ins are planned (#112).
 
@@ -51,7 +51,7 @@ Everything for which a complete ROM set is found is built (MT-32 / CM-32L, SC-55
 | Emu-SC8820 (with SC-D70 interface) | `Emu-SC8820` |
 | Emu-SC8850 | `Emu-SC8850` |
 
-CLAP and VST2 are the **same file** with two entry points (Windows). On Linux there is a native CLAP plug-in without editor; the patcher also runs on macOS, where it still creates the Windows plug-ins. Plug-in IDs, voice counts and the plug-in state are listed in the [plug-in reference](docs/plugins.md).
+CLAP and VST2 are the **same file** with two entry points (Windows). On Linux there is a native CLAP plug-in with the same editor; the patcher also runs on macOS, where it still creates the Windows plug-ins. Plug-in IDs, voice counts and the plug-in state are listed in the [plug-in reference](docs/plugins.md).
 
 ---
 
@@ -120,6 +120,7 @@ Parts of the code come from other projects and keep their own notices:
 - The files of the emulation core in `src/nuked-sc55/` carry the notice of nukeykt: redistribution is allowed, but not for sale and not in a commercial product or activity, and modified redistributions must include the complete source code.
 - The original Nuked-SC55-CLAP plug-in code is distributed under the GPL v2.0 or later, as stated in its README.
 - 88emu and the SC-88 Pro panel art are by The Usual Suspects and part of Gearmulator (GPLv3).
+- The Linux editor embeds the unmodified fonts Liberation Sans 2.1 (SIL Open Font License 1.1) and DejaVu Sans Mono 2.37 (Bitstream Vera license) and uses `stb_truetype.h` (public domain / MIT); the license texts are in `src/third_party/fonts/` and `src/third_party/stb/`.
 - The CLAP headers in `include/clap` are from the CLAP project. The VST2 interface in `src/vst2/vst2_abi.h` is an independent description of the binary interface and contains no Steinberg SDK code ("VST" is a trademark of Steinberg Media Technologies GmbH).
 
 **ROMs are not part of this repository and are not covered by this license.** They are the property of Roland. Plug-ins built with the builder or with embedded ROMs contain them and are for private use only.

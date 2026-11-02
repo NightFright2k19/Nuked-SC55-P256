@@ -4,6 +4,12 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r72: Editor for the Linux plug-ins (2026-11-02)
+
+- The native **Linux CLAP** plug-ins now have the **same editor panel and SETUP menu** as on Windows (#112): an X11 window that the host embeds, 918 x 280 px, 30 frames per second. They need libX11 (part of every Linux desktop; under Wayland through XWayland).
+- The text uses the embedded fonts Liberation Sans and DejaVu Sans Mono instead of Arial / Segoe UI and Consolas (licenses in `src/third_party/fonts/`). The SETUP menu is drawn by the plug-in and does not block the host.
+- Code: `src/gui/win32_x11.cpp` runs the Win32 editor code on X11; CLAP `timer-support` / `posix-fd-support` drive it. Test host `tools/test/clapgui_x11.cpp`; `clapcheck` now expects the X11 editor. The Windows plug-ins are unchanged.
+
 ## r71: Native Linux CLAP plug-ins (2026-11-02)
 
 - The **Linux patcher** now creates native **Linux x64 CLAP** plug-ins of all seven models instead of the Windows files (#112). No VST2 and no editor window yet: hosts show their generic parameter view. The plug-ins need glibc 2.35 or newer (Ubuntu 22.04, Debian 12 or newer). Same CLAP IDs as on Windows.
