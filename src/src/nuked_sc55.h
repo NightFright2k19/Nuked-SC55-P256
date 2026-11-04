@@ -335,6 +335,7 @@ public:
 	// SETUP menu "System Mode" (SC-88, SC-88 Pro; last mode set from the menu): 0 = Mode 1, 1 = Mode 2
 	std::atomic<int> system_mode{0}; // default Mode 1 (factory setting)
 	bool HasGm2() const;
+	bool HasXgReset() const; // SETUP > Send Reset > XG: SC-8820 (translated, XG mode) and SC-88 Pro (the firmware's own XG fallback)
 	bool HasXg() const; // XG mode (SC-8820): XG Bank Select / Program Change / SysEx are translated, issue #95
 	XgTranslate::Translator xg; // audio thread only
 	void EmitXg(const XgTranslate::Msg& m, uint8_t port, uint32_t render_frame);

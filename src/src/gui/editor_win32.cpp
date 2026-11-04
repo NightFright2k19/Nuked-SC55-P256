@@ -450,7 +450,7 @@ void ShowSetupMenu(Editor& e)
         AppendMenuW(rt_menu, MF_STRING, 10, L"MT-32");
         AppendMenuW(rt_menu, MF_STRING, 6, L"GM");
         AppendMenuW(rt_menu, MF_STRING, 2, L"GS");
-        if (p.HasXg()) AppendMenuW(rt_menu, MF_STRING, 12, L"XG");
+        if (p.HasXgReset()) AppendMenuW(rt_menu, MF_STRING, 12, L"XG");
         if (p.HasGm2()) AppendMenuW(rt_menu, MF_STRING, 7, L"GM2");
         AppendMenuW(m, MF_POPUP, (UINT_PTR)rt_menu, T(L"Send Reset", L"Reset senden"));
     }

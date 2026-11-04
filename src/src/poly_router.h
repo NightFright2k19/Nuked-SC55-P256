@@ -350,6 +350,15 @@ private:
 			else Reset();
 			return;
 		}
+#ifdef NUKED_SC55_DEVICE_88PRO
+		// XG System On: the SC-88 Pro switches to its XG fallback mode and initialises like after a GS Reset
+		if (m.size() >= 9 && m[0] == 0xf0 && m[1] == 0x43 && (m[2] & 0xf0) == 0x10 && m[3] == 0x4c &&
+		    m[4] == 0x00 && m[5] == 0x00 && m[6] == 0x7e && m[7] == 0x00) {
+			if (double_module) ResetPort(port);
+			else Reset();
+			return;
+		}
+#endif
 		// Roland GS DT1: F0 41 dev 42 12 aa bb cc data... sum F7
 		if (m.size() < 10 || m[0] != 0xf0 || m[1] != 0x41 || m[3] != 0x42 ||
 		    m[4] != 0x12)
