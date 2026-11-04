@@ -4,6 +4,11 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r75: XG reset for the SC-88 Pro (2026-11-04)
+
+- New **XG** entry in SETUP > Send Reset of the SC-88 Pro (#120). It sends the Yamaha XG System On (`F0 43 10 4C 00 00 7E 00 F7`), like the original needs it, and the firmware switches to its unofficial XG ("MU80 compatible") fallback mode; the plug-in translates nothing. A file that starts with XG System On does the same. The reset also counts for late-waking units and the note router, like a GS Reset.
+- Code: `HasXgReset()` (menu entry for the SC-8820 and the SC-88 Pro; `HasXg()` stays the SC-8820 translation), `StateLog::IsXgSystemOn`, `PolyRouter::SnoopSysEx`. Test `tools/test/xg_reset_88pro_test.cpp`. The SC-88 Pro template is rebuilt.
+
 ## r74: Editor for the macOS plug-ins (2026-11-02)
 
 - The native **macOS CLAP** plug-ins now have the **same editor panel** as on Windows and Linux (#112): an NSView that the host embeds, 918 x 280 points, 30 frames per second, on Apple Silicon and Intel. The **SETUP menu** is a native macOS menu with the same entries.

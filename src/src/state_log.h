@@ -91,6 +91,13 @@ public:
 
 	// GM System On/Off, GM2 System On (F0 7E xx 09 0n F7), GS Reset (40 00 7F) and, on
 	// the 88emu devices, System Mode Set (00 00 7F, Mode 1/2): the module starts over
+	// XG System On: F0 43 1n 4C 00 00 7E 00 F7
+	static bool IsXgSystemOn(std::span<const uint8_t> m)
+	{
+		return m.size() >= 9 && m[0] == 0xf0 && m[1] == 0x43 && (m[2] & 0xf0) == 0x10 && m[3] == 0x4c &&
+		       m[4] == 0x00 && m[5] == 0x00 && m[6] == 0x7e && m[7] == 0x00;
+	}
+
 	static bool IsReset(std::span<const uint8_t> m)
 	{
 		const bool gm_on = m.size() >= 6 && m[1] == 0x7e && m[3] == 0x09;
@@ -101,7 +108,14 @@ public:
 #else
 		const bool mode_set = false; // ignored by the SC-55 firmware
 #endif
-		return gm_on || mode_set ||
+#ifdef NUKED_SC55_DEVICE_88PRO
+		// XG System On: the SC-88 Pro firmware switches to its "MU80 compatible" fallback mode and initialises
+		// (the SC-8820 plug-in translates it to a GS Reset before it gets here)
+		const bool xg_on = IsXgSystemOn(m);
+#else
+		const bool xg_on = false;
+#endif
+		return gm_on || mode_set || xg_on ||
 		       (roland_dt1 && m[5] == 0x40 && m[6] == 0x00 && m[7] == 0x7f);
 	}
 

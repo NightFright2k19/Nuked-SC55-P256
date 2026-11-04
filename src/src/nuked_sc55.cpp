@@ -2157,13 +2157,15 @@ void NukedSc55::HandleUiCommands()
 				}
 			}
 		}
-	} else if (cmd == 2 || cmd == 6 || (cmd == 7 && HasGm2()) || (cmd == 12 && HasXg()) ||
+	} else if (cmd == 2 || cmd == 6 || (cmd == 7 && HasGm2()) || (cmd == 12 && HasXgReset()) ||
 	           ((cmd == 8 || cmd == 9) && HasSystemMode())) {
 		// SETUP menu "Send Reset" (GM / GS / XG / GM2) and "System Mode" (Mode 1 / Mode 2)
 		static const uint8_t gm[]  = {0xf0, 0x7e, 0x7f, 0x09, 0x01, 0xf7};
 		static const uint8_t gs[]  = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x40,
 		                              0x00, 0x7f, 0x00, 0x41, 0xf7};
 		static const uint8_t gm2[] = {0xf0, 0x7e, 0x7f, 0x09, 0x03, 0xf7};
+		// the XG System On of Yamaha: the SC-88 Pro firmware answers with its (unofficial) XG fallback mode
+		static const uint8_t xgon[] = {0xf0, 0x43, 0x10, 0x4c, 0x00, 0x00, 0x7e, 0x00, 0xf7};
 		static const uint8_t md1[] = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x00,
 		                              0x00, 0x7f, 0x00, 0x01, 0xf7};
 		static const uint8_t md2[] = {0xf0, 0x41, 0x10, 0x42, 0x12, 0x00,
@@ -2174,9 +2176,12 @@ void NukedSc55::HandleUiCommands()
 		case 7: msg = gm2; break;
 		case 8: msg = md1; system_mode = 0; break;
 		case 9: msg = md2; system_mode = 1; break;
+#ifdef NUKED_SC55_DEVICE_88PRO
+		case 12: msg = xgon; break; // SC-88 Pro: the real XG System On, the firmware does the rest
+#endif
 		default: msg = gs; break; // GS, and XG (a GS Reset, then XG mode: GM2 would switch the SC-8820 to its GM2 sound map)
 		}
-		if (cmd == 12) xg.Enable();
+		if (cmd == 12 && HasXg()) xg.Enable();
 		else xg.Disable();
 		// Mode 2 (Double Module): GM On / GS Reset reach only the part group of the MIDI IN
 		// they arrive on, so the menu sends them on IN A and IN B to reset the whole module
@@ -2209,6 +2214,15 @@ double NukedSc55::ResetSettleSeconds(const StateLog::Entry& e)
 	return (m.size() >= 10 && m[1] == 0x41 && m[5] == 0x00 && m[6] == 0x00 && m[7] == 0x7f) ? 0.2 : 0.06;
 }
 #endif
+
+bool NukedSc55::HasXgReset() const
+{
+#if defined(NUKED_SC55_DEVICE_8820) || defined(NUKED_SC55_DEVICE_88PRO)
+	return true;
+#else
+	return false;
+#endif
+}
 
 bool NukedSc55::HasXg() const
 {

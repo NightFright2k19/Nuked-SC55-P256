@@ -45,7 +45,7 @@ The SC-88 plug-in uses the same 88emu core with the firmware of the first SC-88 
 - **Graphics:** the 88emu SC-88 panel art (GPLv3, The Usual Suspects) by `tools/make_sc88orig_panel.py`. Only the branding ("Emu-SC88"), the playlist header (VOICES) and the VOLUME label (GAIN) are replaced; everything else is unchanged. Switches, rockers, LEDs, PREVIEW and the GAIN knob are rendered from the player's own vector graphics at the positions of its skin (`tools/make_sc88orig_sprites.py`, with the pressed tint).
 - **LCD:** the firmware's character LCD on the panel's glass, rendered like on the SC-88 Pro.
 - **Controls:** every switch is held while the mouse button is down (at least 80 ms), so holding a rocker repeats like on the device. A right click holds a switch until the next left-click switch is let go, for the key combinations of the manual (SELECT + ..., USER INST + ..., ALL + ...). GAIN: drag, wheel (0.1 dB per notch), double-click = 0 dB.
-- **VOICES / UNITS** as on the other 88emu panels. **SETUP** (bottom, between the logo and the EFX lamp; same place on the SC-88 Pro): max polyphony 64 / 128 / 192 / 256, tone map (SC-55 / SC-88), Send Reset (MT-32 / GM / GS), System Mode (Mode 1 / Mode 2), all notes off.
+- **VOICES / UNITS** as on the other 88emu panels. **SETUP** (bottom, between the logo and the EFX lamp; same place on the SC-88 Pro): max polyphony 64 / 128 / 192 / 256, tone map (SC-55 / SC-88), Send Reset (MT-32 / GM / GS; the SC-88 Pro also XG, see [XG fallback mode](#xg-fallback-mode-sc-88-pro)), System Mode (Mode 1 / Mode 2), all notes off.
 
 ---
 
@@ -58,6 +58,14 @@ The SC-88 Pro variant does not use the Nuked core. It uses **88emu**, a low-leve
 - **Engine variant:** compile-time `NUKED_SC55_ENGINE_88PRO` (model index 6). All differences sit in `#ifdef` blocks at about ten coupling points, so the SC-55 code is unchanged.
 - **Units:** 64 voices per unit, 4 units. 88emu renders at the device rate of 32 kHz, which goes through the existing resampler. Boot takes about 0.7 s per unit.
 - **Ports:** both MIDI inputs, 32 parts (A01-B16): CLAP note ports "MIDI IN A" and "MIDI IN B"; on VST2 (one input) the port select messages `F5 01` / `F5 02`.
+
+### XG fallback mode (SC-88 Pro)
+
+The SC-88 Pro has an unofficial, undocumented fallback mode for Yamaha XG (MU80) files, which Roland never advertised. It cannot be reached from the front panel; the firmware switches to it when it receives the **XG System On** `F0 43 10 4C 00 00 7E 00 F7` (issue #120). The display then shows "SOUND Canvas" instead of the part name, the bank map is the XG-like one, and the firmware initialises like after a GS Reset. It is a partial, reverse-engineered XG, not a full MU80: for example the XG insertion effects are only partly there.
+
+- **On and off:** SETUP > Send Reset > **XG** (below GS) sends exactly that message to all units, as a host or a file would do. The plug-in does not translate anything (unlike the [SC-8820](#xg-mode-sc-8820)): the emulated firmware does what the original does. Any GM On or GS Reset (menu or file) leaves the mode again. The mode is not stored in the plug-in state (like the other resets).
+- **Plug-in side:** the XG System On counts as a reset for the state log (units that wake up later replay it, so all units have the same mode) and for the note router (like a GS Reset; in System Mode 2 only the MIDI IN it arrives on). The menu entry holds back the next MIDI for 100 ms like the other resets.
+- **Checked** with the emulated firmware (88emu, SC-88 Pro ROM): after the XG System On the display text and the sound of the same Bank Select / Program Change differ from GS (for example bank 127 and SFX bank 64 on a melody part, LSB 16 equals LSB 1), a GS Reset returns to the GS sound bit for bit, and a note sent with the reset in the same block plays at the normal level. Test: `tools/test/xg_reset_88pro_test.cpp` (state log).
 
 ### Tone map switch
 
