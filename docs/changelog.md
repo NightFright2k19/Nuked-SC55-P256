@@ -7,6 +7,7 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 ## r76: XG drum notes 13, 14 and 29 for the SC-8820 (2026-11-09)
 
 - XG mode of the SC-8820: on a drum part, XG notes 13 (Mute Surdo), 14 (Open Surdo) and 29 (Snare Roll) are played on the GS notes 86, 87 and 25, where the SC-8820 drum sets have these sounds. Measured against S-MU2000 recordings of 9 kits, the spectral distance of these notes fell from 10.7 / 11.8 / 12.0 dB to 8.6 / 5.7 / 5.4 dB; the other notes of 13-34 got further away and are not remapped [#95].
+- The SC-8820 templates of Windows and Linux are rebuilt with it (checked through the real plug-in: XG notes 13 / 14 / 29 play bit-identical to the GS notes 86 / 87 / 25). The macOS SC-8820 templates need a Mac to build and are not rebuilt yet, so the macOS plug-ins play these three notes as before until they are.
 - Code: `Translator::DrumNote()` (`xg_translate.h`), applied to Note On / Note Off / Poly Key Pressure in `nuked_sc55.cpp`. Test: `tools/test/xg_translate_test.cpp`.
 
 ## r75: XG reset for the SC-88 Pro (2026-11-04)
