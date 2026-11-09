@@ -4,6 +4,11 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r76: XG drum notes 13, 14 and 29 for the SC-8820 (2026-11-09)
+
+- XG mode of the SC-8820: on a drum part, XG notes 13 (Mute Surdo), 14 (Open Surdo) and 29 (Snare Roll) are played on the GS notes 86, 87 and 25, where the SC-8820 drum sets have these sounds. Measured against S-MU2000 recordings of 9 kits, the spectral distance of these notes fell from 10.7 / 11.8 / 12.0 dB to 8.6 / 5.7 / 5.4 dB; the other notes of 13-34 got further away and are not remapped [#95].
+- Code: `Translator::DrumNote()` (`xg_translate.h`), applied to Note On / Note Off / Poly Key Pressure in `nuked_sc55.cpp`. Test: `tools/test/xg_translate_test.cpp`.
+
 ## r75: XG reset for the SC-88 Pro (2026-11-04)
 
 - New **XG** entry in SETUP > Send Reset of the SC-88 Pro (#120). It sends the Yamaha XG System On (`F0 43 10 4C 00 00 7E 00 F7`), like the original needs it, and the firmware switches to its unofficial XG ("MU80 compatible") fallback mode; the plug-in translates nothing. A file that starts with XG System On does the same. The reset also counts for late-waking units and the note router, like a GS Reset.

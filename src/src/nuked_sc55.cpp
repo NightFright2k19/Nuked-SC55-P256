@@ -1367,7 +1367,19 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 			if (!injecting && (status == ControlChange || status == ProgramChange))
 				host_change[port * 16 + (midi_event->data[0] & 0x0f)] = render_frame_count + render_frame + 1;
 #endif
+			const uint8_t* msg_data = midi_event->data; // what follows the translators below (may be a copy with another note)
 #ifdef NUKED_SC55_DEVICE_8820
+			uint8_t xg_note_msg[3];
+			if (!injecting && xg.Enabled() && len == 3 &&
+			    (status == NoteOn || status == NoteOff || status == PolyKeyPressure)) {
+				const uint8_t n = xg.DrumNote(midi_event->data[0] & 0x0f, port, midi_event->data[1]);
+				if (n != midi_event->data[1]) { // XG drum note that the GS set has elsewhere
+					xg_note_msg[0] = midi_event->data[0];
+					xg_note_msg[1] = n;
+					xg_note_msg[2] = midi_event->data[2];
+					msg_data       = xg_note_msg;
+				}
+			}
 			if (!injecting) ui_midi_in.fetch_add(1, std::memory_order_relaxed);
 			if (!injecting && xg.Enabled() && (status == ControlChange || status == ProgramChange)) {
 				// XG mode: Bank Select is held back and sent as GS bank / map with the Program Change
@@ -1377,10 +1389,10 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 				if (!xo.pass) break; // else the message itself follows the translator's own messages
 			}
 #endif
-			state_log.AddShort(midi_event->data, port);
-			UiTrackShort(midi_event->data, port);
-			const auto mask = router.RouteShort(midi_event->data, port);
-			QueueMidi(mask, midi_event->data, len, render_frame, port);
+			state_log.AddShort(msg_data, port);
+			UiTrackShort(msg_data, port);
+			const auto mask = router.RouteShort(msg_data, port);
+			QueueMidi(mask, msg_data, len, render_frame, port);
 #ifdef DEBUG
 			log_midi_message(midi_event);
 #endif
