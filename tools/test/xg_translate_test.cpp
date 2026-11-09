@@ -146,6 +146,23 @@ int main()
 	Sx(t, {0xf0, 0x43, 0x10, 0x4c, 0x00, 0x00, 0x7e, 0x00, 0xf7}, o);
 	Sx(t, {0xf0, 0x7e, 0x7f, 0x09, 0x01, 0xf7}, o); CHECK(!t.Enabled());
 
+	// drum notes 13 / 14 / 29 -> GS 86 / 87 / 25, only on a drum part while XG mode is on
+	{
+		Translator d;
+		CHECK(d.DrumNote(9, 0, 13) == 13); // disabled
+		Sx(d, {0xf0, 0x43, 0x10, 0x4c, 0x00, 0x00, 0x7e, 0x00, 0xf7}, o);
+		CHECK(d.DrumNote(9, 0, 13) == 86 && d.DrumNote(9, 0, 14) == 87 && d.DrumNote(9, 0, 29) == 25);
+		CHECK(d.DrumNote(9, 0, 36) == 36 && d.DrumNote(9, 0, 30) == 30 && d.DrumNote(9, 0, 20) == 20); // other notes unchanged
+		CHECK(d.DrumNote(0, 0, 13) == 13); // melody part
+		Cc(d, 2, 0, 127, o); Pc(d, 2, 0, o); // channel 3 becomes a drum part
+		CHECK(d.DrumNote(2, 0, 14) == 87);
+		Cc(d, 2, 0, 0, o); Pc(d, 2, 0, o);
+		CHECK(d.DrumNote(2, 0, 14) == 14);
+		CHECK(d.DrumNote(9, 1, 13) == 86); // port B channel 10
+		Sx(d, {0xf0, 0x7e, 0x7f, 0x09, 0x01, 0xf7}, o);
+		CHECK(d.DrumNote(9, 0, 13) == 13); // XG mode off again
+	}
+
 	std::printf(failures ? "%d FAILED\n" : "all passed\n", failures);
 	return failures != 0;
 }

@@ -219,6 +219,21 @@ public:
 		}
 	}
 
+	// XG drum notes whose position the SC-8820 (GS) fills with a different sound: the XG standard kits have Mute
+	// Surdo / Open Surdo / Snare Roll on 13 / 14 / 29, the GS sets have them on 86 / 87 / 25. Measured with the
+	// firmware's own XG fallback and against S-MU2000 recordings of 9 kits: only these three notes get closer
+	// (other notes of 13-34 got further away). Drum parts only, and only while XG mode is on.
+	uint8_t DrumNote(int ch, int port, uint8_t note) const
+	{
+		if (!enabled || port < 0 || port >= kMaxPorts || !rhythm[port * 16 + (ch & 0x0f)]) return note;
+		switch (note) {
+		case 13: return 86;
+		case 14: return 87;
+		case 29: return 25;
+		default: return note;
+		}
+	}
+
 	// Channel message of the host (3 bytes for CC, 2 for Program Change). Only while enabled.
 	void Short(const uint8_t* d, size_t len, int port, Out& out)
 	{
