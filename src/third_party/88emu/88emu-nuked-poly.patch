@@ -285,7 +285,7 @@ index 363de6c..8570101 100644
  		Lcd&       lcd()       { return m_lcd; }
  		const Lcd& lcd() const { return m_lcd; }
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8820.cpp b/source/ronaldo/88emu/88lib/boards/sc8820.cpp
-index bce6e72..1431172 100644
+index bce6e72..4705828 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8820.cpp
 +++ b/source/ronaldo/88emu/88lib/boards/sc8820.cpp
 @@ -5,9 +5,21 @@ namespace emu88Lib
@@ -322,6 +322,16 @@ index bce6e72..1431172 100644
  		m_xp.setInterruptCallback([this](bool level) { m_machine.intc().set_irq_pin(0, level); });
  		m_machine.sci(0).set_tx_sink([this](uint8_t value, bool, uint64_t) { m_midiOut.write(value); });
  		m_machine.ports().set_write_hook([this](sh2::Port port, uint16_t, uint16_t)
+@@ -65,7 +77,8 @@ namespace emu88Lib
+ 				m_usb.midiIn(port, &value, 1);
+ 			});
+ 			input->setSamplerate(SampleRate);
+-			input->setRateLimit(3125);
++			// Nuked SC-55 Poly: not the 3125 bytes/s of a DIN cable; the SC-8820 is played over USB (issue #126)
++			input->setRateLimit(31250);
+ 			input->setPreserveEventOrder(true);
+ 			input->setResetPause(0.05f);
+ 		}
 diff --git a/source/ronaldo/88emu/88lib/boards/sc8820.h b/source/ronaldo/88emu/88lib/boards/sc8820.h
 index 5773748..49f2a88 100644
 --- a/source/ronaldo/88emu/88lib/boards/sc8820.h
@@ -630,7 +640,7 @@ index e40ec7a..ca55f3c 100644
  		xpLib::XP m_xp;
  		Lcd m_lcd;
 diff --git a/source/ronaldo/88emu/88lib/c_interface.cpp b/source/ronaldo/88emu/88lib/c_interface.cpp
-index 9ccf846..fc6335a 100644
+index 9ccf846..cc79787 100644
 --- a/source/ronaldo/88emu/88lib/c_interface.cpp
 +++ b/source/ronaldo/88emu/88lib/c_interface.cpp
 @@ -1,3 +1,4 @@
