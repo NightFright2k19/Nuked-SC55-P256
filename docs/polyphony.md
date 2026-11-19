@@ -51,6 +51,8 @@ The firmware takes MIDI in at its own pace (SC-55: emulated UART, SC-88 / SC-88 
 
 On the SC-8820 the backlog that 88emu reports does not show the bytes waiting in its MIDI input limiter, so a file with a constant stream of bitmaps (the Bad Apple video file sends about 9.8 kB/s) held the notes back for as long as it ran [#126]. For the SC-8820 the plug-in therefore counts the bytes it has sent to unit 0 itself, drains the count at 6250 bytes per second and uses it as unit 0's backlog (`MidiBacklog()`). Display messages use what the notes leave of that rate, a bitmap that has to wait is replaced by a newer one for the same address, so such a video shows fewer frames. The 88emu input limit of the SC-8820 itself is 31250 bytes per second (r78); before it was 3125, which made the notes uneven under any dense MIDI.
 
+The SC-55 v1.21 and SC-55mk2 firmware has no bitmap display. The SC-8850 bitmaps (`45 12 20 xx xx`, thousands of them in a Bad Apple file) made the SC-55 LCD show "Address Error!" after about a minute and delayed the notes (median 98 ms, 99th percentile 337 ms instead of 10 / 90 ms without them). The plug-in therefore drops model `45` messages with address `20 xx xx` on these two models (r79) [#126]. Text messages (`45 10 00 xx`) still reach the firmware.
+
 ## Capital Tone Fallback (SC-55mk2)
 
 With CTF, a module falls back to the capital (basic) tone of a program when the selected variation tone does not exist, instead of staying silent. The SC-55 firmware does this by itself; the original SC-55mk2 firmware does not, which is why the mk2 ROM gets patched.
