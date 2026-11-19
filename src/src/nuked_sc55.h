@@ -276,6 +276,13 @@ private:
 	void DispFeed();
 	bool DispReady() const;                // nothing waiting and unit 0 has room
 public:
+#ifdef NUKED_SC55_DEVICE_8820
+	// SC-8820 (#126): its firmware takes MIDI in at wire speed (3125 bytes/s), but the backlog 88emu reports does not
+	// show it. The bytes sent to unit 0, drained at that speed, are the backlog the display pacing looks at.
+	mutable double wire_bytes = 0;
+	mutable uint64_t wire_frame = 0;
+	void WireDecay() const;
+#endif
 	size_t MidiBacklog(int i) const;       // diagnostics: MIDI bytes unit i has not taken in yet
 	size_t DispPending() const { return disp_pending.size(); }
 public:

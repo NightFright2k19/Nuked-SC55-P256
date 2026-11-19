@@ -4,6 +4,12 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r77: SC-8820 no longer lags behind a stream of display SysEx (2026-11-19)
+
+- SC-8820: a MIDI file with a constant stream of SC-8850 bitmap messages (`45 20 0x 00`, for example the Bad Apple video file, about 83 messages / 9.8 kB per second) held the notes back: they came late by a growing amount, and after Stop the plug-in kept playing for as long as the file had run [#126]. The firmware of the SC-8820 works through about 3.1 kB of MIDI per second, but the backlog reported by 88emu stays at 0 to 4 bytes for it, so the display pacing of #42 never held a message back. The plug-in now counts the bytes it has sent to unit 0 and drains that count at 3125 bytes per second, and lets a display message through only while the count is below 512 bytes (newer data for the same address replaces older data in the queue, as before). Measured with that file: a note sent 3 s after the start of the stream was not heard at all within 17 s; now notes come within 0.2 s, and after Stop the sound ends as without the display messages. Only display SysEx of the SC-8820 is affected, the sound of files without them is unchanged.
+- The SC-8820 templates of Windows and Linux are rebuilt with it. The macOS SC-8820 templates need a Mac to build and are not rebuilt yet, so the macOS plug-ins keep the old behaviour until they are.
+- Code: `WireDecay()`, `wire_bytes` and `MidiBacklog()` in `nuked_sc55.cpp` / `nuked_sc55.h` (SC-8820 only).
+
 ## r76: XG drum notes 13, 14 and 29 for the SC-8820 (2026-11-09)
 
 - XG mode of the SC-8820: on a drum part, XG notes 13 (Mute Surdo), 14 (Open Surdo) and 29 (Snare Roll) are played on the GS notes 86, 87 and 25, where the SC-8820 drum sets have these sounds. Measured against S-MU2000 recordings of 9 kits, the spectral distance of these notes fell from 10.7 / 11.8 / 12.0 dB to 8.6 / 5.7 / 5.4 dB; the other notes of 13-34 got further away and are not remapped [#95].
