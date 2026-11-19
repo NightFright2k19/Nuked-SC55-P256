@@ -1308,6 +1308,12 @@ void NukedSc55::QueueMidi(const PolyRouter::Mask mask, const uint8_t* data,
 {
 	const auto offset = static_cast<uint32_t>(midi_bytes.size());
 	midi_bytes.insert(midi_bytes.end(), data, data + size);
+#ifdef NUKED_SC55_DEVICE_8820
+	if ((mask & PolyRouter::Mask{1}) && !instances.empty() && instances[0].awake) {
+		WireDecay();
+		wire_bytes += static_cast<double>(size);
+	}
+#endif
 
 	for (int i = 0; i < NumInstances(); ++i) {
 		if ((mask & (PolyRouter::Mask{1} << i)) && instances[i].awake) {
@@ -3771,6 +3777,16 @@ void NukedSc55::DispQueue(const std::span<const uint8_t> msg, const uint8_t port
 	disp_pending.push_back(d);
 }
 
+#ifdef NUKED_SC55_DEVICE_8820
+void NukedSc55::WireDecay() const
+{
+	if (render_frame_count > wire_frame) {
+		wire_bytes = std::max(0.0, wire_bytes - 3125.0 * static_cast<double>(render_frame_count - wire_frame) / render_sample_rate_hz);
+		wire_frame = render_frame_count;
+	}
+}
+#endif
+
 size_t NukedSc55::MidiBacklog(const int i) const
 {
 	const auto& inst = instances[i];
@@ -3778,6 +3794,12 @@ size_t NukedSc55::MidiBacklog(const int i) const
 #ifdef NUKED_SC55_ENGINE_88PRO
 	if (!inst.ctx) return 0;
 	size_t n = emu88_get_midi_in_backlog(inst.ctx);
+#ifdef NUKED_SC55_DEVICE_8820
+	if (i == 0) {
+		WireDecay();
+		n = std::max(n, static_cast<size_t>(wire_bytes));
+	}
+#endif
 #else
 	const auto& mcu = inst.emu->GetMCU();
 	size_t n = (mcu.uart_write_ptr + uart_buffer_size - mcu.uart_read_ptr) % uart_buffer_size;
