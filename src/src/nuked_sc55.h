@@ -277,8 +277,11 @@ private:
 	bool DispReady() const;                // nothing waiting and unit 0 has room
 public:
 #ifdef NUKED_SC55_DEVICE_8820
-	// SC-8820 (#126): its firmware takes MIDI in at wire speed (3125 bytes/s), but the backlog 88emu reports does not
-	// show it. The bytes sent to unit 0, drained at that speed, are the backlog the display pacing looks at.
+	// SC-8820 (#126): 88emu feeds the firmware at a limited rate and does not report the bytes waiting for it. The
+	// plug-in counts the bytes it sent to unit 0 and drains the count at kWireRate8820; display SysEx pass only while
+	// the count is below the display limit, so they use what the notes leave of this rate. Measured with the Bad Apple
+	// file: 6250 gave the steadiest notes (p99 delay 42 ms, 3125: 64 ms, 12500: 94 ms).
+	static constexpr double kWireRate8820 = 6250.0;
 	mutable double wire_bytes = 0;
 	mutable uint64_t wire_frame = 0;
 	void WireDecay() const;

@@ -3781,7 +3781,7 @@ void NukedSc55::DispQueue(const std::span<const uint8_t> msg, const uint8_t port
 void NukedSc55::WireDecay() const
 {
 	if (render_frame_count > wire_frame) {
-		wire_bytes = std::max(0.0, wire_bytes - 3125.0 * static_cast<double>(render_frame_count - wire_frame) / render_sample_rate_hz);
+		wire_bytes = std::max(0.0, wire_bytes - kWireRate8820 * static_cast<double>(render_frame_count - wire_frame) / render_sample_rate_hz);
 		wire_frame = render_frame_count;
 	}
 }
