@@ -4,6 +4,12 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r79: SC-55 ignores SC-8850 bitmap display data (2026-11-19)
+
+- SC-55 v1.21 and SC-55mk2: MIDI files made for the SC-8850 that draw bitmaps on its display (such as the Bad Apple video file) sent thousands of `45 12 20 xx xx` messages, which these firmware versions do not know. After about a minute the LCD showed "Address Error!", and the notes came late (test note delay, median / 99th percentile: 98 / 337 ms, without the bitmap data 10 / 90 ms). The plug-in now drops those messages on the two models, so the delay is back to 10 / 90 ms and the error no longer appears. Text display messages are still passed on [#126].
+- The SC-55 templates of Windows and Linux are rebuilt. The macOS SC-55 templates need a Mac to build and are not rebuilt yet, so the macOS plug-ins keep the old behaviour until they are.
+- SC-88 and SC-88 Pro were checked with the same file: no "Address Error!", and the stream does not delay the notes (test note, median / 99th percentile: SC-88 16 / 110 ms, SC-88 Pro 8 / 121 ms, identical with and without the bitmap data). The other models are not changed.
+
 ## r78: SC-8820 takes MIDI in faster, steadier notes (2026-11-19)
 
 - SC-8820: 88emu limited the MIDI input of the SC-8820 to 3125 bytes per second per port, the speed of a DIN cable, although the device is played over USB. Dense passages (chords, controller streams, SysEx) waited in that queue and the notes came late by an uneven amount, which sounded uneven in playback [#126]. The limit is now 31250 bytes per second (`88emu-nuked-poly.patch`, `Sc8820::reset()`). The data is not lost at any rate (the queue towards the firmware is not limited; the parameters of all 32 parts after XG and GS test files were the same at both rates). The display pacing of r77 now drains its byte count at 6250 bytes per second (`kWireRate8820`), the value with the steadiest notes in the test.

@@ -1434,6 +1434,12 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 				}
 			}
 #endif
+#ifndef NUKED_SC55_ENGINE_88PRO
+			// SC-55 v1.21 / MkII firmware has no bitmap display: the SC-8850 graphic data (model 45h,
+			// address 20 xx xx, e.g. Bad Apple MIDIs) corrupts its state ("Address Error!" on the LCD
+			// after about a minute) and makes playback lag. The text display (10 00 00) stays.
+			if (IsDisplaySysEx(msg) && msg[5] == 0x20) break;
+#endif
 			if (disp_pace && IsDisplaySysEx(msg)) {
 #ifdef NUKED_SC55_DEVICE_8850
 				DotSysEx(msg);
