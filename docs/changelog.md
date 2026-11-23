@@ -4,6 +4,12 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r80: MT-32 / CM-32L reverb and ring modulation fixes (Gearmulator update to 00e1b17) (2026-11-23)
+
+- Newer 88emu core base (Gearmulator `00e1b17`, 38 commits plus merges after `7f9a980`). For the MT-32 / CM-32L it brings the reverb fixes made from the die shot (the tap delay summed one tap wrongly, and all modes rounded slightly differently; interpreter and both JIT paths) and a fix of the ring modulation of the LA32 sound generator. In a 12 s comparison render (all three LA devices, same MIDI sequence) the output differs from the previous state by -49 to -53 dB (RMS of the difference relative to the signal), the level by less than 0.01 dB, with no new clipping or silence.
+- SC-88, SC-88 Pro, SC-8820 and SC-8850 render bit-identical to r79 in the same test; the SC-55 plug-ins do not use this code. The new base also contains the PRO-E board, the M6801 CPU core and a faster ROM scan, none of which are used by the plug-ins.
+- The patch of the 88emu core was adapted to the new base (`hardwareDevice.cpp`: the SC-8820 panel buttons and lamp rows next to the new PRO-E branches). The submodule pins are unchanged. The Windows and Linux templates of the five 88emu plug-ins are rebuilt. The macOS templates need a Mac to build and are not rebuilt yet, so the macOS plug-ins keep the old behaviour until they are.
+
 ## r79: SC-55 ignores SC-8850 bitmap display data (2026-11-19)
 
 - SC-55 v1.21 and SC-55mk2: MIDI files made for the SC-8850 that draw bitmaps on its display (such as the Bad Apple video file) sent thousands of `45 12 20 xx xx` messages, which these firmware versions do not know. After about a minute the LCD showed "Address Error!", and the notes came late (test note delay, median / 99th percentile: 98 / 337 ms, without the bitmap data 10 / 90 ms). The plug-in now drops those messages on the two models, so the delay is back to 10 / 90 ms and the error no longer appears. Text display messages are still passed on [#126].

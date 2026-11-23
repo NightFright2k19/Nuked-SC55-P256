@@ -5,7 +5,7 @@
 # GM_NATIVE_ONLY=1: only the library of the machine itself (build88/; macOS templates, issue #112).
 set -e
 GM=${1:?Zielordner}; S=${2:?Plugin-Quellen}
-GM_COMMIT=${GM_COMMIT:-7f9a9806b7b3326379a39a2008c6dc92519191df} # default: recorded state
+GM_COMMIT=${GM_COMMIT:-00e1b17fe32711c25c4417eea6400c34b32c4ab7} # default: recorded state
 fetch() { # <path> <url> <commit>
   rm -rf "$1"; git init -q "$1"; (cd "$1" && git remote add origin "$2" && git fetch -q --depth 1 origin "$3" && git checkout -q FETCH_HEAD)
 }

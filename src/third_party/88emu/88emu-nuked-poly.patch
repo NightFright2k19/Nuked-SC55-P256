@@ -640,7 +640,7 @@ index e40ec7a..ca55f3c 100644
  		xpLib::XP m_xp;
  		Lcd m_lcd;
 diff --git a/source/ronaldo/88emu/88lib/c_interface.cpp b/source/ronaldo/88emu/88lib/c_interface.cpp
-index 9ccf846..cc79787 100644
+index 33aaa56..8d9a761 100644
 --- a/source/ronaldo/88emu/88lib/c_interface.cpp
 +++ b/source/ronaldo/88emu/88lib/c_interface.cpp
 @@ -1,3 +1,4 @@
@@ -687,7 +687,7 @@ index 9ccf846..cc79787 100644
  	}
  
  	void updateResampler()
-@@ -264,6 +283,12 @@ void emu88_set_boot_flags(const emu88_context _context, const unsigned _flags)
+@@ -270,6 +289,12 @@ void emu88_set_boot_flags(const emu88_context _context, const unsigned _flags)
  		_context->bootFlags = _flags;
  }
  
@@ -700,7 +700,7 @@ index 9ccf846..cc79787 100644
  emu88_return_code emu88_set_pcm_card(const emu88_context _context, const uint8_t* _image, const size_t _length)
  {
  	if(!_context || (!_image && _length))
-@@ -302,6 +327,7 @@ emu88_return_code emu88_open_synth(const emu88_context _context)
+@@ -308,6 +333,7 @@ emu88_return_code emu88_open_synth(const emu88_context _context)
  	emu88Lib::BootOptions boot;
  	boot.factoryReset = (_context->bootFlags & EMU88_BOOT_FACTORY_RESET) != 0;
  	boot.fastBoot = (_context->bootFlags & EMU88_BOOT_SKIP_INTRO) != 0;
@@ -708,7 +708,7 @@ index 9ccf846..cc79787 100644
  
  	auto device = std::make_unique<emu88Lib::HardwareDevice>(params, boot, _context->pcmCard);
  	if(!device->isValid())
-@@ -515,3 +541,219 @@ void emu88_render_bit16s(const emu88_context _context, int16_t* _stream, const u
+@@ -521,3 +547,219 @@ void emu88_render_bit16s(const emu88_context _context, int16_t* _stream, const u
  }
  
  } // extern "C"
@@ -929,10 +929,10 @@ index 9ccf846..cc79787 100644
 +	if(context && context->device) context->device->setMidiInRate(bytesPerSecond);
 +}
 diff --git a/source/ronaldo/88emu/88lib/c_interface.h b/source/ronaldo/88emu/88lib/c_interface.h
-index 642e7ce..0ce7843 100644
+index 9bdcfd5..de64465 100644
 --- a/source/ronaldo/88emu/88lib/c_interface.h
 +++ b/source/ronaldo/88emu/88lib/c_interface.h
-@@ -166,6 +166,8 @@ EMU88_EXPORT void emu88_free_context(emu88_context context);
+@@ -171,6 +171,8 @@ EMU88_EXPORT void emu88_free_context(emu88_context context);
  EMU88_EXPORT emu88_return_code emu88_select_device(emu88_context context, emu88_device_id device);
  /* A combination of EMU88_BOOT_*; EMU88_BOOT_DEFAULT unless set. */
  EMU88_EXPORT void emu88_set_boot_flags(emu88_context context, unsigned flags);
@@ -941,7 +941,7 @@ index 642e7ce..0ce7843 100644
  /* The PCM card in the slot of a device that has one, as a raw SN-U110 series card image of up to
   * 512 KiB in either of the two dump byte orders; the image is copied. NULL or 0 empties the slot.
   * Fails with EMU88_RC_INVALID_ARGUMENT when the image is not readable as a card. */
-@@ -233,6 +235,62 @@ EMU88_EXPORT int emu88_is_display_on(emu88_context context, unsigned screen);
+@@ -238,6 +240,62 @@ EMU88_EXPORT int emu88_is_display_on(emu88_context context, unsigned screen);
   * closed synth produces silence. */
  EMU88_EXPORT void emu88_render_bit16s(emu88_context context, int16_t* stream, uint32_t length);
  EMU88_EXPORT void emu88_render_float(emu88_context context, float* stream, uint32_t length);
@@ -1005,10 +1005,10 @@ index 642e7ce..0ce7843 100644
  #ifdef __cplusplus
  }
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.cpp b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-index c8f3b85..c3f09f9 100644
+index 610530b..cdaa024 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-@@ -27,8 +27,6 @@ namespace emu88Lib
+@@ -28,8 +28,6 @@ namespace emu88Lib
  		// A press and its release must remain visible to firmware even when a very
  		// fast pointer click delivers both edges inside one host audio block.
  		constexpr uint64_t g_minimumPanelEdgeSamples = 64;
@@ -1017,7 +1017,7 @@ index c8f3b85..c3f09f9 100644
  
  		using Screen = HardwareDevice::DisplaySnapshot::Screen;
  
-@@ -145,8 +143,17 @@ namespace emu88Lib
+@@ -154,8 +152,17 @@ namespace emu88Lib
  		}
  		case DeviceModel::Sc8820:
  		{
@@ -1036,7 +1036,7 @@ index c8f3b85..c3f09f9 100644
  			if(!inventory.read(cpu, RomDevice::Sc8820, RomSlot::Internal) ||
  				!inventory.read(program, RomDevice::Sc8820, RomSlot::Program) ||
  				!inventory.read(wave0, RomDevice::Sc8820, RomSlot::Wave, 0) ||
-@@ -156,6 +163,16 @@ namespace emu88Lib
+@@ -165,6 +172,16 @@ namespace emu88Lib
  		}
  		case DeviceModel::Sc8850:
  		{
@@ -1053,7 +1053,7 @@ index c8f3b85..c3f09f9 100644
  			auto roms = RomLoader::findSc8850RomSet();
  			auto waves = RomLoader::findSc8850WaveRomSet();
  			if(!roms.isValid() || !waves.isValid()) break;
-@@ -168,6 +185,12 @@ namespace emu88Lib
+@@ -177,6 +194,12 @@ namespace emu88Lib
  		case DeviceModel::Xpgs:
  		{
  			const auto model = m_model == DeviceModel::Sc88VL ? Model::Sc88VL : m_model == DeviceModel::Xpgs ? Model::Xpgs : Model::Sc88;
@@ -1066,7 +1066,7 @@ index c8f3b85..c3f09f9 100644
  			auto rom = RomLoader::findROM(model);
  			if(!rom.isValid() || rom.model() != model) break;
  			auto waveData = m_model == DeviceModel::Xpgs
-@@ -248,7 +271,7 @@ namespace emu88Lib
+@@ -258,7 +281,7 @@ namespace emu88Lib
  		{
  			// What the board sends out meanwhile is dropped; its display is published so the panel
  			// starts on the screen the board is now showing.
@@ -1075,10 +1075,10 @@ index c8f3b85..c3f09f9 100644
  				renderBoardFrame();
  			std::vector<synthLib::SMidiEvent> discarded;
  			readMidiOutFromBoard(discarded);
-@@ -518,6 +541,11 @@ namespace emu88Lib
- 			else if(m_sc55) m_sc55->setButtons(buttons);
+@@ -540,6 +563,11 @@ namespace emu88Lib
  			else if(m_la) m_la->setButtons(buttons);
  			else if(m_cm64) m_cm64->setButtons(buttons);
+ 			else if(m_proe) m_proe->setButtons(buttons);
 +			else if(m_sc8820) // Nuked SC-55 Poly: bit 0 INST MAP, bit 1 VOLUME push (PREVIEW)
 +			{
 +				m_sc8820->setButton(Sc8820::Button::InstMap, (buttons & 1u) != 0);
@@ -1087,16 +1087,16 @@ index c8f3b85..c3f09f9 100644
  			m_nextPanelCommandSample = m_renderedSamples + g_minimumPanelEdgeSamples;
  		}
  		else if(command.type == PanelCommandType::Mv30Panel)
-@@ -641,6 +669,8 @@ namespace emu88Lib
- 			first.displayOn = (lcd.displayMode() & 0x0c) != 0;
- 			lcd.renderMono(first.mono);
+@@ -675,6 +703,8 @@ namespace emu88Lib
+ 			first.text = lcdText(m_proe->lcd());
+ 			next.leds = m_proe->leds();
  		}
 +		else if(m_sc8820)
 +			next.leds = m_sc8820->leds(); // Nuked SC-55 Poly: lamp rows (no LCD)
  		if(m_mv30)
  			m_mv30->readParts(m_mv30PartsScratch);
  		std::unique_lock lock(m_displayMutex, std::try_to_lock);
-@@ -805,3 +835,52 @@ namespace emu88Lib
+@@ -840,3 +870,52 @@ namespace emu88Lib
  			m_activeChannels &= ~channelMask;
  	}
  }
@@ -1150,10 +1150,10 @@ index c8f3b85..c3f09f9 100644
 +	}
 +}
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.h b/source/ronaldo/88emu/88lib/hardwareDevice.h
-index 40655af..1d281e1 100644
+index fcc3e85..b9bce2a 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.h
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.h
-@@ -39,6 +39,8 @@ namespace emu88Lib
+@@ -40,6 +40,8 @@ namespace emu88Lib
  		bool factoryReset = true;
  		// Then keep the board running for another 10 s, so it starts past its power-on intro.
  		bool fastBoot = false;
@@ -1162,7 +1162,7 @@ index 40655af..1d281e1 100644
  		// Held switches at power-on; bypass automatic initialization and intro skipping.
  		uint32_t initialPanelButtons = 0;
  	};
-@@ -47,6 +49,15 @@ namespace emu88Lib
+@@ -48,6 +50,15 @@ namespace emu88Lib
  	class HardwareDevice final : public synthLib::Device
  	{
  	public:
@@ -1179,7 +1179,7 @@ index 40655af..1d281e1 100644
  		{
  			enum class Type : uint8_t { None, Character, Graphic };
 diff --git a/source/ronaldo/88emu/88lib/rom/romloader.cpp b/source/ronaldo/88emu/88lib/rom/romloader.cpp
-index 080801b..32ca9dc 100644
+index a5b0861..e096da5 100644
 --- a/source/ronaldo/88emu/88lib/rom/romloader.cpp
 +++ b/source/ronaldo/88emu/88lib/rom/romloader.cpp
 @@ -4,6 +4,7 @@
@@ -1288,7 +1288,7 @@ index 080801b..32ca9dc 100644
  
      bool RomLoader::isDeviceAvailable(const DeviceModel _model) { return isDeviceAvailable(toRomDevice(_model)); }
  
-@@ -120,6 +210,16 @@ namespace emu88Lib
+@@ -122,6 +212,16 @@ namespace emu88Lib
  
      Sc88ProRomSet RomLoader::findSc88ProRomSet(const RomDevice _device)
      {
@@ -1305,7 +1305,7 @@ index 080801b..32ca9dc 100644
          const auto inventory = scan();
          const bool sk88Pro = _device == RomDevice::Sk88Pro;
          if ((_device != RomDevice::Sc88Pro && _device != RomDevice::VeGsPro && _device != RomDevice::Sc880 &&
-@@ -154,6 +254,14 @@ namespace emu88Lib
+@@ -156,6 +256,14 @@ namespace emu88Lib
  
      Sc8850RomSet RomLoader::findSc8850RomSet()
      {
@@ -1320,7 +1320,7 @@ index 080801b..32ca9dc 100644
          const auto inventory = scan();
  
          Sc8850RomSet result;
-@@ -168,6 +276,13 @@ namespace emu88Lib
+@@ -170,6 +278,13 @@ namespace emu88Lib
      Sc8850WaveRomSet RomLoader::findSc8850WaveRomSet()
      {
          Sc8850WaveRomSet result;
@@ -1334,7 +1334,7 @@ index 080801b..32ca9dc 100644
          const auto inventory = scan();
          if (!inventory.read(result.romA, RomDevice::Sc8850, RomSlot::Wave, 0) ||
              !inventory.read(result.romB, RomDevice::Sc8850, RomSlot::Wave, 1))
-@@ -245,10 +360,17 @@ namespace emu88Lib
+@@ -259,10 +374,17 @@ namespace emu88Lib
  
      LaRomSet RomLoader::findLaRomSet(const LaModel _model)
      {
@@ -1354,7 +1354,7 @@ index 080801b..32ca9dc 100644
              !inventory.read(result.wave, device, RomSlot::Wave) ||
              !inventory.read(result.reverb, device, RomSlot::Reverb))
 diff --git a/source/ronaldo/88emu/88lib/rom/romloader.h b/source/ronaldo/88emu/88lib/rom/romloader.h
-index 3da3465..f5c73ce 100644
+index 84ccd04..9f4e106 100644
 --- a/source/ronaldo/88emu/88lib/rom/romloader.h
 +++ b/source/ronaldo/88emu/88lib/rom/romloader.h
 @@ -1,5 +1,6 @@
