@@ -906,6 +906,7 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	E88PanelInput();
 	E88SyncPump(instances[0], true, render_frame_count);
 	E88PanelMutes();
+	E88MapShown();
 #endif
 #ifdef NUKED_SC55_DEVICE_88
 	// Front panel of unit 0: edits of the last block passed on, GUI input, ALL + MUTE
@@ -3080,6 +3081,24 @@ void NukedSc55::E88MapTrack(const int part, const int value, const bool baseline
 	for (int i = 0; i < kNumParts; ++i)
 		mixed |= map_ref[i] >= 0 && map_cur[i] >= 0 && map_ref[i] != map_cur[i];
 	ui_map_mixed.store(mixed, std::memory_order_relaxed);
+}
+
+// Audio thread, every block: the map the SETUP menu marks. While all parts follow the map chosen for
+// them, that one; after INST MAP has changed a part, the map of the part shown on the panel
+// (tone map bytes 40 4x 00..01: Bank Select LSB, or 0 = the INST MAP map 1..4 = SC-55 .. SC-8850).
+void NukedSc55::E88MapShown()
+{
+	int shown = tone_map.load();
+	if (ui_map_mixed.load(std::memory_order_relaxed) && !instances.empty() && instances[0].ctx) {
+		uint8_t cur = 0;
+		emu88_peek_work_ram(instances[0].ctx, kRam8850CurPart, &cur, 1);
+		if (cur < kNumParts && map_cur[cur] >= 0) {
+			const int lsb = map_cur[cur] >> 8, inst = map_cur[cur] & 0xff;
+			const int m   = (lsb != 0 ? lsb : inst) - 1;
+			if (m >= 0 && m <= kMaxToneMap) shown = m;
+		}
+	}
+	ui_map_shown.store(shown, std::memory_order_relaxed);
 }
 
 // Compare an answer with what the other units are known to have and pass on the changes.

@@ -4,11 +4,16 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
-## r83: MT-32 / CM-32L use much less CPU (Gearmulator update to 62f6a687) (2026-11-26)
+## r84: MT-32 / CM-32L use much less CPU (Gearmulator update to 62f6a687) (2026-11-26)
 
 - Newer 88emu core base (Gearmulator `62f6a687`, 3 commits after `00e1b17`). Two of them are performance work on the MT-32 / CM-32L: a faster LA32 sound generator and a faster MCS-96 CPU core and scheduler (the board itself also does less per sample). In a 12 s comparison render of seven 88emu devices (MT-32 old, MT-32 new, CM-32L, SC-88, SC-88 Pro, SC-8820, SC-8850) the output is bit-identical to the previous base, so the sound does not change. A render of the MT-32 / CM-32L alone takes about 2.7 times less time than before, and the Linux plug-in test (256 notes, 4 s of audio) needs 0.2 s of compute time instead of 0.5 s with the same RMS.
 - The third commit only adds PRO-E panel switches, which no plug-in uses.
 - The patch of the 88emu core was adapted to the new base (`hardwareDevice.cpp` / `hardwareDevice.h`: the SC-8820 panel buttons and the fast-boot length next to the widened PRO-E button path). The submodule pins are unchanged. The Windows and Linux templates of Emu-MT32 are rebuilt; the other four 88emu plug-ins render bit-identically and gain nothing there. The macOS templates (arm64 and Intel, all models) are rebuilt by the macOS workflow from the new base, which also brings the SC-8850 SETUP menu fix of r81 / r82 into the macOS SC-8850 templates.
+
+## r83: SC-8850 SETUP menu marks the map of the shown part (2026-11-26)
+
+- SC-8850: since r82 the entry "Tone map (all parts)" showed no mark at all as soon as the INST MAP button had set a part to another map. It now keeps a mark: while the parts differ, it is on the map of the part shown on the panel (Bank Select LSB 1-3 of the part's tone map, or 0 = the INST MAP map 1-4), and it changes with the part chosen with PART < >. While all parts follow the map chosen in the menu nothing changes, and picking a map in the menu still sends it to all parts [#133].
+- Checked with the Linux SC-8850 test variant and the real ROMs: after a menu pick the mark is on that map; each INST MAP press moves it to the map the button selects (SC-8850, SC-88 Pro, SC-88, SC-55, SC-8850 ...). The Windows and Linux SC-8850 templates are rebuilt; the macOS ones need a Mac and keep the old behaviour until they are rebuilt.
 
 ## r82: SC-8850 SETUP menu follows the INST MAP button, templates rebuilt (2026-11-26)
 
