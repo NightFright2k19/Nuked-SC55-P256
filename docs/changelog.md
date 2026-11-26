@@ -4,6 +4,10 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r85: macOS SC-8850 templates rebuilt with the SETUP menu fix (2026-11-26)
+
+- The macOS SC-8850 templates (arm64 and Intel) are rebuilt by the macOS workflow from the current sources, so the SETUP menu entry "Tone map (all parts)" keeps its mark on the map of the part shown on the panel, as already fixed in r83 for Windows and Linux. The other macOS templates are unchanged.
+
 ## r84: MT-32 / CM-32L use much less CPU (Gearmulator update to 62f6a687) (2026-11-26)
 
 - Newer 88emu core base (Gearmulator `62f6a687`, 3 commits after `00e1b17`). Two of them are performance work on the MT-32 / CM-32L: a faster LA32 sound generator and a faster MCS-96 CPU core and scheduler (the board itself also does less per sample). In a 12 s comparison render of seven 88emu devices (MT-32 old, MT-32 new, CM-32L, SC-88, SC-88 Pro, SC-8820, SC-8850) the output is bit-identical to the previous base, so the sound does not change. A render of the MT-32 / CM-32L alone takes about 2.7 times less time than before, and the Linux plug-in test (256 notes, 4 s of audio) needs 0.2 s of compute time instead of 0.5 s with the same RMS.
