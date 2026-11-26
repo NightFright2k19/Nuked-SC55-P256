@@ -967,7 +967,13 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 #ifdef NUKED_SC55_DEVICE_8850
 		// SC-8850: the map is a per-part setting (Bank Select LSB, 1 = SC-55, 2 = SC-88, 3 = SC-88 Pro,
 		// 0 = SC-8850): send it for every part with the tracked bank / program
+		// A menu pick while the panel's INST MAP has made the parts differ sends the map again (Issue #133)
+		if (map_reapply.exchange(false) && !instances.empty()) instances[0].applied_map = -1;
 		if (!instances.empty() && instances[0].applied_map != map) {
+			map_ref.fill(-1); // baseline is read again once the firmware has the map
+			ui_map_mixed.store(false, std::memory_order_relaxed);
+			map_probe_pending = true;
+			map_probe_at      = render_frame_count + static_cast<uint64_t>(render_sample_rate_hz * 0.6);
 			// (sleeping units get the map with the replay; one may be synced in the background now)
 			for (auto& inst : instances)
 				if (inst.awake) inst.applied_map = map;
@@ -3063,6 +3069,19 @@ void NukedSc55::E88SyncStart(const bool boot)
 	std::reverse(sync_queue.begin(), sync_queue.end()); // sent from the back
 }
 
+// Record the tone map bytes of a part and update the SETUP menu's "mixed" state: true as soon
+// as a part differs from its baseline (the map the plug-in last set for all parts).
+void NukedSc55::E88MapTrack(const int part, const int value, const bool baseline)
+{
+	if (part < 0 || part >= kNumParts) return;
+	map_cur[part] = static_cast<int16_t>(value);
+	if (baseline || map_ref[part] < 0) map_ref[part] = static_cast<int16_t>(value);
+	bool mixed = false;
+	for (int i = 0; i < kNumParts; ++i)
+		mixed |= map_ref[i] >= 0 && map_cur[i] >= 0 && map_ref[i] != map_cur[i];
+	ui_map_mixed.store(mixed, std::memory_order_relaxed);
+}
+
 // Compare an answer with what the other units are known to have and pass on the changes.
 void NukedSc55::E88SyncAnswer(const SyncReq& req, const uint8_t* data, const int n, const bool forward)
 {
@@ -3071,6 +3090,14 @@ void NukedSc55::E88SyncAnswer(const SyncReq& req, const uint8_t* data, const int
 	if (part_block) {
 		const int x = req.a1 & 0x0f;
 		part        = req.port * 16 + (x == 0 ? 9 : (x <= 9 ? x - 1 : x));
+	}
+	// Tone map of the part (INST MAP sets it per part): the baseline read after the menu pick only
+	// records it; later answers show whether the panel changed a part away from it (Issue #133).
+	const bool map_bytes = part_block && (req.a1 & 0xf0) == 0x40 && req.a2 == 0x00 && n >= 2;
+	if (map_bytes && req.map_probe) {
+		for (int i = 0; i < 2; ++i) sync_base[SyncIndex(req.port, req.a0, req.a1, req.a2 + i)] = data[i];
+		E88MapTrack(part, data[0] << 8 | data[1], true);
+		return; // the menu already sent this map to every unit
 	}
 	if (forward && req.tries < 3) {
 		// The host may have changed the same parameters while the answer was on its way: then
@@ -3084,6 +3111,7 @@ void NukedSc55::E88SyncAnswer(const SyncReq& req, const uint8_t* data, const int
 			return;
 		}
 	}
+	if (map_bytes) E88MapTrack(part, data[0] << 8 | data[1], !forward); // boot: baseline
 	std::array<bool, 128> send{};
 	bool any = false;
 	for (int i = 0; i < n && req.a2 + i < 128; ++i) {
@@ -3189,6 +3217,16 @@ void NukedSc55::E88SyncPump(Instance& inst, const bool forward, const uint64_t n
 	if (sync_in.size() > 8192) sync_in.clear();
 	// unanswered (address not readable on this firmware): give up after 0.25 s
 	std::erase_if(sync_outstanding, [&](const SyncReq& r) { return now > r.sent_frame + 8000; });
+	// the map for all parts was just sent (SETUP menu): once the firmware has applied it, read every
+	// part's tone map as the new baseline for the "mixed" check
+	if (forward && map_probe_pending && now >= map_probe_at && sync_queue.empty() && sync_outstanding.empty()) {
+		map_probe_pending = false;
+		for (int part = kNumParts - 1; part >= 0; --part) {
+			SyncReq r{static_cast<uint8_t>(part / 16), 0x40, static_cast<uint8_t>(0x40 | GsBlockOfChannel(part % 16)), 0x00, 2};
+			r.map_probe = true;
+			sync_queue.push_back(r);
+		}
+	}
 	// a new pass 0.4 s after the last panel input
 	if (forward && sync_dirty && sync_queue.empty() && sync_outstanding.empty() && now > panel_frame + 12800) {
 		sync_dirty = false;
@@ -3212,6 +3250,10 @@ void NukedSc55::E88SyncPump(Instance& inst, const bool forward, const uint64_t n
 void NukedSc55::E88SyncBoot(Instance& inst)
 {
 	sync_base.assign(static_cast<size_t>(kNumPorts) * 2 * 128 * 128, -1);
+	map_ref.fill(-1);
+	map_cur.fill(-1);
+	map_probe_pending = false;
+	ui_map_mixed.store(false, std::memory_order_relaxed);
 	sync_in.clear();
 	sync_outstanding.clear();
 	host_change.fill(0);

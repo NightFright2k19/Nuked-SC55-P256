@@ -4,6 +4,12 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r81: SC-8850 SETUP menu follows the INST MAP button (2026-11-26)
+
+- SC-8850: the INST MAP button on the panel sets the tone map of the part shown only, as on the device, but the SETUP menu entry "Tone map (all parts)" kept its mark on the map last chosen in the menu, so it no longer matched the panel [#133]. After a panel pass reads a part's tone map back and it differs from what the menu set for all parts, the menu now marks no map. Picking a map in the menu then sends it to all parts again (before, picking the already marked map did nothing). The baseline is read once, about 0.6 s after each menu pick, with 32 small data requests (2 bytes each) through unit 0.
+- Checked the other models: SC-8820 already takes over the map that unit 0 shows (`E8820PanelInput`), the SC-88 Pro has no per-part INST MAP on its panel (ALL view only, the map keys are plug-in functions and set the state directly), SC-55, SC-55mk2 and MT-32 / CM-32L have no tone map menu. The SC-88 panel's INST MAP outside ALL mode is per part as well and is not covered by this change yet (see known issues).
+- Only the Windows / Linux / macOS SC-8850 plug-in is affected; the other models render and behave as before.
+
 ## r80: MT-32 / CM-32L reverb and ring modulation fixes (Gearmulator update to 00e1b17) (2026-11-23)
 
 - Newer 88emu core base (Gearmulator `00e1b17`, 38 commits plus merges after `7f9a980`). For the MT-32 / CM-32L it brings the reverb fixes made from the die shot (the tap delay summed one tap wrongly, and all modes rounded slightly differently; interpreter and both JIT paths) and a fix of the ring modulation of the LA32 sound generator. In a 12 s comparison render (all three LA devices, same MIDI sequence) the output differs from the previous state by -49 to -53 dB (RMS of the difference relative to the signal), the level by less than 0.01 dB, with no new clipping or silence.

@@ -41,3 +41,4 @@ These are limits of the approach, or things that are not done yet.
 ### SC-8850
 
 - **Panel edits of user tones and user drum sets** (stored in the firmware's user memory) are not passed on to the other units; part, system, effect and drum map settings are. The firmware RAM addresses the plug-in reads (current part, MUTE / SOLO) belong to the accepted program ROM.
+- **SC-88 tone map mark:** the panel's INST MAP outside ALL mode changes the map of the selected part only, while the SETUP menu's "Tone map (all parts)" mark stays on the last map chosen there (as the SC-8850 did before r81, Issue #133).
