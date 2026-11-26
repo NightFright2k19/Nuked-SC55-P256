@@ -4,6 +4,11 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r86: SETUP menu: all max. polyphony entries work again (2026-11-26)
+
+- In the SETUP menu of the Nuked-SC55 v1.21 / MkII, Emu-SC88, Emu-SC88 Pro, Emu-SC8820 and Emu-SC8850 plug-ins, the "Max. polyphony" entries with 200 voices or more did nothing: their menu IDs (`100 + voices`) fell into the range of the preview-note entries (300 to 427), so the choice was taken as a preview note and the limit stayed where it was. Affected were the two largest SC-55 entries (224 and 256 voices; 10 and 11 units on the v1.21, 8 and 9 on the MkII) and the 256-voice entry of the SC-88, SC-88 Pro, SC-8820 and SC-8850. Emu-MT32 (32 and 64 voices only) was not affected, but gets the same menu code. Once the limit had been lowered (and saved, for example in an FXB preset), it could not be raised to the maximum again from the menu. The polyphony entries now use IDs from 1000 up, above all other SETUP menu entries [#139].
+- Saved states are unaffected: the state only holds the number of voices. The Windows, Linux and macOS templates (arm64 and Intel) of all models are rebuilt.
+
 ## r85: macOS SC-8850 templates rebuilt with the SETUP menu fix (2026-11-26)
 
 - The macOS SC-8850 templates (arm64 and Intel) are rebuilt by the macOS workflow from the current sources, so the SETUP menu entry "Tone map (all parts)" keeps its mark on the map of the part shown on the panel, as already fixed in r83 for Windows and Linux. The other macOS templates are unchanged.

@@ -313,6 +313,11 @@ HMENU BuildPreviewMenu(NukedSc55& p, wchar_t* label, size_t label_len)
 }
 #endif
 
+// Menu ID of a max. polyphony entry = kCmdPolyBase + number of voices. It must lie above every other ID range of the
+// SETUP menu (preview notes use 300..427): with 100 + voices, the entries of 200 voices and more fell into the
+// preview-note range and did nothing (issue #139).
+constexpr int kCmdPolyBase = 1000;
+
 void HandleSetupCommand(Editor& e, int cmd);
 
 void ShowSetupMenu(Editor& e)
@@ -360,7 +365,7 @@ void ShowSetupMenu(Editor& e)
             swprintf(s, 128, L"   %d voices\t(%d %ls, %d partials%ls)", v, units,
                      units == 1 ? L"unit" : L"units", units * cap, dflt);
         const bool checked = (cur + cap - 1) / cap == units;
-        AppendMenuW(m, MF_STRING | (checked ? MF_CHECKED : 0), 100 + v, s);
+        AppendMenuW(m, MF_STRING | (checked ? MF_CHECKED : 0), kCmdPolyBase + v, s);
     }
 #ifdef NUKED_SC55_DEVICE_88PRO
     {
@@ -513,7 +518,10 @@ void ShowSetupMenu(Editor& e)
 void HandleSetupCommand(Editor& e, int cmd)
 {
     NukedSc55& p = *e.plugin;
-    if (cmd >= 300 && cmd <= 427) {
+    if (cmd >= kCmdPolyBase) {
+        p.SetMaxVoices(cmd - kCmdPolyBase); // stored in the plugin state by the host
+        p.NotifyStateChanged();
+    } else if (cmd >= 300 && cmd <= 427) {
 #ifdef NUKED_SC55_ENGINE_88PRO
         p.preview_note = cmd - 300; // stored in the plugin state
         p.NotifyStateChanged();
@@ -523,9 +531,6 @@ void HandleSetupCommand(Editor& e, int cmd)
 #ifdef NUKED_SC55_DEVICE_8850
         if (p.ui_map_mixed.load()) p.map_reapply = true; // parts differ (INST MAP): send the map again
 #endif
-        p.NotifyStateChanged();
-    } else if (cmd >= 100) {
-        p.SetMaxVoices(cmd - 100); // stored in the plugin state by the host
         p.NotifyStateChanged();
     } else if (cmd == 1 || cmd == 2 || cmd == 6 || cmd == 7 || cmd == 10 || cmd == 11 || cmd == 12) { // all notes off, resets
         p.ui_command = cmd;
