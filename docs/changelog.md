@@ -4,6 +4,11 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r82: SC-8850 SETUP menu follows the INST MAP button, templates rebuilt (2026-11-26)
+
+- The fix of r81 (pull request #134, issue #133) was merged as source only, so no release carried it. The SC-8850 templates of Windows and Linux are rebuilt from the same sources (88emu core `00e1b17`), so the SETUP menu entry "Tone map (all parts)" now loses its mark when the panel's INST MAP button has set a single part to another map, and picking a map sends it to all parts again.
+- Checked before the rebuild with the Linux test variant and the real ROMs (boot, menu pick, three INST MAP presses, same map picked again, another map picked: the state followed in every step). The other templates are unchanged. The macOS SC-8850 templates need a Mac to build and are not rebuilt yet, so the macOS plug-ins keep the old behaviour until they are.
+
 ## r81: SC-8850 SETUP menu follows the INST MAP button (2026-11-26)
 
 - SC-8850: the INST MAP button on the panel sets the tone map of the part shown only, as on the device, but the SETUP menu entry "Tone map (all parts)" kept its mark on the map last chosen in the menu, so it no longer matched the panel [#133]. After a panel pass reads a part's tone map back and it differs from what the menu set for all parts, the menu now marks no map. Picking a map in the menu then sends it to all parts again (before, picking the already marked map did nothing). The baseline is read once, about 0.6 s after each menu pick, with 32 small data requests (2 bytes each) through unit 0.
