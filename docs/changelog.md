@@ -4,6 +4,11 @@ What changed in each [Autobuild](https://github.com/NightFright2k19/Nuked-SC55-P
 
 **Maintaining it:** every change that triggers an Autobuild adds an entry at the top of this file in the same PR, headed `## r<N>: <title>` with `N` the number of the next Autobuild (newest release number + 1). The release workflow takes the title of the top entry for the release name (`Autobuild r<N>: <title>`) if its number matches. Releases r23 to r44 were created afterwards from the history, and r1 to r22 do not exist (the project started on 2026-10-08 with plug-in templates, before the patcher).
 
+## r83: SC-8850 SETUP menu marks the map of the shown part (2026-11-26)
+
+- SC-8850: since r82 the entry "Tone map (all parts)" showed no mark at all as soon as the INST MAP button had set a part to another map. It now keeps a mark: while the parts differ, it is on the map of the part shown on the panel (Bank Select LSB 1-3 of the part's tone map, or 0 = the INST MAP map 1-4), and it changes with the part chosen with PART < >. While all parts follow the map chosen in the menu nothing changes, and picking a map in the menu still sends it to all parts [#133].
+- Checked with the Linux SC-8850 test variant and the real ROMs: after a menu pick the mark is on that map; each INST MAP press moves it to the map the button selects (SC-8850, SC-88 Pro, SC-88, SC-55, SC-8850 ...). The Windows and Linux SC-8850 templates are rebuilt; the macOS ones need a Mac and keep the old behaviour until they are rebuilt.
+
 ## r82: SC-8850 SETUP menu follows the INST MAP button, templates rebuilt (2026-11-26)
 
 - The fix of r81 (pull request #134, issue #133) was merged as source only, so no release carried it. The SC-8850 templates of Windows and Linux are rebuilt from the same sources (88emu core `00e1b17`), so the SETUP menu entry "Tone map (all parts)" now loses its mark when the panel's INST MAP button has set a single part to another map, and picking a map sends it to all parts again.

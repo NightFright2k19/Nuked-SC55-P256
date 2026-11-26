@@ -391,8 +391,8 @@ void ShowSetupMenu(Editor& e)
 #endif
 #ifdef NUKED_SC55_DEVICE_8850
     {   // tone map (all parts), as on the SC-8820; the panel's INST MAP still sets it per part, and
-        // the mark then goes out while the parts differ from the map chosen here (Issue #133)
-        const int tm = p.ui_map_mixed.load() ? -1 : p.tone_map.load();
+        // the mark then follows the part shown on the panel while the parts differ (Issue #133)
+        const int tm = p.ui_map_shown.load();
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Tone map (all parts)", L"Klang-Map (alle Parts)"));
         AppendMenuW(m, MF_STRING | (tm == 0 ? MF_CHECKED : 0), 200, L"   SC-55 Map");
