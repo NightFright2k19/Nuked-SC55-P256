@@ -1,3 +1,9 @@
+diff --git a/source/cpu/dsp56300 b/source/cpu/dsp56300
+--- a/source/cpu/dsp56300
++++ b/source/cpu/dsp56300
+@@ -1 +1 @@
+-Subproject commit 8b731966f9792789adc39fe180a8cf68508f816a
++Subproject commit 8b731966f9792789adc39fe180a8cf68508f816a-dirty
 diff --git a/source/cpu/h8500/bus.hpp b/source/cpu/h8500/bus.hpp
 index 17ded73..1fd2b50 100644
 --- a/source/cpu/h8500/bus.hpp
@@ -222,7 +228,7 @@ index f82e7ae..d020758 100644
 +
 +}  // namespace h8500
 diff --git a/source/ronaldo/88emu/88lib/boards/laBoard.h b/source/ronaldo/88emu/88lib/boards/laBoard.h
-index 1fec112..9428700 100644
+index e1237d2..a5cf5a7 100644
 --- a/source/ronaldo/88emu/88lib/boards/laBoard.h
 +++ b/source/ronaldo/88emu/88lib/boards/laBoard.h
 @@ -107,6 +107,22 @@ namespace emu88Lib
@@ -1005,7 +1011,7 @@ index 9bdcfd5..de64465 100644
  #ifdef __cplusplus
  }
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.cpp b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
-index 610530b..cdaa024 100644
+index 6814bea..b6a6f9f 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.cpp
 @@ -28,8 +28,6 @@ namespace emu88Lib
@@ -1066,7 +1072,7 @@ index 610530b..cdaa024 100644
  			auto rom = RomLoader::findROM(model);
  			if(!rom.isValid() || rom.model() != model) break;
  			auto waveData = m_model == DeviceModel::Xpgs
-@@ -258,7 +281,7 @@ namespace emu88Lib
+@@ -260,7 +283,7 @@ namespace emu88Lib
  		{
  			// What the board sends out meanwhile is dropped; its display is published so the panel
  			// starts on the screen the board is now showing.
@@ -1075,10 +1081,10 @@ index 610530b..cdaa024 100644
  				renderBoardFrame();
  			std::vector<synthLib::SMidiEvent> discarded;
  			readMidiOutFromBoard(discarded);
-@@ -540,6 +563,11 @@ namespace emu88Lib
+@@ -543,6 +566,11 @@ namespace emu88Lib
  			else if(m_la) m_la->setButtons(buttons);
  			else if(m_cm64) m_cm64->setButtons(buttons);
- 			else if(m_proe) m_proe->setButtons(buttons);
+ 			else if(m_proe) m_proe->setButtons(command.wide);
 +			else if(m_sc8820) // Nuked SC-55 Poly: bit 0 INST MAP, bit 1 VOLUME push (PREVIEW)
 +			{
 +				m_sc8820->setButton(Sc8820::Button::InstMap, (buttons & 1u) != 0);
@@ -1087,7 +1093,7 @@ index 610530b..cdaa024 100644
  			m_nextPanelCommandSample = m_renderedSamples + g_minimumPanelEdgeSamples;
  		}
  		else if(command.type == PanelCommandType::Mv30Panel)
-@@ -675,6 +703,8 @@ namespace emu88Lib
+@@ -678,6 +706,8 @@ namespace emu88Lib
  			first.text = lcdText(m_proe->lcd());
  			next.leds = m_proe->leds();
  		}
@@ -1096,7 +1102,7 @@ index 610530b..cdaa024 100644
  		if(m_mv30)
  			m_mv30->readParts(m_mv30PartsScratch);
  		std::unique_lock lock(m_displayMutex, std::try_to_lock);
-@@ -840,3 +870,52 @@ namespace emu88Lib
+@@ -843,3 +873,52 @@ namespace emu88Lib
  			m_activeChannels &= ~channelMask;
  	}
  }
@@ -1150,7 +1156,7 @@ index 610530b..cdaa024 100644
 +	}
 +}
 diff --git a/source/ronaldo/88emu/88lib/hardwareDevice.h b/source/ronaldo/88emu/88lib/hardwareDevice.h
-index fcc3e85..b9bce2a 100644
+index e57f3f3..66e8434 100644
 --- a/source/ronaldo/88emu/88lib/hardwareDevice.h
 +++ b/source/ronaldo/88emu/88lib/hardwareDevice.h
 @@ -40,6 +40,8 @@ namespace emu88Lib
@@ -1160,7 +1166,7 @@ index fcc3e85..b9bce2a 100644
 +		// Nuked SC-55 Poly: length of that run in emulated seconds
 +		float fastBootSeconds = 10.0f;
  		// Held switches at power-on; bypass automatic initialization and intro skipping.
- 		uint32_t initialPanelButtons = 0;
+ 		uint64_t initialPanelButtons = 0;
  	};
 @@ -48,6 +50,15 @@ namespace emu88Lib
  	class HardwareDevice final : public synthLib::Device
