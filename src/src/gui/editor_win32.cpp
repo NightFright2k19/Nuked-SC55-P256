@@ -390,8 +390,9 @@ void ShowSetupMenu(Editor& e)
     }
 #endif
 #ifdef NUKED_SC55_DEVICE_8850
-    {   // tone map (all parts), as on the SC-8820; the panel's INST MAP still sets it per part
-        const int tm = p.tone_map.load();
+    {   // tone map (all parts), as on the SC-8820; the panel's INST MAP still sets it per part, and
+        // the mark then goes out while the parts differ from the map chosen here (Issue #133)
+        const int tm = p.ui_map_mixed.load() ? -1 : p.tone_map.load();
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(m, MF_STRING | MF_GRAYED, 0, T(L"Tone map (all parts)", L"Klang-Map (alle Parts)"));
         AppendMenuW(m, MF_STRING | (tm == 0 ? MF_CHECKED : 0), 200, L"   SC-55 Map");
@@ -519,6 +520,9 @@ void HandleSetupCommand(Editor& e, int cmd)
 #endif
     } else if (cmd >= 200 && cmd <= 200 + NukedSc55::kMaxToneMap) {
         p.tone_map = cmd - 200; // switched like the panel buttons, stored in the state
+#ifdef NUKED_SC55_DEVICE_8850
+        if (p.ui_map_mixed.load()) p.map_reapply = true; // parts differ (INST MAP): send the map again
+#endif
         p.NotifyStateChanged();
     } else if (cmd >= 100) {
         p.SetMaxVoices(cmd - 100); // stored in the plugin state by the host

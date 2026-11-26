@@ -432,6 +432,11 @@ public:
 	static constexpr int kMaxToneMap = 3, kMapRounds = 2;
 	std::atomic<int> tone_map{3};
 	int last_tone_map = 3;
+	// The panel's INST MAP button sets the map of the part shown only (as on the device), while
+	// tone_map is the setting for all parts. True while some part's map differs from what the
+	// plug-in last set for all parts: the SETUP menu then marks no map (Issue #133).
+	std::atomic<bool> ui_map_mixed{false};
+	std::atomic<bool> map_reapply{false}; // menu pick while mixed: send the map to all parts again
 #elif defined(NUKED_SC55_DEVICE_LA)
 	// MT-32 / CM-32L: no tone maps
 	static constexpr int kMaxToneMap = 0, kMapRounds = 1;
@@ -594,7 +599,12 @@ private:
 		uint8_t port, a0, a1, a2, size;
 		uint8_t tries = 0;
 		uint64_t sent_frame = 0;
+		bool map_probe = false; // tone map baseline read: answer is only recorded (Issue #133)
 	};
+	std::array<int16_t, kNumParts> map_ref{}, map_cur{}; // tone map bytes per part (baseline / now), -1 = unknown
+	bool map_probe_pending = false;                      // baseline read queued once the firmware has applied the menu map
+	uint64_t map_probe_at  = 0;
+	void E88MapTrack(int part, int value, bool baseline);
 	std::vector<SyncReq> sync_queue;       // requests still to send (the last one next)
 	std::vector<SyncReq> sync_outstanding; // sent, answer pending
 	std::vector<int16_t> sync_base;        // last known value per (port, address); -1 = unknown
