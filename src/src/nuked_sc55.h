@@ -436,6 +436,8 @@ public:
 	// tone_map is the setting for all parts. True while some part's map differs from what the
 	// plug-in last set for all parts: the SETUP menu then marks no map (Issue #133).
 	std::atomic<bool> ui_map_mixed{false};
+	// Map the SETUP menu marks: tone_map while all parts follow it, else the map of the part shown on the panel
+	std::atomic<int> ui_map_shown{3};
 	std::atomic<bool> map_reapply{false}; // menu pick while mixed: send the map to all parts again
 #elif defined(NUKED_SC55_DEVICE_LA)
 	// MT-32 / CM-32L: no tone maps
@@ -605,6 +607,7 @@ private:
 	bool map_probe_pending = false;                      // baseline read queued once the firmware has applied the menu map
 	uint64_t map_probe_at  = 0;
 	void E88MapTrack(int part, int value, bool baseline);
+	void E88MapShown();
 	std::vector<SyncReq> sync_queue;       // requests still to send (the last one next)
 	std::vector<SyncReq> sync_outstanding; // sent, answer pending
 	std::vector<int16_t> sync_base;        // last known value per (port, address); -1 = unknown

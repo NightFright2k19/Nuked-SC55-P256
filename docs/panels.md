@@ -44,7 +44,7 @@ All panels run on Windows (Win32/GDI), Linux (X11) and macOS (Cocoa), the same c
 | All notes off | stops all sounding notes |
 | Tone map (SC-88) | SC-55 / SC-88 (default SC-88) for all parts: ALL + INST MAP on every unit; stored in the state (`map=0..1`), kept over GS resets |
 | Tone map (SC-88 Pro) | SC-55 / SC-88 / SC-88 Pro |
-| Tone map (SC-8850) | SC-55 / SC-88 / SC-88 Pro / SC-8850 (default SC-8850) for all parts: sends Bank Select LSB (CC#32) and the part's bank and program again to every part; stored in the state (`map=0..3`), a GS / GM reset returns to the SC-8850 map. The panel's INST MAP still sets it per part; the menu then marks no map while a part differs from the map set for all parts, and picking a map sends it to all parts again (Issue #133) |
+| Tone map (SC-8850) | SC-55 / SC-88 / SC-88 Pro / SC-8850 (default SC-8850) for all parts: sends Bank Select LSB (CC#32) and the part's bank and program again to every part; stored in the state (`map=0..3`), a GS / GM reset returns to the SC-8850 map. The panel's INST MAP still sets it per part; while a part differs from the map set for all parts, the menu marks the map of the part shown on the panel, and picking a map sends it to all parts again (Issue #133) |
 | Prevw Note (SC-88 Pro, SC-8820, SC-8850) | submenu per octave |
 | Interface Style (SC-8820) | SC-8820 (default) / SC-D70: the [SC-8820 panel](models.md#sc-8820-part-display) or the [SC-D70 interface](models.md#sc-d70-interface); last entry of the menu, stored in the state (`style=1..2`, a former `style=0` opens as SC-8820); a left click on the logo switches too |
 
