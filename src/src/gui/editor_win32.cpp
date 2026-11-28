@@ -28,6 +28,8 @@
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC8820P256Editor_"
 #elif defined(NUKED_SC55_DEVICE_LA)
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedMT32P256Editor_"
+#elif defined(NUKED_SC55_DEVICE_55E)
+#define NUKED_SC55_WNDCLASS_PREFIX "NukedSC55eP256Editor_"
 #elif defined(NUKED_SC55_DEVICE_88)
 #define NUKED_SC55_WNDCLASS_PREFIX "NukedSC88oP256Editor_"
 #elif defined(NUKED_SC55_ENGINE_88PRO)
@@ -213,7 +215,7 @@ bool GatherLcd(NukedSc55& p, lcdview::View& view)
 }
 
 #include "editor_sc88.inc" // shared helpers (GAIN knob, VOICES, text boxes)
-#ifndef NUKED_SC55_ENGINE_88PRO
+#ifdef NUKED_SC55_PANEL55
 #include "editor_sc55.inc"
 #endif
 #ifdef NUKED_SC55_DEVICE_8850
@@ -330,7 +332,7 @@ void ShowSetupMenu(Editor& e)
     const int base_mk1[] = {24, 48, 64, 96, 128, 160, 192, 224, 256};
     const int base_mk2[] = {28, 56, 64, 96, 128, 160, 192, 224, 256};
     const int* opts      = p.IsMk2() ? base_mk2 : base_mk1;
-#ifdef NUKED_SC55_ENGINE_88PRO
+#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_PANEL55)
     const int base_88pro[] = {64, 128, 192, 256, 256, 256, 256, 256, 256}; // units of 64
     opts = base_88pro;
 #endif
@@ -576,7 +578,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 #if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
     if (e && Mouse88o(*e, hwnd, msg, wp, lp)) return 0;
 #endif
-#ifndef NUKED_SC55_ENGINE_88PRO
+#ifdef NUKED_SC55_PANEL55
     if (e && Mouse55(*e, hwnd, msg, wp, lp)) return 0;
 #endif
     switch (msg) {

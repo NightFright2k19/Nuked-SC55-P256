@@ -246,6 +246,9 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 	partials_per_instance = 128; // SC-8850: 128 voices per unit (two XP tone generators)
 #elif defined(NUKED_SC55_DEVICE_LA)
 	partials_per_instance = 32;  // MT-32 / CM-32L: 32 partials per unit
+#elif defined(NUKED_SC55_DEVICE_55E)
+	if (!E55SetRoms()) return false; // also tells v1.21 from the mkII
+	partials_per_instance = e55_mk2 ? 28 : 24;
 #elif defined(NUKED_SC55_ENGINE_88PRO)
 	partials_per_instance = 64; // SC-88 Pro: 64 voices per unit
 #else
@@ -305,6 +308,8 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 			instances.clear();
 			return false;
 		}
+#elif defined(NUKED_SC55_DEVICE_55E)
+		// SC-55 on 88emu: the ROM set was handed over in E55SetRoms()
 #elif defined(NUKED_SC55_EMBED_ROMS)
 		// Single-file build: the normalized ROM set is linked into the binary
 		// (locations 0..3 = control, wave A, wave B, wave C; SC-8850: internal, program,
@@ -896,7 +901,7 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 		router.SetAllowed(allowed);
 	}
 	HandleUiCommands();
-#ifndef NUKED_SC55_ENGINE_88PRO
+#ifdef NUKED_SC55_PANEL55
 	// Front panel of unit 0: edits of the last block passed on, MUTE flags, GUI input
 	E55PanelPump();
 	E55PanelInput();
@@ -1109,7 +1114,7 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	}
 
 	{   // GAIN knob: analog-style output level after the emulation, ramped over the block
-#ifdef NUKED_SC55_ENGINE_88PRO
+#ifndef NUKED_SC55_PANEL55
 		const float target = GainFactor(gain_db.load(std::memory_order_relaxed));
 #else
 		// SC-55: ALL + MUTE on the panel silences the whole module (unit 0 mutes itself)
@@ -1186,6 +1191,9 @@ int NukedSc55::StateString(char* buf, const size_t size) const
 #elif defined(NUKED_SC55_DEVICE_LA)
 	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d dev=%d", max_voices.load(),
 	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)), la_device.load());
+#elif defined(NUKED_SC55_DEVICE_55E)
+	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d", max_voices.load(),
+	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)));
 #elif defined(NUKED_SC55_DEVICE_88)
 	// the tone map for all parts (SETUP menu) is kept here; the panel's own settings live in the firmware
 	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d", max_voices.load(),
@@ -1441,7 +1449,7 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 				}
 			}
 #endif
-#ifndef NUKED_SC55_ENGINE_88PRO
+#ifdef NUKED_SC55_PANEL55
 			// SC-55 v1.21 / MkII firmware has no bitmap display: the SC-8850 graphic data (model 45h,
 			// address 20 xx xx, e.g. Bad Apple MIDIs) corrupts its state ("Address Error!" on the LCD
 			// after about a minute) and makes playback lag. The text display (10 00 00) stays.
@@ -1495,7 +1503,7 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 	}
 }
 
-#ifndef NUKED_SC55_ENGINE_88PRO
+#ifdef NUKED_SC55_PANEL55
 //----------------------------------------------------------------------------
 // SC-55 / SC-55mk2 front panel (unit 0)
 //----------------------------------------------------------------------------
@@ -1561,6 +1569,9 @@ std::span<const uint16_t> NukedSc55::E55RxSwitches() const
 	static constexpr uint16_t v110[] = {0x4df6, 0x4df7, 0x4df8}; // also v1.20, v1.21
 	static constexpr uint16_t v200[] = {0x4e66, 0x4e67, 0x4e68};
 	static constexpr uint16_t mk2[]  = {0x5c2c, 0x5c2d, 0x5c2e, 0x5c9d, 0x5c9e};
+#ifdef NUKED_SC55_DEVICE_55E
+	return e55_mk2 ? std::span<const uint16_t>(mk2) : std::span<const uint16_t>(v110); // v1.21 or mkII v1.01
+#endif
 	switch (model) {
 	case Model::Sc55_v1_00: return v100;
 	case Model::Sc55_v1_10:
@@ -1572,23 +1583,64 @@ std::span<const uint16_t> NukedSc55::E55RxSwitches() const
 	}
 }
 
+// Parameter memory of unit 0 as the firmware left it (Nuked core: the SRAM itself; 88emu: a copy of the bytes the
+// panel code reads, taken now), and single bytes of any unit
+const uint8_t* NukedSc55::E55Sram(const int unit)
+{
+#ifdef NUKED_SC55_ENGINE_88PRO
+	const auto ctx = instances[unit].ctx;
+	emu88_peek_work_ram(ctx, 0, sram55.data(), 0x700);
+	for (const uint16_t a : E55RxSwitches()) emu88_peek_work_ram(ctx, a, sram55.data() + a, 1);
+	return sram55.data();
+#else
+	return instances[unit].emu->GetMCU().sram;
+#endif
+}
+
+uint8_t NukedSc55::E55Peek(const int unit, const uint16_t addr) const
+{
+#ifdef NUKED_SC55_ENGINE_88PRO
+	uint8_t v = 0;
+	emu88_peek_work_ram(instances[unit].ctx, addr, &v, 1);
+	return v;
+#else
+	return instances[unit].emu->GetMCU().sram[addr];
+#endif
+}
+
+void NukedSc55::E55Poke(const int unit, const uint16_t addr, const uint8_t v)
+{
+#ifdef NUKED_SC55_ENGINE_88PRO
+	emu88_poke_work_ram(instances[unit].ctx, addr, &v, 1);
+#else
+	instances[unit].emu->GetMCU().sram[addr] = v;
+#endif
+}
+
+bool NukedSc55::E55HasUnit(const Instance& inst)
+{
+#ifdef NUKED_SC55_ENGINE_88PRO
+	return inst.ctx != nullptr;
+#else
+	return inst.emu != nullptr;
+#endif
+}
+
 void NukedSc55::E55ApplyRxSwitches(Instance& inst)
 {
-	if (!inst.emu || &inst == &instances[0] || !instances[0].emu) return;
-	const uint8_t* src = instances[0].emu->GetMCU().sram;
-	uint8_t* dst       = inst.emu->GetMCU().sram;
-	for (const uint16_t a : E55RxSwitches()) dst[a] = src[a];
+	if (!E55HasUnit(inst) || &inst == &instances[0] || !E55HasUnit(instances[0])) return;
+	const int u = static_cast<int>(&inst - instances.data());
+	for (const uint16_t a : E55RxSwitches()) E55Poke(u, a, E55Peek(0, a));
 	for (int x = 0; x < 16; ++x) {
-		const int a = kSram55Part + kSram55PartSize * x + kPart55Fine;
-		dst[a] = src[a];
+		const auto a = static_cast<uint16_t>(kSram55Part + kSram55PartSize * x + kPart55Fine);
+		E55Poke(u, a, E55Peek(0, a));
 	}
 }
 
 // Audio thread, start of a block: GUI switches to unit 0, lamps back to the GUI
 void NukedSc55::E55PanelInput()
 {
-	if (instances.empty() || !instances[0].emu) return;
-	auto& mcu = instances[0].emu->GetMCU();
+	if (instances.empty() || !E55HasUnit(instances[0])) return;
 	uint32_t buttons = ui_panel_buttons.load(std::memory_order_relaxed);
 	// ALL + MIDI CH changes the device ID, which has no GS parameter: unit 0 would then ignore
 	// the host's GS messages and the other units not. Not given to the firmware, as on the SC-88.
@@ -1597,12 +1649,22 @@ void NukedSc55::E55PanelInput()
 		panel_active_until = render_frame_count + 1 +
 		                     static_cast<uint64_t>(render_sample_rate_hz * kPanel55Seconds);
 	}
+#ifdef NUKED_SC55_ENGINE_88PRO
+	// 88emu: the same switch matrix; its board decodes the lamps (bit 0 = ALL, bit 1 = MUTE)
+	const auto ctx = instances[0].ctx;
+	if (buttons != applied_buttons || buttons != 0) emu88_set_panel_buttons(ctx, buttons | panel_button_bits);
+	applied_buttons = buttons;
+	const uint32_t lamps = emu88_get_panel_leds(ctx);
+	const bool all = (lamps & 1u) != 0, mute = (lamps & 2u) != 0;
+#else
+	auto& mcu = instances[0].emu->GetMCU();
 	if (buttons != applied_buttons || buttons != 0) mcu.button_pressed = buttons | panel_button_bits;
 	applied_buttons = buttons;
 	// The firmware ORs the ALL / MUTE lamps into every panel column write (mk1: gate array
 	// address, mk2: sub-CPU port 0). In ALL mode the MUTE lamp shows ALL + MUTE.
 	const uint8_t port = mcu.is_mk1 ? mcu.io_sd : mcu.p0_data;
 	const bool all = !(port & kLamp55All), mute = !(port & kLamp55Mute);
+#endif
 	if (all) all_mute55 = mute;
 	ui_panel_leds.store((all ? 1u : 0u) | (mute ? 2u : 0u), std::memory_order_relaxed);
 }
@@ -1611,8 +1673,8 @@ void NukedSc55::E55PanelInput()
 // panel input) goes to the other units and the state log; part MUTE flags to the other units.
 void NukedSc55::E55PanelPump()
 {
-	if (instances.empty() || !instances[0].emu) return;
-	const uint8_t* sram = instances[0].emu->GetMCU().sram;
+	if (instances.empty() || !E55HasUnit(instances[0])) return;
+	const uint8_t* sram = E55Sram(0);
 	if (!panel_seen_valid) {
 		std::memcpy(panel_seen.data(), sram, panel_seen.size());
 		panel_seen_valid = true;
@@ -1703,11 +1765,12 @@ void NukedSc55::E55PanelPump()
 
 void NukedSc55::E55ApplyMutes(Instance& inst, const uint16_t rx)
 {
-	if (!inst.emu) return;
-	uint8_t* sram = inst.emu->GetMCU().sram;
+	if (!E55HasUnit(inst)) return;
+	const int u = static_cast<int>(&inst - instances.data());
 	for (int x = 0; x < 16; ++x) {
-		uint8_t& f = sram[kSram55Part + kSram55PartSize * x + kPart55Flags];
-		f = (rx & (1u << x)) ? (f | kMute55Bit) : (f & ~kMute55Bit);
+		const auto a = static_cast<uint16_t>(kSram55Part + kSram55PartSize * x + kPart55Flags);
+		const uint8_t f = E55Peek(u, a);
+		E55Poke(u, a, static_cast<uint8_t>((rx & (1u << x)) ? (f | kMute55Bit) : (f & ~kMute55Bit)));
 	}
 }
 #endif
@@ -2313,6 +2376,7 @@ const char* NukedSc55::ModelName() const
 	case Model::Sc88: return "SC-88";
 	case Model::Sc8820: return "SC-8820";
 	case Model::Mt32: return "MT-32 / CM-32L";
+	case Model::Sc55E: return IsMk2() ? "SC-55mk2 (88emu)" : "SC-55 v1.21 (88emu)";
 #endif
 	default: return "SC-55mk2 v1.01";
 	}
@@ -2344,6 +2408,46 @@ float NukedSc55::GainFactor(const float gain_db)
 	return std::pow(10.0f, (std::clamp(gain_db, kGainMinDb, kGainMaxDb) + kLevelMatchDb) / 20.0f);
 }
 
+#ifdef NUKED_SC55_DEVICE_55E
+// SC-55 on 88emu: hand the ROM set to 88emu and find out which board it is for. Embedded (locations 0..4 =
+// on-chip ROM, program ROM, wave ROMs 1..3 as dumped; a 512 KiB program ROM is the mkII's) or from the
+// ROM folders (SC-55 v1.21 first, then the mkII).
+bool NukedSc55::E55SetRoms()
+{
+#ifdef NUKED_SC55_EMBED_ROMS
+	const uint8_t* rp[5] = {};
+	size_t rn[5]         = {};
+	for (int k = 0; k < g_embedded_rom_count; ++k) {
+		const auto& r = g_embedded_roms[k];
+		if (r.location < 5) {
+			rp[r.location] = r.begin;
+			rn[r.location] = static_cast<size_t>(r.end - r.begin);
+		}
+	}
+	e55_mk2 = rn[1] == 0x80000;
+	if (emu88_set_sc55_rom_images(e55_mk2 ? EMU88_DEVICE_SC55MK2 : EMU88_DEVICE_SC55, rp[0], rn[0], rp[1], rn[1],
+	                              rp[2], rn[2], rp[3], rn[3], rp[4], rn[4]) != EMU88_RC_OK) {
+		log("88emu: embedded SC-55 ROM set invalid");
+		return false;
+	}
+	return true;
+#else
+	for (const auto& base : GetRomBasePaths()) {
+		emu88_add_rom_path((base / "SC-55-v1.21").string().c_str());
+		emu88_add_rom_path((base / "SC-55mk2-v1.01").string().c_str());
+		emu88_add_rom_path(base.string().c_str());
+	}
+	if (emu88_is_device_available(EMU88_DEVICE_SC55)) e55_mk2 = false;
+	else if (emu88_is_device_available(EMU88_DEVICE_SC55MK2)) e55_mk2 = true;
+	else {
+		log("88emu: no SC-55 ROM set found");
+		return false;
+	}
+	return true;
+#endif
+}
+#endif
+
 #ifdef NUKED_SC55_ENGINE_88PRO
 
 float NukedSc55::GainFromLegacyVolume(const int vol)
@@ -2373,6 +2477,8 @@ bool NukedSc55::E88BootUnit(const int i)
 		emu88_select_device(inst.ctx, EMU88_DEVICE_SC88);
 #elif defined(NUKED_SC55_DEVICE_LA)
 		emu88_select_device(inst.ctx, kLaDeviceIds[std::clamp(la_active.load(), 0, kLaDevices - 1)]);
+#elif defined(NUKED_SC55_DEVICE_55E)
+		emu88_select_device(inst.ctx, e55_mk2 ? EMU88_DEVICE_SC55MK2 : EMU88_DEVICE_SC55);
 #else
 		emu88_select_device(inst.ctx, EMU88_DEVICE_SC88PRO);
 #endif
@@ -2394,7 +2500,7 @@ bool NukedSc55::E88BootUnit(const int i)
 		inst.buf_l.reserve(1 << 16);
 		inst.buf_r.reserve(1 << 16);
 		inst.seq_len     = 0;
-#if defined(NUKED_SC55_DEVICE_LA)
+#if defined(NUKED_SC55_DEVICE_LA) || defined(NUKED_SC55_DEVICE_55E)
 		inst.applied_map = 0; // no tone maps
 #elif defined(NUKED_SC55_DEVICE_8820) || defined(NUKED_SC55_DEVICE_8850)
 		inst.applied_map = 3; // boots with its own map (SC-8820 / SC-8850)
@@ -2406,6 +2512,18 @@ bool NukedSc55::E88BootUnit(const int i)
 		E88ApplyMapSync(inst, tone_map.load());
 #ifdef NUKED_SC55_DEVICE_8850
 		if (i == 0) E88SyncBoot(inst); // what unit 0's panel can change, as booted
+#endif
+#ifdef NUKED_SC55_DEVICE_55E
+		// As the Nuked SC-55 plug-ins: a GS Reset after the boot (the units start in GS mode alike)
+		emu88_play_device_reset(inst.ctx);
+		E88RenderFrames(inst, static_cast<size_t>(emu88_get_device_samplerate(inst.ctx) * 0.1));
+		inst.buf_l.clear();
+		inst.buf_r.clear();
+		if (i == 0) { // unit 0's panel: parameter memory as booted
+			panel_seen_valid = false;
+			applied_buttons  = 0;
+			applied_mute55   = 0xffff;
+		}
 #endif
 #if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
 		if (i == 0) { // panel edits are read from the end of the log as booted
@@ -2593,7 +2711,7 @@ void NukedSc55::E88Drain(Instance& inst, const size_t bytes, const double extra_
 }
 #endif
 
-#ifdef NUKED_SC55_ENGINE_88PRO
+#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_PANEL55)
 // Lamps of unit 0's front panel (SC-88 Pro: ALL view; SC-8850, SC-88: all switches)
 uint32_t NukedSc55::PanelLeds() const
 {

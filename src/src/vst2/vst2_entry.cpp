@@ -35,6 +35,8 @@
 #define NUKED_SC55_FAMILY "Emu SC-8820 P256"
 #elif defined(NUKED_SC55_DEVICE_LA)
 #define NUKED_SC55_FAMILY "Emu MT-32 P256"
+#elif defined(NUKED_SC55_DEVICE_55E)
+#define NUKED_SC55_FAMILY "Emu SC-55 P256"
 #elif defined(NUKED_SC55_ENGINE_88PRO)
 #define NUKED_SC55_FAMILY "Emu SC-88 P256"
 #else

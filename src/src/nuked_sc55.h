@@ -2,8 +2,20 @@
 
 // SC-88 Pro (88emu engine without an SC-8850 / SC-88 device switch)
 #if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88) && \
-    !defined(NUKED_SC55_DEVICE_8820) && !defined(NUKED_SC55_DEVICE_LA)
+    !defined(NUKED_SC55_DEVICE_8820) && !defined(NUKED_SC55_DEVICE_LA) && !defined(NUKED_SC55_DEVICE_55E)
 #define NUKED_SC55_DEVICE_88PRO 1
+#endif
+// SC-55 on the 88emu core (issue #142, development branch): the SC-55 panel and its SETUP menu, units from
+// 88emu's SC-55 board (v1.21, or the SC-55mkII when only its ROM set is there)
+#if defined(NUKED_SC55_DEVICE_55E) && !defined(NUKED_SC55_ENGINE_88PRO)
+#error NUKED_SC55_DEVICE_55E needs NUKED_SC55_ENGINE_88PRO
+#endif
+// The SC-55 front panel (Nuked core, or the SC-55 on 88emu)
+#if !defined(NUKED_SC55_ENGINE_88PRO) || defined(NUKED_SC55_DEVICE_55E)
+#define NUKED_SC55_PANEL55 1
+#endif
+#if defined(NUKED_SC55_DEVICE_55E) && !defined(NUKED_SC55_55E_LEVEL_DB)
+#define NUKED_SC55_55E_LEVEL_DB 6.0f // 88emu SC-55 at GAIN 0 dB: the level of the Nuked SC-55 plug-ins (e1m1/animus/grabbag: 6.0 dB lower)
 #endif
 #if defined(NUKED_SC55_DEVICE_LA) && !defined(NUKED_SC55_LA_LEVEL_DB)
 #define NUKED_SC55_LA_LEVEL_DB 0.0f // level matching of the MT-32 / CM-32L at GAIN 0 dB, see kLevelMatchDb
@@ -70,7 +82,8 @@ public:
 		Sc8850,
 		Sc88,
 		Sc8820,
-		Mt32 // MT-32 (old / new) and CM-32L, device chosen in the SETUP menu (issue #69)
+		Mt32, // MT-32 (old / new) and CM-32L, device chosen in the SETUP menu (issue #69)
+		Sc55E // SC-55 v1.21 (or SC-55mkII) on the 88emu core (issue #142)
 #endif
 	};
 
@@ -324,7 +337,7 @@ public:
 	// SC-8850 A01..D16 (IN A..D, the four USB cables)
 #if defined(NUKED_SC55_DEVICE_8850)
 	static constexpr int kNumPorts = 4;
-#elif defined(NUKED_SC55_DEVICE_LA)
+#elif defined(NUKED_SC55_DEVICE_LA) || defined(NUKED_SC55_DEVICE_55E)
 	static constexpr int kNumPorts = 1; // one MIDI IN
 #elif defined(NUKED_SC55_ENGINE_88PRO)
 	static constexpr int kNumPorts = 2;
@@ -376,7 +389,13 @@ public:
 	void NotifyStateChanged();
 	std::function<void()> state_changed_callback;
 	const char* ModelName() const;
+#ifdef NUKED_SC55_DEVICE_55E
+	bool IsMk2() const { return e55_mk2; }
+	bool e55_mk2 = false; // 88emu SC-55: the ROM set is the SC-55mkII's (Init)
+	bool E55SetRoms();    // hands the ROM set to 88emu, sets e55_mk2
+#else
 	bool IsMk2() const { return model == Model::Sc55mk2_v1_01; }
+#endif
 
 	void* editor = nullptr; // opaque GUI object (Windows; Linux with NUKED_SC55_X11_EDITOR)
 
@@ -474,6 +493,11 @@ private:
 	void LaPanelInput();
 	void LaSwitchDevice();
 public:
+#elif defined(NUKED_SC55_DEVICE_55E)
+	// SC-55: no tone maps
+	static constexpr int kMaxToneMap = 0, kMapRounds = 1;
+	std::atomic<int> tone_map{0};
+	int last_tone_map = 0;
 #elif defined(NUKED_SC55_DEVICE_88)
 	// SC-88: 0 SC-55, 1 SC-88 (boots with the SC-88 map); SETUP menu, all parts (Issue #59)
 	static constexpr int kMaxToneMap = 1, kMapRounds = 2;
@@ -500,6 +524,8 @@ public:
 	static constexpr float kLevelMatchDb = 7.5f;
 #elif defined(NUKED_SC55_DEVICE_LA)
 	static constexpr float kLevelMatchDb = NUKED_SC55_LA_LEVEL_DB;
+#elif defined(NUKED_SC55_DEVICE_55E)
+	static constexpr float kLevelMatchDb = NUKED_SC55_55E_LEVEL_DB;
 #else
 	static constexpr float kLevelMatchDb = 5.0f;
 #endif
@@ -532,19 +558,30 @@ private:
 #endif
 public:
 #endif
-#ifndef NUKED_SC55_ENGINE_88PRO
+#ifdef NUKED_SC55_PANEL55
 	// SC-55 / SC-55mk2 front panel (Issue #10): the GUI drives unit 0's own panel (firmware
 	// LCD, ALL / MUTE lamps). Edits made there are read back from unit 0's parameter memory
 	// and passed on to the other units and the state log.
-	std::atomic<uint32_t> ui_panel_buttons{0}; // switches held in the GUI (bit = Nuked MCU button)
+	std::atomic<uint32_t> ui_panel_buttons{0}; // switches held in the GUI (bit = Nuked MCU button = 88emu SC-55 button)
 	std::atomic<uint32_t> ui_panel_leds{0};    // unit 0's lamps: bit 0 = ALL, bit 1 = MUTE
 	uint32_t PanelLeds() const { return ui_panel_leds.load(std::memory_order_relaxed); }
+#ifndef NUKED_SC55_ENGINE_88PRO
 	std::atomic<float> gain_db{0.0f};          // GAIN knob in dB, kGainMinDb..kGainMaxDb; 0 = default
 	static constexpr float kGainMinDb = -12.0f, kGainMaxDb = 12.0f;
 	static constexpr float kLevelMatchDb = 0.0f; // 0 dB = the level the SC-55 plugins always had
 	static float GainFactor(float gain_db);
+#endif
 private:
+#ifndef NUKED_SC55_ENGINE_88PRO
 	float applied_gain = -1.0f;    // < 0: not applied yet
+#else
+	// 88emu SC-55: unit 0's parameter memory (SRAM 0..6FF and the Rx switch bytes) read each block
+	std::array<uint8_t, 0x6000> sram55{};
+#endif
+	const uint8_t* E55Sram(int unit);                 // unit 0's parameter memory (read only)
+	uint8_t E55Peek(int unit, uint16_t addr) const;    // one byte of a unit's SRAM
+	void E55Poke(int unit, uint16_t addr, uint8_t v);
+	static bool E55HasUnit(const Instance& inst);
 	uint32_t applied_buttons = 0;
 	uint64_t panel_active_until = 0; // render frame until which unit 0's edits are passed on
 	std::array<uint8_t, 0x700> panel_seen{}; // unit 0's parameter memory (SRAM 0..6FF) as last seen
@@ -626,8 +663,9 @@ public:
 #endif
 	static constexpr bool HasToneMap()
 	{
-#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_LA)
-		return false; // INST MAP on the panel, per part (synchronised like other panel edits)
+#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_LA) || \
+    defined(NUKED_SC55_DEVICE_55E)
+		return false; // INST MAP on the panel, per part (synchronised like other panel edits); SC-55: none
 #elif defined(NUKED_SC55_ENGINE_88PRO)
 		return true;
 #else

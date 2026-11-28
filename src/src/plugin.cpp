@@ -21,6 +21,8 @@ constexpr auto NumPlugins = 6;
 #define NUKED_PLUGIN_FAMILY "Emu SC-8820 P256"
 #elif defined(NUKED_SC55_DEVICE_LA)
 #define NUKED_PLUGIN_FAMILY "Emu MT-32 P256"
+#elif defined(NUKED_SC55_DEVICE_55E)
+#define NUKED_PLUGIN_FAMILY "Emu SC-55 P256"
 #elif defined(NUKED_SC55_DEVICE_88)
 #define NUKED_PLUGIN_FAMILY "Emu SC-88 P256"
 #elif defined(NUKED_SC55_ENGINE_88PRO)
@@ -165,6 +167,19 @@ static const clap_plugin_descriptor_t plugin_descriptor_mt32 = {
         .support_url  = Url,
         .version      = Version,
         .description = "Roland MT-32 / CM-32L emulation (88emu core) with extended polyphony",
+        .features = Features};
+
+// SC-55 on the 88emu core (issue #142, development branch only; becomes a model of the multi plug-in)
+static const clap_plugin_descriptor_t plugin_descriptor_sc55e = {
+        .clap_version = CLAP_VERSION_INIT,
+        .id           = "net.nuked_sc55_poly_clap.sc55_88emu",
+        .name         = NUKED_PLUGIN_FAMILY " — Roland SC-55 (88emu)",
+        .vendor       = Vendor,
+        .url          = Url,
+        .manual_url   = Url,
+        .support_url  = Url,
+        .version      = Version,
+        .description = "Roland SC-55 emulation (88emu core) with extended polyphony",
         .features = Features};
 #endif
 
@@ -780,6 +795,11 @@ static const clap_plugin_t my_plugin_class_mt32 = [] {
 	c.desc          = &plugin_descriptor_mt32;
 	return c;
 }();
+static const clap_plugin_t my_plugin_class_sc55e = [] {
+	clap_plugin_t c = my_plugin_class_sc88pro;
+	c.desc          = &plugin_descriptor_sc55e;
+	return c;
+}();
 #endif
 
 
@@ -823,6 +843,7 @@ static const clap_plugin_factory_t plugin_factory = {
 			        case 8: orig = &plugin_descriptor_sc88; break;
 			        case 9: orig = &plugin_descriptor_sc8820; break;
 			        case 10: orig = &plugin_descriptor_mt32; break;
+			        case 11: orig = &plugin_descriptor_sc55e; break;
 #endif
 			        default: orig = &plugin_descriptor_sc55mk2_v1_01; break;
 			        }
@@ -862,6 +883,8 @@ static const clap_plugin_factory_t plugin_factory = {
 		        return &plugin_descriptor_sc8820;
 	        } else if (index == 10) {
 		        return &plugin_descriptor_mt32;
+	        } else if (index == 11) {
+		        return &plugin_descriptor_sc55e;
 #endif
 
 	        } else {
@@ -923,6 +946,8 @@ static const clap_plugin_factory_t plugin_factory = {
 		        the_plugin = new NukedSc55(my_plugin_class_sc8820, host, NukedSc55::Model::Sc8820);
 	        } else if (strcmp(plugin_id, plugin_descriptor_mt32.id) == 0) {
 		        the_plugin = new NukedSc55(my_plugin_class_mt32, host, NukedSc55::Model::Mt32);
+	        } else if (strcmp(plugin_id, plugin_descriptor_sc55e.id) == 0) {
+		        the_plugin = new NukedSc55(my_plugin_class_sc55e, host, NukedSc55::Model::Sc55E);
 #endif
 	        } else {
 		        return nullptr;

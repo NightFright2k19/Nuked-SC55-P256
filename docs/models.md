@@ -1,6 +1,6 @@
 # Models and engines
 
-Details of the MT-32 / CM-32L, SC-88, SC-88 Pro, SC-8820 and SC-8850 engines and their panels. Part of the [documentation index](../README.md#documentation).
+Details of the MT-32 / CM-32L, SC-55 on 88emu (development variant), SC-88, SC-88 Pro, SC-8820 and SC-8850 engines and their panels. Part of the [documentation index](../README.md#documentation).
 
 ## MT-32 / CM-32L engine (88emu)
 
@@ -23,6 +23,19 @@ The MT-32 plug-in uses the 88emu LA board (the 8095 / 8098 CPU with the original
 - **Graphics:** drawn from scratch by `tools/make_la_panel.py` after photos of the devices (no photo or third-party art is used); the maker's logos are replaced by the plug-in's own branding. VOICES (count, bar) and UNITS on the left, the name ("Emu-MT32", "Emu-MT32 v2" for the new MT-32, "Emu-CM32L") and SETUP (bottom right) in the strip below, as on the other panels. **A left click on the name switches the device** in the order CM-32L, MT-32 (old), MT-32 (new), CM-32L (devices without ROMs are skipped); like SETUP > Device, the units boot again as that device.
 - **MT-32:** the dark front with the display window: the 20-character LCD modelled on the MT-32's display (vivid green, square dots of 5 x 8 per character with the character ROM of the LCD controller, bold, unlit dots and the cursor line visible, glass) shows unit 0's display text (a part that plays shows a block, as on the device); the MIDI MESSAGE lamp (green, right of the LCD) lights for notes of any unit. PART 1-5, RHYTHM, SOUND GROUP, VOLUME, SOUND and MASTER VOLUME are the device's switches, pressed on all units alike (held while the mouse button is down, at least 120 ms; a right click holds a switch until the next left-click switch, for key combinations). The knob is labelled SELECT/GAIN: left-drag or mouse wheel = GAIN (0.1 dB per notch, double-click = 0 dB), right-drag or Shift + wheel = the device's own knob (SELECT, for example in the SOUND menu; in play mode it is the device's master volume, starting at "vol:100").
 - **CM-32L:** the aged ivory front with "Emu CM-32L / LA SOUND MODULE" in the device's squared lettering, the dark knob (GAIN) above a ribbed column cut into the ribbed strip, the GAIN value above it, the MIDI MESSAGE (green) and POWER (red) lamps across the full height of the ribbed strip and the grey power switch.
+
+---
+
+## SC-55 engine (88emu, development variant)
+
+Groundwork for the multi plug-in "Emu-SC Multi" (issue #142, branch `dev/multi-plugin`): the SC-55 runs on the 88emu SC-55 board (H8/532 CPU with the original firmware, GP sound chip) instead of the Nuked core. Compile-time `NUKED_SC55_DEVICE_55E` on top of `NUKED_SC55_ENGINE_88PRO`, model index 11, CLAP ID `net.nuked_sc55_poly_clap.sc55_88emu`. It is not shipped as a template of its own; it becomes the SC-55 model of the multi plug-in.
+
+- **Devices:** SC-55 v1.21 (24 partials per unit); the SC-55mk2 v1.01 (28 partials) only when no v1.21 set is present. Embedded ROMs use slots 0-4 (CPU internal ROM, program ROM, wave ROMs 1-3; a 512 KB program ROM means mk2). External ROMs are searched in the ROM folder and its subfolders `SC-55-v1.21` and `SC-55mk2-v1.01`.
+- **Units, panel, SETUP:** as the Nuked SC-55 plug-ins (sleeping units, wake-up replay, the SC-55 panel with ALL / MUTE / part / LEVEL / PAN / REVERB / CHORUS / KEY SHIFT / MIDI CH, the receive switches and mutes in the firmware's work RAM, GAIN -12 ... +12 dB). One MIDI port; no tone map (the SC-55 has none).
+- **Level:** 88emu's SC-55 output is about 6 dB louder than the Nuked core; the plug-in lowers it by 6.0 dB (`NUKED_SC55_55E_LEVEL_DB`), so E1M1 measures -20.95 dBFS RMS against -20.94 dBFS on the Nuked v1.21.
+- **CPU and memory** (Linux, `-O2`): E1M1, 40 s: 3.2 s of compute time against 4.4 s on the Nuked core; 160 notes on 11 units: 1.7 s against 2.7 s for 6 s of audio. The descrambled wave ROM is shared by all units of the process, so 11 units (264 voices) need about 53 MB peak RSS (one unit about 17 MB; the Nuked core about 22 MB at 264 voices).
+- **Patches:** `88emu-nuked-poly.patch` adds `emu88_set_sc55_rom_images` (ROM set from memory), `emu88_poke_work_ram` and `emu88_peek_work_ram` for the SC-55 board, the SC-55 voice counter (a GP slot counts while its envelope register is non-zero), its MIDI input backlog and rate, the ALL / MUTE lamps of the mk1 panel (decoded from port D bits 6 / 5) and the process-wide shared wave ROM (`Sc55Board::sharedWaveRom`, the GP chip holds its wave banks as `shared_ptr`).
+- **Panel code:** the SC-55 panel and its SETUP entries are compiled under `NUKED_SC55_PANEL55` (Nuked SC-55 or `NUKED_SC55_DEVICE_55E`); work RAM access goes through `E55Peek` / `E55Poke`, which read the Nuked SRAM directly or call 88emu. The Nuked SC-55 plug-ins render bit-identically to before.
 
 ---
 
