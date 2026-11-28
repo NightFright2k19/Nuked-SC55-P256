@@ -1,5 +1,5 @@
-// Emu SC-8820 Poly - front panel (included by editor_win32.cpp in NUKED_SC55_DEVICE_8820 builds,
-// after editor_sc88.inc).
+// Emu SC-8820 Poly - front panel (included by editor_win32.cpp in 88emu builds, after
+// editor_sc88.inc; used for the SC-8820 model).
 //
 // Background and lamp art: tools/make_sc8820_panel.py, drawn from scratch after photos of the
 // device (918x280; --base = lamps off, --all-on = every lamp lit). The lamps of unit 0's firmware

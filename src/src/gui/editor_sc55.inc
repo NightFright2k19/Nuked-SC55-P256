@@ -1,5 +1,5 @@
 // Nuked SC-55 Poly - front panel of the SC-55 / SC-55mkII (included by editor_win32.cpp in
-// the Nuked-core builds, after editor_sc88.inc).
+// all builds, after editor_sc88.inc; used by the Nuked core and the 88emu SC-55 model).
 //
 // Background: the 88emu SC-55 / SC-55mkII panel art (The Usual Suspects, GPLv3), prepared at
 // build time by tools/make_sc55_panel.py (918x280, branding replaced, playlist -> VOICES,

@@ -29,7 +29,9 @@
 #endif
 
 // Product family / vendor shown by VST2 hosts
-#if defined(NUKED_SC55_DEVICE_8850)
+#if defined(NUKED_SC55_MULTI)
+#define NUKED_SC55_FAMILY "Emu SC Multi P256"
+#elif defined(NUKED_SC55_DEVICE_8850)
 #define NUKED_SC55_FAMILY "Emu SC-8850 P256"
 #elif defined(NUKED_SC55_DEVICE_8820)
 #define NUKED_SC55_FAMILY "Emu SC-8820 P256"

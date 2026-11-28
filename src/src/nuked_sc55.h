@@ -1,8 +1,25 @@
 #pragma once
 
+// Device of the 88emu engine. A single-model build fixes it at compile time (NUKED_SC55_DEVICE_*, none = SC-88 Pro);
+// NUKED_SC55_MULTI builds all 88emu devices into one binary and chooses one at run time (issue #142). Every 88emu build
+// compiles the code of all devices; in a single-model build the device checks are constants and the compiler drops the
+// code of the other devices, so the output is the same as before.
+#if defined(NUKED_SC55_MULTI)
+#if !defined(NUKED_SC55_ENGINE_88PRO)
+#error NUKED_SC55_MULTI needs NUKED_SC55_ENGINE_88PRO
+#endif
+#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_8820) || \
+    defined(NUKED_SC55_DEVICE_LA) || defined(NUKED_SC55_DEVICE_55E) || defined(NUKED_SC55_DEVICE_88PRO)
+#error NUKED_SC55_MULTI chooses the device at run time: no NUKED_SC55_DEVICE_* with it
+#endif
+#if defined(NUKED_SC55_EMBED_ROMS)
+#error NUKED_SC55_MULTI does not embed ROMs yet (issue #142, phase 3)
+#endif
+#endif
 // SC-88 Pro (88emu engine without an SC-8850 / SC-88 device switch)
-#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_DEVICE_8850) && !defined(NUKED_SC55_DEVICE_88) && \
-    !defined(NUKED_SC55_DEVICE_8820) && !defined(NUKED_SC55_DEVICE_LA) && !defined(NUKED_SC55_DEVICE_55E)
+#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_MULTI) && !defined(NUKED_SC55_DEVICE_8850) && \
+    !defined(NUKED_SC55_DEVICE_88) && !defined(NUKED_SC55_DEVICE_8820) && !defined(NUKED_SC55_DEVICE_LA) && \
+    !defined(NUKED_SC55_DEVICE_55E)
 #define NUKED_SC55_DEVICE_88PRO 1
 #endif
 // SC-55 on the 88emu core (issue #142, development branch): the SC-55 panel and its SETUP menu, units from
@@ -10,15 +27,11 @@
 #if defined(NUKED_SC55_DEVICE_55E) && !defined(NUKED_SC55_ENGINE_88PRO)
 #error NUKED_SC55_DEVICE_55E needs NUKED_SC55_ENGINE_88PRO
 #endif
-// The SC-55 front panel (Nuked core, or the SC-55 on 88emu)
-#if !defined(NUKED_SC55_ENGINE_88PRO) || defined(NUKED_SC55_DEVICE_55E)
-#define NUKED_SC55_PANEL55 1
-#endif
-#if defined(NUKED_SC55_DEVICE_55E) && !defined(NUKED_SC55_55E_LEVEL_DB)
+#if !defined(NUKED_SC55_55E_LEVEL_DB)
 #define NUKED_SC55_55E_LEVEL_DB 6.0f // 88emu SC-55 at GAIN 0 dB: the level of the Nuked SC-55 plug-ins (e1m1/animus/grabbag: 6.0 dB lower)
 #endif
-#if defined(NUKED_SC55_DEVICE_LA) && !defined(NUKED_SC55_LA_LEVEL_DB)
-#define NUKED_SC55_LA_LEVEL_DB 0.0f // level matching of the MT-32 / CM-32L at GAIN 0 dB, see kLevelMatchDb
+#if !defined(NUKED_SC55_LA_LEVEL_DB)
+#define NUKED_SC55_LA_LEVEL_DB 0.0f // level matching of the MT-32 / CM-32L at GAIN 0 dB, see LevelMatchDb()
 #endif
 
 #include <array>
@@ -86,6 +99,42 @@ public:
 		Sc55E // SC-55 v1.21 (or SC-55mkII) on the 88emu core (issue #142)
 #endif
 	};
+#ifdef NUKED_SC55_ENGINE_88PRO
+	// Device of the 88emu units: fixed in a single-model build, chosen from the model in a multi build
+	enum class Dev : uint8_t { Sc88Pro, Sc8850, Sc88, Sc8820, La, Sc55E };
+#ifdef NUKED_SC55_MULTI
+	Dev D() const { return dev; }
+#else
+	static constexpr Dev D()
+	{
+#if defined(NUKED_SC55_DEVICE_8850)
+		return Dev::Sc8850;
+#elif defined(NUKED_SC55_DEVICE_8820)
+		return Dev::Sc8820;
+#elif defined(NUKED_SC55_DEVICE_88)
+		return Dev::Sc88;
+#elif defined(NUKED_SC55_DEVICE_LA)
+		return Dev::La;
+#elif defined(NUKED_SC55_DEVICE_55E)
+		return Dev::Sc55E;
+#else
+		return Dev::Sc88Pro;
+#endif
+	}
+#endif
+	bool Is88Pro() const { return D() == Dev::Sc88Pro; }
+	bool Is8850() const { return D() == Dev::Sc8850; }
+	bool Is88() const { return D() == Dev::Sc88; }
+	bool Is8820() const { return D() == Dev::Sc8820; }
+	bool IsLa() const { return D() == Dev::La; }
+	bool Is55E() const { return D() == Dev::Sc55E; }
+	static Dev DevOfModel(Model m);
+	// Panel of unit 0 driven through 88emu's switches with edits read back (SC-8850, SC-88, SC-88 Pro, SC-8820)
+	bool HasE88Panel() const { return Is8850() || Is88() || Is88Pro() || Is8820(); }
+	bool HasPanel55() const { return Is55E(); } // the SC-55 panel (Nuked core: always)
+#else
+	bool HasPanel55() const { return true; }
+#endif
 
 	// Init/shutdown
 	NukedSc55(const clap_plugin_t plugin_class, const clap_host_t* host,
@@ -120,6 +169,10 @@ private:
 	clap_plugin_t plugin_class         = {};
 	const clap_host_t* host            = nullptr;
 	const clap_plugin* plugin_instance = nullptr;
+
+#ifdef NUKED_SC55_MULTI
+	Dev dev = Dev::Sc88Pro;
+#endif
 
 	// One emulated SC-55 per instance; combined polyphony = N x 24/28.
 	struct QueuedMidi {
@@ -289,7 +342,7 @@ private:
 	void DispFeed();
 	bool DispReady() const;                // nothing waiting and unit 0 has room
 public:
-#ifdef NUKED_SC55_DEVICE_8820
+#ifdef NUKED_SC55_ENGINE_88PRO
 	// SC-8820 (#126): 88emu feeds the firmware at a limited rate and does not report the bytes waiting for it. The
 	// plug-in counts the bytes it sent to unit 0 and drains the count at kWireRate8820; display SysEx pass only while
 	// the count is below the display limit, so they use what the notes leave of this rate. Measured with the Bad Apple
@@ -334,21 +387,21 @@ public:
 		std::atomic<bool> rhythm{false};
 	};
 	// Parts: SC-55 1..16; SC-88 Pro A01..A16 (MIDI IN A) and B01..B16 (IN B);
-	// SC-8850 A01..D16 (IN A..D, the four USB cables)
-#if defined(NUKED_SC55_DEVICE_8850)
-	static constexpr int kNumPorts = 4;
-#elif defined(NUKED_SC55_DEVICE_LA) || defined(NUKED_SC55_DEVICE_55E)
-	static constexpr int kNumPorts = 1; // one MIDI IN
-#elif defined(NUKED_SC55_ENGINE_88PRO)
-	static constexpr int kNumPorts = 2;
+	// SC-8850 A01..D16 (IN A..D, the four USB cables). kMaxPorts: the most of any device of the build (array
+	// sizes), NumPorts(): the MIDI INs of this device.
+#if defined(NUKED_SC55_ENGINE_88PRO)
+	static constexpr int kMaxPorts = 4;
+	int NumPorts() const { return Is8850() ? 4 : (IsLa() || Is55E()) ? 1 : 2; }
 #else
-	static constexpr int kNumPorts = 1;
+	static constexpr int kMaxPorts = 1;
+	static constexpr int NumPorts() { return 1; }
 #endif
-	static constexpr int kNumParts = kNumPorts * 16;
+	static constexpr int kMaxParts = kMaxPorts * 16;
+	int NumParts() const { return NumPorts() * 16; }
 private:
-	std::array<std::vector<uint8_t>, kNumPorts> ReleaseMissedKeys(int i);
+	std::array<std::vector<uint8_t>, kMaxPorts> ReleaseMissedKeys(int i);
 public:
-	std::array<UiPart, kNumParts> ui_parts;
+	std::array<UiPart, kMaxParts> ui_parts;
 	std::atomic<int> ui_voices{0};      // sounding partials (all instances)
 	std::atomic<int> ui_awake{1};       // awake emulator instances
 	std::atomic<int> max_voices{256};   // user limit (setup menu)
@@ -363,6 +416,12 @@ public:
 	XgTranslate::Translator xg; // audio thread only
 	void EmitXg(const XgTranslate::Msg& m, uint8_t port, uint32_t render_frame);
 	bool HasSystemMode() const;
+	// SC-88 Pro: XG System On initialises the module (the firmware's XG fallback mode); state log and router follow
+#ifdef NUKED_SC55_ENGINE_88PRO
+	bool XgOnResets() const { return Is88Pro(); }
+#else
+	bool XgOnResets() const { return false; }
+#endif
 	// Plugin settings as text (CLAP state, VST2 chunk)
 	static constexpr size_t kStateSize = 128;
 	int StateString(char* buf, size_t size) const;
@@ -389,8 +448,8 @@ public:
 	void NotifyStateChanged();
 	std::function<void()> state_changed_callback;
 	const char* ModelName() const;
-#ifdef NUKED_SC55_DEVICE_55E
-	bool IsMk2() const { return e55_mk2; }
+#ifdef NUKED_SC55_ENGINE_88PRO
+	bool IsMk2() const { return Is55E() && e55_mk2; }
 	bool e55_mk2 = false; // 88emu SC-55: the ROM set is the SC-55mkII's (Init)
 	bool E55SetRoms();    // hands the ROM set to 88emu, sets e55_mk2
 #else
@@ -403,14 +462,29 @@ public:
 	// the plugin state: 0 = SC-55, 1 = SC-88, 2 = SC-88 Pro (default = factory setting).
 	float boot_dc_l = 0.0f, boot_dc_r = 0.0f; // idle offset measured on unit 0 after boot
 	bool clone_units = true; // start units as copies of unit 0 (NUKED_SC55_NO_CLONE=1: boot each)
-#ifdef NUKED_SC55_DEVICE_8820
+#ifdef NUKED_SC55_ENGINE_88PRO
+	// Tone maps. SC-88 Pro: 0 = SC-55, 1 = SC-88, 2 = SC-88 Pro (front-panel SC-55 MAP / SC-88 MAP); SC-88: 0 SC-55,
+	// 1 SC-88 (SETUP menu, all parts, issue #59); SC-8850 / SC-8820: 0 SC-55, 1 SC-88, 2 SC-88 Pro, 3 its own map;
+	// MT-32 / CM-32L and SC-55: none. Each device boots with its own map (DefaultToneMap()). MapRounds(): presses
+	// per map change (SC-8820: one press per round).
+	int MaxToneMap() const { return (Is8850() || Is8820()) ? 3 : (IsLa() || Is55E()) ? 0 : Is88() ? 1 : 2; }
+	int DefaultToneMap() const { return MaxToneMap(); }
+	int MapRounds() const { return Is8820() ? 8 : (IsLa() || Is55E()) ? 1 : 2; }
+	std::atomic<int> tone_map{2};
+	int last_tone_map = 2;
+	// Panel switches held in the GUI (bit = 88emu button of the device; MT-32: EMU88_MT32_BUTTON_*; SC-55: the
+	// Nuked MCU button = 88emu SC-55 button), as given to the units, and the VALUE encoder (SC-8850) / SELECT
+	// knob (MT-32) detents not yet passed on
+	std::atomic<uint32_t> ui_panel_buttons{0};
+	std::atomic<int> ui_encoder{0};
+	// Lamps: SC-88 Pro unit 0's ALL view; SC-8850, SC-88: all switches; SC-8820: ORed over a short window;
+	// MT-32: all units ORed (bit 0 = MIDI MESSAGE); SC-55: bit 0 = ALL, bit 1 = MUTE
+	uint32_t PanelLeds() const;
+	// --- SC-8820 ---
 	static constexpr uint32_t kBtn8820InstMap = 1u, kBtn8820Preview = 2u;   // emu88_set_panel_buttons
 	static constexpr uint32_t kLed8820MapShown = 0x100u;                     // emu88_get_panel_leds
 	// bits 0-3 PART A level (4 blocks), 4-7 PART B level or map (55/88/88Pro/8820), 0x200 USB, 0x400 POWER
 	// SC-8820: 0 SC-55, 1 SC-88, 2 SC-88 Pro, 3 SC-8820 (boots with the SC-8820 map)
-	static constexpr int kMaxToneMap = 3, kMapRounds = 8; // one press per round
-	std::atomic<int> tone_map{3};
-	int last_tone_map = 3;
 	void E8820PanelInput();
 	std::atomic<uint32_t> ui_leds8820{0}; // unit 0's lamps, ORed over ~40 ms (GUI, via PanelLeds)
 	uint64_t gui_map_until = 0; // render frame up to which a map shown on unit 0 is the user's choice
@@ -446,11 +520,8 @@ private:
 	std::array<std::atomic<uint32_t>, 256> ui_midi{}; // GUI -> audio: port << 24 | d2 << 16 | d1 << 8 | s
 	std::atomic<uint32_t> ui_midi_w{0}, ui_midi_r{0};
 public:
-#elif defined(NUKED_SC55_DEVICE_8850)
+	// --- SC-8850 ---
 	// SC-8850: 0 SC-55, 1 SC-88, 2 SC-88 Pro, 3 SC-8850 (boots with the SC-8850 map)
-	static constexpr int kMaxToneMap = 3, kMapRounds = 2;
-	std::atomic<int> tone_map{3};
-	int last_tone_map = 3;
 	// The panel's INST MAP button sets the map of the part shown only (as on the device), while
 	// tone_map is the setting for all parts. True while some part's map differs from what the
 	// plug-in last set for all parts: the SETUP menu then marks no map (Issue #133).
@@ -458,11 +529,8 @@ public:
 	// Map the SETUP menu marks: tone_map while all parts follow it, else the map of the part shown on the panel
 	std::atomic<int> ui_map_shown{3};
 	std::atomic<bool> map_reapply{false}; // menu pick while mixed: send the map to all parts again
-#elif defined(NUKED_SC55_DEVICE_LA)
+	// --- MT-32 / CM-32L ---
 	// MT-32 / CM-32L: no tone maps
-	static constexpr int kMaxToneMap = 0, kMapRounds = 1;
-	std::atomic<int> tone_map{0};
-	int last_tone_map = 0;
 	// SETUP menu "Device" (stored in the state): the units are booted again as the new device
 	static constexpr int kLaDevices = 3; // 0 = MT-32 (old), 1 = MT-32 (new), 2 = CM-32L
 	std::atomic<int> la_device{2};       // default CM-32L (or the first device whose ROMs are there)
@@ -474,37 +542,23 @@ public:
 	// Dots of unit 0's display as the LCD controller shows them, ROM and firmware-defined characters alike
 	// (120 x 9: 20 cells of 6 x 9, 5 x 8 used; GUI thread; false while the units are rebooted)
 	bool GetLaDots(uint8_t* dots, size_t size);
-	std::atomic<int> ui_encoder{0};      // SELECT: knob detents (right-drag), passed on to all units
 	// Emulated seconds each unit runs at boot (88emu default: 10 s). All three LA devices are past their
 	// intro and take MIDI after 2 s (CM-32L not yet after 1 s); 3 s keeps a margin and boots 3x faster.
 	static constexpr float kLaBootSeconds = 3.0f;
 	static constexpr int kLaKnobStep = 4; // knob travel per detent (of 1023): 256 detents for the whole travel
-	std::atomic<uint32_t> ui_panel_buttons{0}; // MT-32 switches held in the GUI (EMU88_MT32_BUTTON_*)
-	uint32_t PanelLeds() const;          // lamps of all units ORed (bit 0 = MIDI MESSAGE)
 private:
 	std::atomic<int> la_active{-1};
 	bool la_have[kLaDevices]        = {};  // ROM set found (Init)
 	char la_version[kLaDevices][16] = {};  // its firmware version
 	static constexpr emu88_device_id kLaDeviceIds[kLaDevices] = {EMU88_DEVICE_MT32_OLD, EMU88_DEVICE_MT32_NEW,
 	                                                               EMU88_DEVICE_CM32L};
-	uint32_t applied_buttons = 0;
 	double last_sample_rate = 0.0;       // of the last Activate(): a device switch activates again
 	uint32_t last_max_frames = 0;
 	void LaPanelInput();
 	void LaSwitchDevice();
 public:
-#elif defined(NUKED_SC55_DEVICE_55E)
-	// SC-55: no tone maps
-	static constexpr int kMaxToneMap = 0, kMapRounds = 1;
-	std::atomic<int> tone_map{0};
-	int last_tone_map = 0;
-#elif defined(NUKED_SC55_DEVICE_88)
-	// SC-88: 0 SC-55, 1 SC-88 (boots with the SC-88 map); SETUP menu, all parts (Issue #59)
-	static constexpr int kMaxToneMap = 1, kMapRounds = 2;
-	std::atomic<int> tone_map{1};
-	int last_tone_map = 1;
 #else
-	static constexpr int kMaxToneMap = 2, kMapRounds = 2;
+	int MaxToneMap() const { return 2; }
 	std::atomic<int> tone_map{2};
 	int last_tone_map = 2;
 #endif
@@ -520,17 +574,12 @@ public:
 	// peaks of the same songs); at GAIN 0 dB the SC-88 Pro is raised to their level. The SC-8850
 	// sits another ~2.3 dB lower (RMS of e1m1/animus/grabbag vs. SC-88 Pro and SC-55); the SC-88
 	// matches the SC-88 Pro with the same 5 dB (-20.8/-17.0/-18.6 dBFS vs. -20.8/-17.0/-18.5).
-#if defined(NUKED_SC55_DEVICE_8850)
-	static constexpr float kLevelMatchDb = 7.5f;
-#elif defined(NUKED_SC55_DEVICE_LA)
-	static constexpr float kLevelMatchDb = NUKED_SC55_LA_LEVEL_DB;
-#elif defined(NUKED_SC55_DEVICE_55E)
-	static constexpr float kLevelMatchDb = NUKED_SC55_55E_LEVEL_DB;
-#else
-	static constexpr float kLevelMatchDb = 5.0f;
-#endif
-	static float GainFactor(float gain_db);           // output factor incl. kLevelMatchDb
-	static float GainFromLegacyVolume(int vol);       // old state "vol=0..1000" -> GAIN dB, same loudness
+	float LevelMatchDb() const
+	{
+		return Is8850() ? 7.5f : IsLa() ? NUKED_SC55_LA_LEVEL_DB : Is55E() ? NUKED_SC55_55E_LEVEL_DB : 5.0f;
+	}
+	float GainFactor(float gain_db) const;           // output factor incl. LevelMatchDb()
+	float GainFromLegacyVolume(int vol) const;       // old state "vol=0..1000" -> GAIN dB, same loudness
 private:
 	float applied_gain     = -1.0f; // < 0: not applied yet
 	int preview_ch         = -1, preview_key = -1, preview_port = 0;
@@ -542,30 +591,25 @@ private:
 	void InjectShort(uint8_t s, uint8_t d1, uint8_t d2, uint16_t port = 0);
 public:
 #endif
-#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO) || \
-    defined(NUKED_SC55_DEVICE_8820)
+#ifdef NUKED_SC55_ENGINE_88PRO
 	// Front panel of the SC-8850 / SC-88 / SC-88 Pro / SC-8820: the GUI drives unit 0's own panel (firmware
 	// menus, LCD, LEDs). Edits made there are passed on to the other units and the state log.
 	// SC-88 Pro: tone map keys, MUTE and PREVIEW stay plugin functions (all units, state).
-	std::atomic<uint32_t> ui_panel_buttons{0}; // switches held in the GUI (bit = 88emu button)
-	uint32_t PanelLeds() const;                // unit 0's panel lamps (88emu bit order)
 private:
-	uint32_t applied_buttons = 0;
+	uint32_t applied_buttons = 0; // switches given to unit 0 (MT-32: to all units)
 	void E88PanelInput();
 	void E88Forward(uint8_t port, const uint8_t* msg, size_t size);
-#ifndef NUKED_SC55_DEVICE_88PRO
-	void E88PanelMutes();
-#endif
+	void E88PanelMutes(); // SC-8850, SC-88
 public:
 #endif
-#ifdef NUKED_SC55_PANEL55
+
 	// SC-55 / SC-55mk2 front panel (Issue #10): the GUI drives unit 0's own panel (firmware
 	// LCD, ALL / MUTE lamps). Edits made there are read back from unit 0's parameter memory
 	// and passed on to the other units and the state log.
-	std::atomic<uint32_t> ui_panel_buttons{0}; // switches held in the GUI (bit = Nuked MCU button = 88emu SC-55 button)
 	std::atomic<uint32_t> ui_panel_leds{0};    // unit 0's lamps: bit 0 = ALL, bit 1 = MUTE
-	uint32_t PanelLeds() const { return ui_panel_leds.load(std::memory_order_relaxed); }
 #ifndef NUKED_SC55_ENGINE_88PRO
+	std::atomic<uint32_t> ui_panel_buttons{0}; // switches held in the GUI (bit = Nuked MCU button)
+	uint32_t PanelLeds() const { return ui_panel_leds.load(std::memory_order_relaxed); }
 	std::atomic<float> gain_db{0.0f};          // GAIN knob in dB, kGainMinDb..kGainMaxDb; 0 = default
 	static constexpr float kGainMinDb = -12.0f, kGainMaxDb = 12.0f;
 	static constexpr float kLevelMatchDb = 0.0f; // 0 dB = the level the SC-55 plugins always had
@@ -582,7 +626,9 @@ private:
 	uint8_t E55Peek(int unit, uint16_t addr) const;    // one byte of a unit's SRAM
 	void E55Poke(int unit, uint16_t addr, uint8_t v);
 	static bool E55HasUnit(const Instance& inst);
+#ifndef NUKED_SC55_ENGINE_88PRO
 	uint32_t applied_buttons = 0;
+#endif
 	uint64_t panel_active_until = 0; // render frame until which unit 0's edits are passed on
 	std::array<uint8_t, 0x700> panel_seen{}; // unit 0's parameter memory (SRAM 0..6FF) as last seen
 	bool panel_seen_valid = false;
@@ -595,8 +641,7 @@ private:
 	void E55ApplyRxSwitches(Instance& inst);
 	void E55ApplyMutes(Instance& inst, uint16_t rx);
 public:
-#endif
-#if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
+#ifdef NUKED_SC55_ENGINE_88PRO
 private:
 	// SC-88 / SC-88 Pro: the firmware logs every panel edit as a GS parameter change (a ring in
 	// its work RAM); the plugin reads the new entries after each block and passes them on as DT1.
@@ -615,11 +660,8 @@ private:
 	uint64_t panel_used_until = 0; // render frame until which unit 0's master tune is passed on
 	uint8_t tune_seen[2] = {0x04, 0x00};
 public:
-#endif
-#ifdef NUKED_SC55_DEVICE_8850
 	// SC-8850: edits are read back from unit 0 with GS data requests; MUTE and SOLO are taken
 	// from unit 0 and applied to all units.
-	std::atomic<int> ui_encoder{0};            // VALUE encoder detents not yet passed on
 	bool GetLcdDots(uint8_t* dots, size_t size, bool& on); // unit 0, 160 x 64, one byte per dot
 	static constexpr int kLcdW = 160, kLcdH = 64;
 private:
@@ -640,7 +682,7 @@ private:
 		uint64_t sent_frame = 0;
 		bool map_probe = false; // tone map baseline read: answer is only recorded (Issue #133)
 	};
-	std::array<int16_t, kNumParts> map_ref{}, map_cur{}; // tone map bytes per part (baseline / now), -1 = unknown
+	std::array<int16_t, kMaxParts> map_ref{}, map_cur{}; // tone map bytes per part (baseline / now), -1 = unknown
 	bool map_probe_pending = false;                      // baseline read queued once the firmware has applied the menu map
 	uint64_t map_probe_at  = 0;
 	void E88MapTrack(int part, int value, bool baseline);
@@ -649,7 +691,7 @@ private:
 	std::vector<SyncReq> sync_outstanding; // sent, answer pending
 	std::vector<int16_t> sync_base;        // last known value per (port, address); -1 = unknown
 	std::vector<uint8_t> sync_in;          // unit 0 MIDI output not yet parsed
-	std::array<uint64_t, kNumParts + 1> host_change{}; // render frame of the host's last state change (part / [kNumParts] = SysEx)
+	std::array<uint64_t, kMaxParts + 1> host_change{}; // render frame of the host's last state change (part / [kMaxParts] = SysEx)
 	bool sync_dirty = false;               // panel input that may have edited parameters since the last pass started
 	uint64_t sync_parts = 0;               // parts shown on the panel during that input (bit = A01..D16)
 	bool sync_drums = false;               // ... with the DRUM menu open
@@ -661,13 +703,12 @@ private:
 	void E88SyncBoot(Instance& inst);
 public:
 #endif
-	static constexpr bool HasToneMap()
+	// Tone map keys of the plug-in (SC-88 Pro). SC-8850, SC-88: INST MAP on the panel, per part (synchronised like
+	// other panel edits); MT-32, SC-55: none. SC-8820: INST MAP presses of the plug-in (E88StartMapSequence).
+	bool HasToneMap() const
 	{
-#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_LA) || \
-    defined(NUKED_SC55_DEVICE_55E)
-		return false; // INST MAP on the panel, per part (synchronised like other panel edits); SC-55: none
-#elif defined(NUKED_SC55_ENGINE_88PRO)
-		return true;
+#if defined(NUKED_SC55_ENGINE_88PRO)
+		return Is88Pro() || Is8820();
 #else
 		return false;
 #endif

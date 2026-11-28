@@ -1,6 +1,6 @@
 # Models and engines
 
-Details of the MT-32 / CM-32L, SC-55 on 88emu (development variant), SC-88, SC-88 Pro, SC-8820 and SC-8850 engines and their panels. Part of the [documentation index](../README.md#documentation).
+Details of the MT-32 / CM-32L, SC-55 on 88emu (development variant), SC-88, SC-88 Pro, SC-8820 and SC-8850 engines and their panels, and of the run-time model choice of the 88emu builds. Part of the [documentation index](../README.md#documentation).
 
 ## MT-32 / CM-32L engine (88emu)
 
@@ -35,7 +35,20 @@ Groundwork for the multi plug-in "Emu-SC Multi" (issue #142, branch `dev/multi-p
 - **Level:** 88emu's SC-55 output is about 6 dB louder than the Nuked core; the plug-in lowers it by 6.0 dB (`NUKED_SC55_55E_LEVEL_DB`), so E1M1 measures -20.95 dBFS RMS against -20.94 dBFS on the Nuked v1.21.
 - **CPU and memory** (Linux, `-O2`): E1M1, 40 s: 3.2 s of compute time against 4.4 s on the Nuked core; 160 notes on 11 units: 1.7 s against 2.7 s for 6 s of audio. The descrambled wave ROM is shared by all units of the process, so 11 units (264 voices) need about 53 MB peak RSS (one unit about 17 MB; the Nuked core about 22 MB at 264 voices).
 - **Patches:** `88emu-nuked-poly.patch` adds `emu88_set_sc55_rom_images` (ROM set from memory), `emu88_poke_work_ram` and `emu88_peek_work_ram` for the SC-55 board, the SC-55 voice counter (a GP slot counts while its envelope register is non-zero), its MIDI input backlog and rate, the ALL / MUTE lamps of the mk1 panel (decoded from port D bits 6 / 5) and the process-wide shared wave ROM (`Sc55Board::sharedWaveRom`, the GP chip holds its wave banks as `shared_ptr`).
-- **Panel code:** the SC-55 panel and its SETUP entries are compiled under `NUKED_SC55_PANEL55` (Nuked SC-55 or `NUKED_SC55_DEVICE_55E`); work RAM access goes through `E55Peek` / `E55Poke`, which read the Nuked SRAM directly or call 88emu. The Nuked SC-55 plug-ins render bit-identically to before.
+- **Panel code:** the SC-55 panel and its SETUP entries are used when `HasPanel55()` is true (the Nuked core always, on 88emu the SC-55 model); work RAM access goes through `E55Peek` / `E55Poke`, which read the Nuked SRAM directly or call 88emu. The Nuked SC-55 plug-ins render bit-identically to before.
+- **Wake-up:** a unit that wakes from sleep gets the panel mutes and the receive switches written into its work RAM again (`E55ApplyMutes`, `E55ApplyRxSwitches`), as on the Nuked core. Before phase 2 the 88emu SC-55 skipped this, so a part muted on the panel could sound on a unit that had just woken.
+
+---
+
+## Run-time model (88emu builds)
+
+Phase 2 of issue #142. In an 88emu build (`NUKED_SC55_ENGINE_88PRO`) the code of all six 88emu models (SC-88 Pro, SC-8850, SC-88, SC-8820, MT-32 / CM-32L, SC-55) is always compiled. The model is chosen by `NukedSc55::D()` (`enum class Dev`), with the helpers `Is88Pro()`, `Is8850()`, `Is88()`, `Is8820()`, `IsLa()`, `Is55E()`, `HasPanel55()`, `NumPorts()`, `NumParts()`, `MaxToneMap()`, `MapRounds()`, `LevelMatchDb()` and `XgOnResets()`.
+
+- **Single-model builds:** `NUKED_SC55_DEVICE_*` still picks the model, and `D()` is a `static constexpr` function, so the compiler drops the branches of the other models. The six plug-ins render bit-identically to before (golden renders of E1M1, events and grabbag), and their panels and SETUP menus are unchanged.
+- **Multi build:** `NUKED_SC55_MULTI` (with `NUKED_SC55_ENGINE_88PRO`, without `NUKED_SC55_DEVICE_*`) makes `D()` a member that the constructor sets from the model (`DevOfModel`). The CLAP factory then lists all six models in one binary (`sc88pro`, `sc8850`, `sc88`, `sc8820`, `mt32`, `sc55_88emu`); each renders bit-identically to its single-model plug-in. Embedded ROMs are not supported yet (`#error`), and there is no model switch inside one instance yet; both follow in later phases.
+- **Arrays:** per-port and per-part arrays use the largest model (`kMaxPorts` = 4, `kMaxParts` = 64); the loops use `NumPorts()` / `NumParts()` of the model.
+- **Editor:** `editor_win32.cpp` includes all panels (`editor_sc55.inc`, `editor_sc8850.inc`, `editor_sc88orig.inc`, `editor_sc8820.inc`, `editor_mt32.inc`) in 88emu builds and picks drawing, hit test, mouse input, SETUP menu and menu position from the model. The Nuked builds include only the SC-55 panel.
+- **XG System On as a reset** (SC-88 Pro, issue #120): `StateLog::IsReset(m, xg_on_resets)` and `PolyRouter::SetXgOnResets` take it from the model instead of the build.
 
 ---
 
@@ -68,7 +81,7 @@ The SC-88 Pro variant does not use the Nuked core. It uses **88emu**, a low-leve
 
 - **Pinned version:** Gearmulator `62f6a687af7f9b336d4df69e75fc688bccc35023`, with the submodules dsp56300 `8b73196`, asmjit `3577608`, mc68k `cc3693a`, freetype `0a0221a`, lunasvg `f8aabfb` (+ plutovg `5e4712c`) and RmlUi `0c8e94e`. `tools/build_88emu.sh <target> <source>` fetches and builds exactly this state (about 8-10 min on one core).
 - **Patches** (`third_party/88emu/`): `88emu-nuked-poly.patch` adds `emu88_get_active_voice_count` (voice counter), `emu88_set_sc88pro_rom_images` (a normalised ROM set from memory, bypassing the file scan), `emu88_dump_sc88pro_rom_images` (build tool), `emu88_get_display_memory` (LCD) and `emu88_get_midi_in_backlog` (MIDI not yet taken in by the firmware). `88emu-nuked-poly.patch` also makes the H8/500 bus (SC-88, SC-88 Pro) take its address space as zero pages from the OS, filled only where ROM or RAM is mapped; unmapped space reads as H'FF through the slow path, so the output is unchanged. `dsp56300-mingw.patch` restricts SEH (`__try`) to MSVC. `asmjit-thread-safe-init.patch` makes the one-time CPU and virtual-memory detection of asmjit (`CpuInfo::host()`, `VirtMem::info()`) thread-safe: the units boot in parallel in `Activate()`, and the first JIT runtime of the process was created by several threads at once (a harmless data race that ThreadSanitizer reported for the SC-8850 and MT-32).
-- **Engine variant:** compile-time `NUKED_SC55_ENGINE_88PRO` (model index 6). All differences sit in `#ifdef` blocks at about ten coupling points, so the SC-55 code is unchanged.
+- **Engine variant:** compile-time `NUKED_SC55_ENGINE_88PRO` (model index 6). The Nuked SC-55 code is unchanged; inside the 88emu engine the model is chosen at run time (see [Run-time model](#run-time-model-88emu-builds)).
 - **Units:** 64 voices per unit, 4 units. 88emu renders at the device rate of 32 kHz, which goes through the existing resampler. Boot takes about 0.7 s per unit.
 - **Ports:** both MIDI inputs, 32 parts (A01-B16): CLAP note ports "MIDI IN A" and "MIDI IN B"; on VST2 (one input) the port select messages `F5 01` / `F5 02`.
 

@@ -1,5 +1,5 @@
 // Emu-MT32 Poly - front panels of the MT-32 and the CM-32L (included by editor_win32.cpp in
-// NUKED_SC55_DEVICE_LA builds, after editor_sc88.inc; issue #69).
+// 88emu builds, after editor_sc88.inc; used for the MT-32 / CM-32L model, issue #69).
 //
 // Background and lamp art: tools/make_la_panel.py, drawn from scratch after photos of the devices
 // (918x280; --base = lamps off, --all-on = every lamp lit, --glass = the glass over the MT-32's LCD).

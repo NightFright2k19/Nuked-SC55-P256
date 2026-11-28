@@ -30,19 +30,9 @@
 
 static std::string get_env_var(const char* var_name);
 
-#ifdef NUKED_SC55_DEVICE_8850
-constexpr bool kHas8850Map = true;  // tone map for all parts from the SETUP menu (Bank Select LSB)
-#else
-constexpr bool kHas8850Map = false;
-#endif
-#ifdef NUKED_SC55_DEVICE_88
-constexpr bool kHas88Map = true;    // tone map for all parts from the SETUP menu (ALL + INST MAP, Issue #59)
-#else
-constexpr bool kHas88Map = false;
-#endif
-
-#ifdef NUKED_SC55_DEVICE_8850
-constexpr uint32_t kRam8850CurPart = 0x01060349; // part shown on the panel, 0..63 = A01..D16
+#ifdef NUKED_SC55_ENGINE_88PRO
+// SC-8850: tone map for all parts from the SETUP menu (Bank Select LSB); SC-88: the same (ALL + INST MAP, Issue #59)
+constexpr uint32_t kRam8850CurPart = 0x01060349; // SC-8850: part shown on the panel, 0..63 = A01..D16
 #endif
 
 // #define DEBUG
@@ -153,7 +143,28 @@ NukedSc55::NukedSc55(const clap_plugin_t _plugin_class,
 
 	host  = _host;
 	model = _model;
+#ifdef NUKED_SC55_MULTI
+	dev = DevOfModel(model);
+#endif
+#ifdef NUKED_SC55_ENGINE_88PRO
+	tone_map      = DefaultToneMap(); // each device boots with its own map
+	last_tone_map = DefaultToneMap();
+#endif
 }
+
+#ifdef NUKED_SC55_ENGINE_88PRO
+NukedSc55::Dev NukedSc55::DevOfModel(const Model m)
+{
+	switch (m) {
+	case Model::Sc8850: return Dev::Sc8850;
+	case Model::Sc88: return Dev::Sc88;
+	case Model::Sc8820: return Dev::Sc8820;
+	case Model::Mt32: return Dev::La;
+	case Model::Sc55E: return Dev::Sc55E;
+	default: return Dev::Sc88Pro;
+	}
+}
+#endif
 
 const clap_plugin_t* NukedSc55::GetPluginClass()
 {
@@ -242,15 +253,17 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 	if (const auto env = get_env_var("NUKED_SC55_POLY_VOICES"); !env.empty()) {
 		target_voices = std::atoi(env.c_str());
 	}
-#if defined(NUKED_SC55_DEVICE_8850)
-	partials_per_instance = 128; // SC-8850: 128 voices per unit (two XP tone generators)
-#elif defined(NUKED_SC55_DEVICE_LA)
-	partials_per_instance = 32;  // MT-32 / CM-32L: 32 partials per unit
-#elif defined(NUKED_SC55_DEVICE_55E)
-	if (!E55SetRoms()) return false; // also tells v1.21 from the mkII
-	partials_per_instance = e55_mk2 ? 28 : 24;
-#elif defined(NUKED_SC55_ENGINE_88PRO)
-	partials_per_instance = 64; // SC-88 Pro: 64 voices per unit
+#if defined(NUKED_SC55_ENGINE_88PRO)
+	if (Is8850()) {
+		partials_per_instance = 128; // SC-8850: 128 voices per unit (two XP tone generators)
+	} else if (IsLa()) {
+		partials_per_instance = 32;  // MT-32 / CM-32L: 32 partials per unit
+	} else if (Is55E()) {
+		if (!E55SetRoms()) return false; // also tells v1.21 from the mkII
+		partials_per_instance = e55_mk2 ? 28 : 24;
+	} else {
+		partials_per_instance = 64; // SC-88 Pro, SC-88, SC-8820: 64 voices per unit
+	}
 #else
 	partials_per_instance = (model == Model::Sc55mk2_v1_01) ? 28 : 24;
 #endif
@@ -264,11 +277,11 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 	if (const auto env = get_env_var("NUKED_SC55_POLY_DYNAMIC"); env == "0") {
 		dynamic_instances = false;
 	}
-#ifdef NUKED_SC55_DEVICE_LA
+#ifdef NUKED_SC55_ENGINE_88PRO
 	// MT-32 / CM-32L: all units run from the start and get every message. A sleeping unit would
 	// have to be woken by replaying the SysEx state at MIDI wire speed (issue #69: faster corrupts
 	// the patch memory), which takes seconds; one unit costs little CPU.
-	dynamic_instances = false;
+	if (IsLa()) dynamic_instances = false;
 #endif
 	if (const auto env = get_env_var("NUKED_SC55_POLY_MIN_ACTIVE"); !env.empty()) {
 		min_active = std::atoi(env.c_str());
@@ -284,84 +297,77 @@ bool NukedSc55::Init(const clap_plugin* _plugin_instance)
 	router.Init(num_instances);
 	router.SetCapacity(partials_per_instance);
 	{
-#if defined(NUKED_SC55_EMBED_ROMS) && defined(NUKED_SC55_DEVICE_LA)
-		// Single-file build: one ROM set per LA device (location 0 = MT-32 old, 1 = MT-32 new,
-		// 2 = CM-32L), each as written by p256_builder.la_blob(): "NKLA1" header, version text,
-		// sizes, then control, wave and reverb. Devices without a set stay unavailable.
-		for (int k = 0; k < g_embedded_rom_count; ++k) {
-			const auto& r = g_embedded_roms[k];
-			const size_t n = static_cast<size_t>(r.end - r.begin);
-			if (r.location >= kLaDevices || n < 40 || std::memcmp(r.begin, "NKLA1\0\0\0", 8) != 0) continue;
-			uint32_t sz[3];
-			std::memcpy(sz, r.begin + 24, sizeof(sz));
-			if (40ull + sz[0] + sz[1] + sz[2] > n) continue;
-			const uint8_t* ctl = r.begin + 40;
-			if (emu88_set_la_rom_images(kLaDeviceIds[r.location], ctl, sz[0], ctl + sz[0], sz[1],
-			                            ctl + sz[0] + sz[1], sz[2]) != EMU88_RC_OK) {
-				log("88emu: embedded LA ROM set %d invalid", r.location);
-				continue;
+#if defined(NUKED_SC55_EMBED_ROMS)
+		if (IsLa()) {
+			// Single-file build: one ROM set per LA device (location 0 = MT-32 old, 1 = MT-32 new,
+			// 2 = CM-32L), each as written by p256_builder.la_blob(): "NKLA1" header, version text,
+			// sizes, then control, wave and reverb. Devices without a set stay unavailable.
+			for (int k = 0; k < g_embedded_rom_count; ++k) {
+				const auto& r = g_embedded_roms[k];
+				const size_t n = static_cast<size_t>(r.end - r.begin);
+				if (r.location >= kLaDevices || n < 40 || std::memcmp(r.begin, "NKLA1\0\0\0", 8) != 0) continue;
+				uint32_t sz[3];
+				std::memcpy(sz, r.begin + 24, sizeof(sz));
+				if (40ull + sz[0] + sz[1] + sz[2] > n) continue;
+				const uint8_t* ctl = r.begin + 40;
+				if (emu88_set_la_rom_images(kLaDeviceIds[r.location], ctl, sz[0], ctl + sz[0], sz[1],
+				                            ctl + sz[0] + sz[1], sz[2]) != EMU88_RC_OK) {
+					log("88emu: embedded LA ROM set %d invalid", r.location);
+					continue;
+				}
+				la_have[r.location] = true;
+				std::memcpy(la_version[r.location], r.begin + 8, 15);
 			}
-			la_have[r.location] = true;
-			std::memcpy(la_version[r.location], r.begin + 8, 15);
-		}
-		if (!la_have[0] && !la_have[1] && !la_have[2]) {
-			instances.clear();
-			return false;
-		}
-#elif defined(NUKED_SC55_DEVICE_55E)
-		// SC-55 on 88emu: the ROM set was handed over in E55SetRoms()
-#elif defined(NUKED_SC55_EMBED_ROMS)
-		// Single-file build: the normalized ROM set is linked into the binary
-		// (locations 0..3 = control, wave A, wave B, wave C; SC-8850: internal, program,
-		// data, wave; SC-88: control and the four wave chips as dumped); no file access.
-		const uint8_t* rp[5] = {};
-		size_t rn[5]         = {};
-		for (int k = 0; k < g_embedded_rom_count; ++k) {
-			const auto& r = g_embedded_roms[k];
-			if (r.location < 5) {
-				rp[r.location] = r.begin;
-				rn[r.location] = static_cast<size_t>(r.end - r.begin);
+			if (!la_have[0] && !la_have[1] && !la_have[2]) {
+				instances.clear();
+				return false;
 			}
-		}
-#if defined(NUKED_SC55_DEVICE_8850)
-		if (emu88_set_sc8850_rom_images(rp[0], rn[0], rp[1], rn[1], rp[2], rn[2], rp[3], rn[3]) !=
-		    EMU88_RC_OK) {
-#elif defined(NUKED_SC55_DEVICE_8820)
-		if (emu88_set_sc8820_rom_images(rp[0], rn[0], rp[1], rn[1], rp[2], rn[2], rp[3], rn[3]) !=
-		    EMU88_RC_OK) {
-#elif defined(NUKED_SC55_DEVICE_88)
-		if (emu88_set_sc88_rom_images(rp[0], rn[0], rp[1], rn[1], rp[2], rn[2], rp[3], rn[3], rp[4], rn[4]) !=
-		    EMU88_RC_OK) {
-#else
-		if (emu88_set_sc88pro_rom_images(rp[0], rn[0], rp[1], rn[1], rp[2], rn[2], rp[3], rn[3]) !=
-		    EMU88_RC_OK) {
-#endif
-			log("88emu: embedded ROM set invalid");
-			instances.clear();
-			return false;
+		} else if (!Is55E()) { // (SC-55 on 88emu: the ROM set was handed over in E55SetRoms())
+			// Single-file build: the normalized ROM set is linked into the binary
+			// (locations 0..3 = control, wave A, wave B, wave C; SC-8850: internal, program,
+			// data, wave; SC-88: control and the four wave chips as dumped); no file access.
+			const uint8_t* rp[5] = {};
+			size_t rn[5]         = {};
+			for (int k = 0; k < g_embedded_rom_count; ++k) {
+				const auto& r = g_embedded_roms[k];
+				if (r.location < 5) {
+					rp[r.location] = r.begin;
+					rn[r.location] = static_cast<size_t>(r.end - r.begin);
+				}
+			}
+			const emu88_return_code rc =
+			        Is8850()   ? emu88_set_sc8850_rom_images(rp[0], rn[0], rp[1], rn[1], rp[2], rn[2], rp[3], rn[3])
+			        : Is8820() ? emu88_set_sc8820_rom_images(rp[0], rn[0], rp[1], rn[1], rp[2], rn[2], rp[3], rn[3])
+			        : Is88()   ? emu88_set_sc88_rom_images(rp[0], rn[0], rp[1], rn[1], rp[2], rn[2], rp[3], rn[3], rp[4], rn[4])
+			                   : emu88_set_sc88pro_rom_images(rp[0], rn[0], rp[1], rn[1], rp[2], rn[2], rp[3], rn[3]);
+			if (rc != EMU88_RC_OK) {
+				log("88emu: embedded ROM set invalid");
+				instances.clear();
+				return false;
+			}
 		}
 #else
-		for (const auto& base : GetRomBasePaths()) {
-			emu88_add_rom_path((base / "SC-88Pro").string().c_str());
-			emu88_add_rom_path((base / "SC-8850").string().c_str());
-			emu88_add_rom_path((base / "SC-88").string().c_str());
-			emu88_add_rom_path((base / "SC-8820").string().c_str());
-			emu88_add_rom_path((base / "MT-32").string().c_str());
-			emu88_add_rom_path(base.string().c_str());
+		if (!Is55E()) { // (SC-55 on 88emu: the ROM paths were added in E55SetRoms())
+			for (const auto& base : GetRomBasePaths()) {
+				emu88_add_rom_path((base / "SC-88Pro").string().c_str());
+				emu88_add_rom_path((base / "SC-8850").string().c_str());
+				emu88_add_rom_path((base / "SC-88").string().c_str());
+				emu88_add_rom_path((base / "SC-8820").string().c_str());
+				emu88_add_rom_path((base / "MT-32").string().c_str());
+				emu88_add_rom_path(base.string().c_str());
+			}
 		}
-#ifdef NUKED_SC55_DEVICE_LA
-		for (int d = 0; d < kLaDevices; ++d) {
-			la_have[d] = emu88_is_device_available(kLaDeviceIds[d]) != 0;
-			std::snprintf(la_version[d], sizeof(la_version[d]), "%s", la_have[d] ? "?" : "");
+		if (IsLa()) {
+			for (int d = 0; d < kLaDevices; ++d) {
+				la_have[d] = emu88_is_device_available(kLaDeviceIds[d]) != 0;
+				std::snprintf(la_version[d], sizeof(la_version[d]), "%s", la_have[d] ? "?" : "");
+			}
 		}
-#endif
 #endif
 	}
 	emu_ok     = true;
 	max_voices = MaxSelectableVoices();
-#ifdef NUKED_SC55_DEVICE_LA
-	max_voices = partials_per_instance; // default 32 voices = one unit, like the device
-#endif
+	if (IsLa()) max_voices = partials_per_instance; // default 32 voices = one unit, like the device
 	{
 		const int hw = static_cast<int>(std::thread::hardware_concurrency());
 		const int threads = std::clamp(std::min(num_instances, hw - 1) - 1, 0, num_instances - 1);
@@ -636,18 +642,16 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	// background, in parallel. Waking or warming a unit waits until it has booted.
 	JoinBootThreads();
 	for (auto& inst : instances) inst.booted->store(false, std::memory_order_relaxed);
-#ifdef NUKED_SC55_DEVICE_LA
-	{   // the device chosen in the SETUP menu; without its ROM set the first one that is there
+	if (IsLa()) { // the device chosen in the SETUP menu; without its ROM set the first one that is there
 		last_sample_rate = requested_sample_rate;
 		last_max_frames  = max_frame_count;
-		int dev = std::clamp(la_device.load(), 0, kLaDevices - 1);
-		for (const int d : {dev, 2, 1, 0})
-			if (la_have[d]) { dev = d; break; }
-		la_device = dev;
-		la_active = dev;
+		int la = std::clamp(la_device.load(), 0, kLaDevices - 1);
+		for (const int d : {la, 2, 1, 0})
+			if (la_have[d]) { la = d; break; }
+		la_device = la;
+		la_active = la;
 		applied_buttons = 0;
 	}
-#endif
 #ifdef NUKED_SC55_EMBED_ROMS
 	// Sleeping units may boot in the background (awake ones are rendered right away), so that Activate() returns after
 	// the booting of unit 0. The audio thread then waits in Wake() for a unit that is needed before its boot has finished,
@@ -756,6 +760,8 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	router.SetPacking(dynamic_instances);
 	router.SetTrackSystemMode(HasSystemMode());
 	state_log.SetTrackSystemMode(HasSystemMode());
+	router.SetXgOnResets(XgOnResets());
+	state_log.SetXgOnResets(XgOnResets());
 	router.SetWakeHandler([this]() {
 		for (int i = 0; i < router.Allowed(); ++i) {
 			if (!instances[i].awake) {
@@ -786,12 +792,12 @@ bool NukedSc55::Activate(const double requested_sample_rate,
 	script_steps.clear();
 	hold_until = 0;
 	warmer_next_frame  = 0;
-#ifdef NUKED_SC55_DEVICE_8850
-	dot_pages = {};
-	dot_page  = 0;
-	DotShow(false);
-#endif
 #ifdef NUKED_SC55_ENGINE_88PRO
+	if (Is8850()) {
+		dot_pages = {};
+		dot_page  = 0;
+		DotShow(false);
+	}
 	if (background_boot) {
 		for (int i = min_active; i < NumInstances(); ++i) {
 			boot_threads.emplace_back([this, i] {
@@ -879,8 +885,8 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	assert(process->audio_outputs_count == 1);
 	assert(process->audio_inputs_count == 0);
 
-#ifdef NUKED_SC55_DEVICE_LA
-	if (la_device.load() != la_active.load()) LaSwitchDevice(); // SETUP menu "Device"
+#ifdef NUKED_SC55_ENGINE_88PRO
+	if (IsLa() && la_device.load() != la_active.load()) LaSwitchDevice(); // SETUP menu "Device"
 #endif
 	const uint32_t num_frames = process->frames_count;
 	const uint32_t num_events = process->in_events->size(process->in_events);
@@ -901,43 +907,39 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 		router.SetAllowed(allowed);
 	}
 	HandleUiCommands();
-#ifdef NUKED_SC55_PANEL55
-	// Front panel of unit 0: edits of the last block passed on, MUTE flags, GUI input
-	E55PanelPump();
-	E55PanelInput();
-#endif
-#ifdef NUKED_SC55_DEVICE_8850
-	// Front panel of unit 0: GUI input, edits passed on to the other units, MUTE / SOLO
-	E88PanelInput();
-	E88SyncPump(instances[0], true, render_frame_count);
-	E88PanelMutes();
-	E88MapShown();
-#endif
-#ifdef NUKED_SC55_DEVICE_88
-	// Front panel of unit 0: edits of the last block passed on, GUI input, ALL + MUTE
-	E88EditPump();
-	E88PanelTune();
-	E88PanelInput();
-	E88PanelMutes();
-#endif
-#ifdef NUKED_SC55_DEVICE_8820
-	// Front panel of unit 0: INST MAP / PREVIEW from the GUI; the map shown is adopted for all units
-	E8820PanelInput();
-	// Pro interface: edits from the part display / buttons to all units, part parameters for the display
-	E8820SendUiMidi();
-	if (ui_style.load(std::memory_order_relaxed) != 0) E8820ReadParts(); // Pro and SC-D70 show part data
-#endif
-#ifdef NUKED_SC55_DEVICE_LA
-	// MT-32 switches and SELECT from the GUI: pressed on all units alike (they stay identical)
-	LaPanelInput();
-#endif
-#ifdef NUKED_SC55_DEVICE_88PRO
-	// Front panel of unit 0: edits of the last block passed on, GUI input
-	E88EditPump();
-	E88PanelTune();
-	E88PanelInput();
-#endif
+	if (HasPanel55()) {
+		// Front panel of unit 0: edits of the last block passed on, MUTE flags, GUI input
+		E55PanelPump();
+		E55PanelInput();
+	}
 #ifdef NUKED_SC55_ENGINE_88PRO
+	if (Is8850()) {
+		// Front panel of unit 0: GUI input, edits passed on to the other units, MUTE / SOLO
+		E88PanelInput();
+		E88SyncPump(instances[0], true, render_frame_count);
+		E88PanelMutes();
+		E88MapShown();
+	} else if (Is88()) {
+		// Front panel of unit 0: edits of the last block passed on, GUI input, ALL + MUTE
+		E88EditPump();
+		E88PanelTune();
+		E88PanelInput();
+		E88PanelMutes();
+	} else if (Is8820()) {
+		// Front panel of unit 0: INST MAP / PREVIEW from the GUI; the map shown is adopted for all units
+		E8820PanelInput();
+		// Pro interface: edits from the part display / buttons to all units, part parameters for the display
+		E8820SendUiMidi();
+		if (ui_style.load(std::memory_order_relaxed) != 0) E8820ReadParts(); // Pro and SC-D70 show part data
+	} else if (IsLa()) {
+		// MT-32 switches and SELECT from the GUI: pressed on all units alike (they stay identical)
+		LaPanelInput();
+	} else if (Is88Pro()) {
+		// Front panel of unit 0: edits of the last block passed on, GUI input
+		E88EditPump();
+		E88PanelTune();
+		E88PanelInput();
+	}
 	{   // PREVIEW: note of the selected part while the button is held
 		const int pv = ui_preview.exchange(0);
 		if ((pv == 1 || pv == 2) && preview_ch >= 0) {
@@ -947,14 +949,12 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 		}
 		if (pv == 1) {
 			int part = ui_preview_part.load();
-#ifdef NUKED_SC55_DEVICE_8850
-			if (part < 0 && !instances.empty() && instances[0].ctx) { // part shown on unit 0's panel
+			if (Is8850() && part < 0 && !instances.empty() && instances[0].ctx) { // part shown on unit 0's panel
 				uint8_t cur = 0;
 				emu88_peek_work_ram(instances[0].ctx, kRam8850CurPart, &cur, 1);
 				part = cur;
 			}
-#endif
-			part         = std::clamp(part, 0, kNumParts - 1); // SC-8820: part A01
+			part         = std::clamp(part, 0, NumParts() - 1); // SC-8820: part A01
 			preview_ch   = part % 16;
 			preview_port = part / 16;
 			preview_key  = std::clamp(preview_note.load(), 0, 127);
@@ -963,14 +963,14 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 		}
 		// MUTE: newly muted parts fall silent at once (All Sound Off); new notes are dropped
 		const uint64_t mutes = mute_mask.load();
-		for (int part = 0; part < kNumParts; ++part)
+		for (int part = 0; part < NumParts(); ++part)
 			if ((mutes & ~applied_mutes) & (uint64_t{1} << part))
 				InjectShort(static_cast<uint8_t>(0xB0 | (part % 16)), 120, 0, static_cast<uint16_t>(part / 16));
 		applied_mutes = mutes;
 	}
 	{
 		const int map = tone_map.load();
-#ifdef NUKED_SC55_DEVICE_8850
+		if (Is8850()) {
 		// SC-8850: the map is a per-part setting (Bank Select LSB, 1 = SC-55, 2 = SC-88, 3 = SC-88 Pro,
 		// 0 = SC-8850): send it for every part with the tracked bank / program
 		// A menu pick while the panel's INST MAP has made the parts differ sends the map again (Issue #133)
@@ -984,7 +984,7 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 			for (auto& inst : instances)
 				if (inst.awake) inst.applied_map = map;
 			const uint8_t lsb = static_cast<uint8_t>((map + 1) & 3);
-			for (int part = 0; part < kNumParts; ++part) {
+			for (int part = 0; part < NumParts(); ++part) {
 				const auto& up = ui_parts[part];
 				const uint8_t c = static_cast<uint8_t>(part % 16);
 				const uint16_t port = static_cast<uint16_t>(part / 16);
@@ -993,7 +993,7 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 				InjectShort(static_cast<uint8_t>(0xC0 | c), up.prog.load(), 0, port);
 			}
 		}
-#endif
+		}
 		for (auto& inst : instances) {
 			if (inst.awake && inst.ctx && inst.seq_len == 0 && inst.applied_map != map)
 				E88StartMapSequence(inst, map);
@@ -1066,8 +1066,8 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	midi_bytes.clear(); // all queued events have been consumed
 	render_frame_count += num_render_frames;
 	if (dynamic_instances) ScheduleWarming();
-#ifdef NUKED_SC55_DEVICE_8850
-	if (dot_until != 0 && render_frame_count >= dot_until) DotShow(false);
+#ifdef NUKED_SC55_ENGINE_88PRO
+	if (Is8850() && dot_until != 0 && render_frame_count >= dot_until) DotShow(false);
 #endif
 
 	// Publish display data
@@ -1081,12 +1081,13 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 		for (int i = 0; i < NumInstances(); ++i)
 			if (instances[i].awake) mask |= uint64_t{1} << i;
 		ui_awake_mask.store(mask, std::memory_order_relaxed);
-#ifdef NUKED_SC55_DEVICE_LA
-		ui_awake.store(std::min(NumAwake(), router.Allowed()), std::memory_order_relaxed); // all run; shown: in use
-#else
-		ui_awake.store(NumAwake(), std::memory_order_relaxed);
+#ifdef NUKED_SC55_ENGINE_88PRO
+		if (IsLa())
+			ui_awake.store(std::min(NumAwake(), router.Allowed()), std::memory_order_relaxed); // all run; shown: in use
+		else
 #endif
-		for (int ch = 0; ch < kNumParts; ++ch) {
+			ui_awake.store(NumAwake(), std::memory_order_relaxed);
+		for (int ch = 0; ch < NumParts(); ++ch) {
 			ui_parts[ch].rhythm.store(router.IsRhythm(ch), std::memory_order_relaxed);
 		}
 	}
@@ -1114,12 +1115,8 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 	}
 
 	{   // GAIN knob: analog-style output level after the emulation, ramped over the block
-#ifndef NUKED_SC55_PANEL55
-		const float target = GainFactor(gain_db.load(std::memory_order_relaxed));
-#else
 		// SC-55: ALL + MUTE on the panel silences the whole module (unit 0 mutes itself)
-		const float target = all_mute55 ? 0.0f : GainFactor(gain_db.load(std::memory_order_relaxed));
-#endif
+		const float target = (HasPanel55() && all_mute55) ? 0.0f : GainFactor(gain_db.load(std::memory_order_relaxed));
 		if (applied_gain < 0.0f) applied_gain = target; // first block: no ramp
 		const float step = (target - applied_gain) / static_cast<float>(std::max<uint32_t>(1, num_frames));
 		for (uint32_t i = 0; i < num_frames; ++i) {
@@ -1129,8 +1126,8 @@ clap_process_status NukedSc55::Process(const clap_process_t* process)
 		}
 		applied_gain = target;
 	}
-#ifdef NUKED_SC55_DEVICE_8820
-	{   // SC-D70 panel: output level meters (the GUI takes the value and resets it)
+#ifdef NUKED_SC55_ENGINE_88PRO
+	if (Is8820()) { // SC-D70 panel: output level meters (the GUI takes the value and resets it)
 		float pl = 0.0f, pr = 0.0f;
 		for (uint32_t i = 0; i < num_frames; ++i) {
 			pl = std::max(pl, std::abs(out_left[i]));
@@ -1180,31 +1177,27 @@ bool NukedSc55::SaveState([[maybe_unused]] const clap_ostream_t* stream)
 // Settings only (CLAP state and VST2 chunk): "NSC55P1 max_voices=<n> ..."
 int NukedSc55::StateString(char* buf, const size_t size) const
 {
-#if defined(NUKED_SC55_DEVICE_8820)
-	// INST MAP (all parts) is the one panel setting; synchronised on all units, kept here
-	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d style=%d", max_voices.load(),
-	                      tone_map.load(), static_cast<int>(std::lround(gain_db.load() * 10.0f)), ui_style.load());
-#elif defined(NUKED_SC55_DEVICE_8850)
-	// INST MAP (all parts) is the one panel setting; synchronised on all units, kept here
-	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d", max_voices.load(),
-	                      tone_map.load(), static_cast<int>(std::lround(gain_db.load() * 10.0f)));
-#elif defined(NUKED_SC55_DEVICE_LA)
-	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d dev=%d", max_voices.load(),
-	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)), la_device.load());
-#elif defined(NUKED_SC55_DEVICE_55E)
-	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d", max_voices.load(),
-	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)));
-#elif defined(NUKED_SC55_DEVICE_88)
-	// the tone map for all parts (SETUP menu) is kept here; the panel's own settings live in the firmware
-	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d", max_voices.load(),
-	                      tone_map.load(), static_cast<int>(std::lround(gain_db.load() * 10.0f)));
-#elif defined(NUKED_SC55_ENGINE_88PRO)
-	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d pnote=%d",
-	                      max_voices.load(), tone_map.load(),
-	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)), preview_note.load());
+	const int gain = static_cast<int>(std::lround(gain_db.load() * 10.0f));
+	int n = 0;
+#if defined(NUKED_SC55_ENGINE_88PRO)
+	if (Is8820()) {
+		// INST MAP (all parts) is the one panel setting; synchronised on all units, kept here
+		n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d style=%d", max_voices.load(),
+		                  tone_map.load(), gain, ui_style.load());
+	} else if (Is8850() || Is88()) {
+		// SC-8850: INST MAP (all parts) is the one panel setting; synchronised on all units, kept here.
+		// SC-88: the tone map for all parts (SETUP menu) is kept here; the panel's own settings live in the firmware
+		n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d", max_voices.load(), tone_map.load(), gain);
+	} else if (IsLa()) {
+		n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d dev=%d", max_voices.load(), gain, la_device.load());
+	} else if (Is55E()) {
+		n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d", max_voices.load(), gain);
+	} else {
+		n = std::snprintf(buf, size, "NSC55P1 max_voices=%d map=%d gain=%d pnote=%d", max_voices.load(),
+		                  tone_map.load(), gain, preview_note.load());
+	}
 #else
-	int n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d", max_voices.load(),
-	                      static_cast<int>(std::lround(gain_db.load() * 10.0f)));
+	n = std::snprintf(buf, size, "NSC55P1 max_voices=%d gain=%d", max_voices.load(), gain);
 #endif
 	if (n < 0 || static_cast<size_t>(n) >= size) return static_cast<int>(size > 0 ? size - 1 : 0); // (truncated)
 	if (HasSystemMode()) n += std::snprintf(buf + n, size - n, " smode=%d", system_mode.load());
@@ -1217,8 +1210,8 @@ bool NukedSc55::ParseState(const char* buf)
 	if (std::sscanf(buf, "NSC55P1 max_voices=%d", &v) != 1) return false;
 	SetMaxVoices(v);
 #ifdef NUKED_SC55_ENGINE_88PRO
-	if (const char* m = std::strstr(buf, "map="); (HasToneMap() || kHas8850Map || kHas88Map) && m && m[4] >= '0' &&
-	                                                    m[4] <= (kMaxToneMap + '0')) {
+	if (const char* m = std::strstr(buf, "map="); (HasToneMap() || Is8850() || Is88()) && m && m[4] >= '0' &&
+	                                                    m[4] <= (MaxToneMap() + '0')) {
 		tone_map = m[4] - '0';
 	}
 	if (const char* m = std::strstr(buf, "gain="); m) {
@@ -1227,14 +1220,11 @@ bool NukedSc55::ParseState(const char* buf)
 		gain_db = GainFromLegacyVolume(std::atoi(v + 4));
 	}
 	if (const char* m = std::strstr(buf, "pnote="); m) preview_note = std::clamp(std::atoi(m + 6), 0, 127);
-#ifdef NUKED_SC55_DEVICE_8820
-	if (const char* m = std::strstr(buf, "style="); m) ui_style = std::clamp(std::atoi(m + 6), 1, kNumStyles8820 - 1); // 0 (Basic, issue #87) -> SC-8820
-#endif
-#ifdef NUKED_SC55_DEVICE_LA
+	if (const char* m = std::strstr(buf, "style="); Is8820() && m)
+		ui_style = std::clamp(std::atoi(m + 6), 1, kNumStyles8820 - 1); // 0 (Basic, issue #87) -> SC-8820
 	// device: switched (units booted again) at the next block; without its ROMs the default applies
-	if (const char* m = std::strstr(buf, "dev="); m && m[4] >= '0' && m[4] < '0' + kLaDevices && la_have[m[4] - '0'])
+	if (const char* m = std::strstr(buf, "dev="); IsLa() && m && m[4] >= '0' && m[4] < '0' + kLaDevices && la_have[m[4] - '0'])
 		la_device = m[4] - '0';
-#endif
 #else
 	if (const char* m = std::strstr(buf, "gain="); m) // older states: no GAIN = 0 dB
 		gain_db = std::clamp(std::atoi(m + 5) / 10.0f, kGainMinDb, kGainMaxDb);
@@ -1323,8 +1313,8 @@ void NukedSc55::QueueMidi(const PolyRouter::Mask mask, const uint8_t* data,
 {
 	const auto offset = static_cast<uint32_t>(midi_bytes.size());
 	midi_bytes.insert(midi_bytes.end(), data, data + size);
-#ifdef NUKED_SC55_DEVICE_8820
-	if ((mask & PolyRouter::Mask{1}) && !instances.empty() && instances[0].awake) {
+#ifdef NUKED_SC55_ENGINE_88PRO
+	if (Is8820() && (mask & PolyRouter::Mask{1}) && !instances.empty() && instances[0].awake) {
 		WireDecay();
 		wire_bytes += static_cast<double>(size);
 	}
@@ -1370,28 +1360,26 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 				// could reach another part than their note-ons: hanging notes (issue #92).
 				// Fold them onto the device's ports instead, so each port always maps to one.
 				if (midi_event->data[1] >= 1)
-					selected_port = static_cast<uint8_t>((midi_event->data[1] - 1) % kNumPorts);
+					selected_port = static_cast<uint8_t>((midi_event->data[1] - 1) % NumPorts());
 				break; // not passed on to the device
 			}
 			// further CLAP note ports = IN B (C, D); the first one: the port chosen by F5
 			// (panel actions name their port directly)
-			if (injecting) port = static_cast<uint8_t>(midi_event->port_index % kNumPorts);
-			else if (midi_event->port_index >= 1 && midi_event->port_index < kNumPorts)
+			if (injecting) port = static_cast<uint8_t>(midi_event->port_index % NumPorts());
+			else if (midi_event->port_index >= 1 && midi_event->port_index < NumPorts())
 				port = static_cast<uint8_t>(midi_event->port_index);
 			else port = selected_port;
 			if (!injecting && status == NoteOn && midi_event->data[2] != 0 &&
 			    (applied_mutes & (uint64_t{1} << (port * 16 + (midi_event->data[0] & 0x0f))))) {
 				break; // MUTE: part silenced
 			}
-#endif
-#ifdef NUKED_SC55_DEVICE_8850
-			if (!injecting && (status == ControlChange || status == ProgramChange))
+			if (Is8850() && !injecting && (status == ControlChange || status == ProgramChange))
 				host_change[port * 16 + (midi_event->data[0] & 0x0f)] = render_frame_count + render_frame + 1;
 #endif
 			const uint8_t* msg_data = midi_event->data; // what follows the translators below (may be a copy with another note)
-#ifdef NUKED_SC55_DEVICE_8820
+#ifdef NUKED_SC55_ENGINE_88PRO
 			uint8_t xg_note_msg[3];
-			if (!injecting && xg.Enabled() && len == 3 &&
+			if (Is8820() && !injecting && xg.Enabled() && len == 3 &&
 			    (status == NoteOn || status == NoteOff || status == PolyKeyPressure)) {
 				const uint8_t n = xg.DrumNote(midi_event->data[0] & 0x0f, port, midi_event->data[1]);
 				if (n != midi_event->data[1]) { // XG drum note that the GS set has elsewhere
@@ -1401,8 +1389,8 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 					msg_data       = xg_note_msg;
 				}
 			}
-			if (!injecting) ui_midi_in.fetch_add(1, std::memory_order_relaxed);
-			if (!injecting && xg.Enabled() && (status == ControlChange || status == ProgramChange)) {
+			if (Is8820() && !injecting) ui_midi_in.fetch_add(1, std::memory_order_relaxed);
+			if (Is8820() && !injecting && xg.Enabled() && (status == ControlChange || status == ProgramChange)) {
 				// XG mode: Bank Select is held back and sent as GS bank / map with the Program Change
 				XgTranslate::Out xo;
 				xg.Short(midi_event->data, len, port, xo);
@@ -1426,38 +1414,36 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 			std::span<const uint8_t> msg{sysex_event->buffer, sysex_event->size};
 			uint8_t port = 0;
 #ifdef NUKED_SC55_ENGINE_88PRO
-			if (sysex_event->port_index >= 1 && sysex_event->port_index < kNumPorts)
+			if (sysex_event->port_index >= 1 && sysex_event->port_index < NumPorts())
 				port = static_cast<uint8_t>(sysex_event->port_index);
 			else port = selected_port;
 #endif
-#ifdef NUKED_SC55_DEVICE_8820
+#ifdef NUKED_SC55_ENGINE_88PRO
 			XgTranslate::Msg xg_sysex; // replacement for an XG message, must outlive msg
-			if (!injecting) {
+			if (Is8820() && !injecting) {
 				XgTranslate::Out xo;
 				xg.SysEx(msg, port, xo);
 				if (!xo.pass) {
 					if (xo.count == 0) break; // an XG message the SC-8820 does not understand
-					if (!StateLog::IsReset({xo.m[0].b.data(), xo.m[0].n})) { // channel messages and settings: no reset follows
+					if (!StateLog::IsReset({xo.m[0].b.data(), xo.m[0].n}, XgOnResets())) { // channel messages and settings: no reset follows
 						for (int i = 0; i < xo.count; ++i) EmitXg(xo.m[static_cast<size_t>(i)], port, render_frame);
 						break;
 					}
 					xg_sysex = xo.m[0];
 					msg      = {xg_sysex.b.data(), xg_sysex.n};
-					if (StateLog::IsReset(msg)) // XG System On became a GS Reset: the firmware needs 0.1 s
+					if (StateLog::IsReset(msg, XgOnResets())) // XG System On became a GS Reset: the firmware needs 0.1 s
 						hold_until = std::max(hold_until, render_frame_count + render_frame +
 						                                          static_cast<uint64_t>(render_sample_rate_hz * 0.1));
 				}
 			}
 #endif
-#ifdef NUKED_SC55_PANEL55
 			// SC-55 v1.21 / MkII firmware has no bitmap display: the SC-8850 graphic data (model 45h,
 			// address 20 xx xx, e.g. Bad Apple MIDIs) corrupts its state ("Address Error!" on the LCD
 			// after about a minute) and makes playback lag. The text display (10 00 00) stays.
-			if (IsDisplaySysEx(msg) && msg[5] == 0x20) break;
-#endif
+			if (HasPanel55() && IsDisplaySysEx(msg) && msg[5] == 0x20) break;
 			if (disp_pace && IsDisplaySysEx(msg)) {
-#ifdef NUKED_SC55_DEVICE_8850
-				DotSysEx(msg);
+#ifdef NUKED_SC55_ENGINE_88PRO
+				if (Is8850()) DotSysEx(msg);
 #endif
 				if (DispReady()) // nothing waiting: straight to unit 0, sample-accurate
 					QueueMidi(PolyRouter::Mask{1}, msg.data(), msg.size(), render_frame, port);
@@ -1465,28 +1451,30 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 					DispQueue(msg, port);
 				break;
 			}
-#ifdef NUKED_SC55_DEVICE_8850
-			host_change[kNumParts] = render_frame_count + render_frame + 1;
-#endif
-#ifdef NUKED_SC55_DEVICE_8820
-			if (!injecting) ui_midi_in.fetch_add(1, std::memory_order_relaxed);
-			TrackGsGm(msg);
+#ifdef NUKED_SC55_ENGINE_88PRO
+			if (Is8850()) host_change[kMaxParts] = render_frame_count + render_frame + 1;
+			if (Is8820()) {
+				if (!injecting) ui_midi_in.fetch_add(1, std::memory_order_relaxed);
+				TrackGsGm(msg);
+			}
 #endif
 			state_log.AddSysEx(msg, port);
 			{
-				const bool reset = StateLog::IsReset(msg);
+				const bool reset = StateLog::IsReset(msg, XgOnResets());
 				if (reset) UiResetParts();
 				if (reset) disp_pending.clear(); // pictures sent before a reset are void
 				if (const int mode = StateLog::SystemModeOf(msg); mode >= 0 && HasSystemMode())
 					system_mode = mode; // System Mode Set from the host: menu mark follows
-#ifdef NUKED_SC55_DEVICE_8850
-				if (reset) DotShow(false);
-				DotSysEx(msg);
+#ifdef NUKED_SC55_ENGINE_88PRO
+				if (Is8850()) {
+					if (reset) DotShow(false);
+					DotSysEx(msg);
+				}
 #endif
 				// GS part parameter "Pitch Key Shift" (40 1x 16), for the panel display;
 				// SC-88 Pro: 50 1x 16 or 40 1x 16 received on IN B = B part (40 1x on IN C/D: C/D)
 				if (msg.size() >= 10 && msg[1] == 0x41 && msg[3] == 0x42 && msg[4] == 0x12 &&
-				    (msg[5] == 0x40 || (kNumPorts > 1 && msg[5] == 0x50)) &&
+				    (msg[5] == 0x40 || (NumPorts() > 1 && msg[5] == 0x50)) &&
 				    (msg[6] & 0xf0) == 0x10 && msg[7] == 0x16) {
 					const int x    = msg[6] & 0x0f;
 					const int part = ((msg[5] == 0x50) ? 16 : port * 16) +
@@ -1503,7 +1491,6 @@ void NukedSc55::ProcessEvent(const clap_event_header_t* event,
 	}
 }
 
-#ifdef NUKED_SC55_PANEL55
 //----------------------------------------------------------------------------
 // SC-55 / SC-55mk2 front panel (unit 0)
 //----------------------------------------------------------------------------
@@ -1569,8 +1556,8 @@ std::span<const uint16_t> NukedSc55::E55RxSwitches() const
 	static constexpr uint16_t v110[] = {0x4df6, 0x4df7, 0x4df8}; // also v1.20, v1.21
 	static constexpr uint16_t v200[] = {0x4e66, 0x4e67, 0x4e68};
 	static constexpr uint16_t mk2[]  = {0x5c2c, 0x5c2d, 0x5c2e, 0x5c9d, 0x5c9e};
-#ifdef NUKED_SC55_DEVICE_55E
-	return e55_mk2 ? std::span<const uint16_t>(mk2) : std::span<const uint16_t>(v110); // v1.21 or mkII v1.01
+#ifdef NUKED_SC55_ENGINE_88PRO
+	if (Is55E()) return e55_mk2 ? std::span<const uint16_t>(mk2) : std::span<const uint16_t>(v110); // v1.21 or mkII v1.01
 #endif
 	switch (model) {
 	case Model::Sc55_v1_00: return v100;
@@ -1773,7 +1760,6 @@ void NukedSc55::E55ApplyMutes(Instance& inst, const uint16_t rx)
 		E55Poke(u, a, static_cast<uint8_t>((rx & (1u << x)) ? (f | kMute55Bit) : (f & ~kMute55Bit)));
 	}
 }
-#endif
 
 #ifdef NUKED_SC55_ENGINE_88PRO
 int NukedSc55::UnitToneMap(const int i) const
@@ -2041,16 +2027,17 @@ void NukedSc55::UiResetParts()
 		p.prog = 0; p.bank = 0; p.vol = 100; p.pan = 64;
 		p.rev = 40; p.cho = 0; p.expr = 127; p.key_shift = 0x40;
 	}
-#ifdef NUKED_SC55_DEVICE_8850
-	for (auto& inst : instances) // a reset returns the parts to the SC-8850 map (sleeping units: with the replay)
-		if (inst.awake) inst.applied_map = 3;
+#ifdef NUKED_SC55_ENGINE_88PRO
+	if (Is8850())
+		for (auto& inst : instances) // a reset returns the parts to the SC-8850 map (sleeping units: with the replay)
+			if (inst.awake) inst.applied_map = 3;
 #endif
 }
 
 void NukedSc55::UiTrackShort(const uint8_t* d, const int port)
 {
 	const int ch = d[0] & 0x0f;
-	auto& p      = ui_parts[(port % kNumPorts) * 16 + ch];
+	auto& p      = ui_parts[(port % NumPorts()) * 16 + ch];
 	switch (d[0] & 0xf0) {
 	case 0x90:
 		if (d[2] != 0) {
@@ -2171,10 +2158,10 @@ void NukedSc55::ReleaseScriptSteps()
 		}
 		const std::span<const uint8_t> msg{s.bytes};
 		state_log.AddSysEx(msg, s.port);
-		if (StateLog::IsReset(msg)) {
+		if (StateLog::IsReset(msg, XgOnResets())) {
 			UiResetParts();
-#ifdef NUKED_SC55_DEVICE_8850
-			DotShow(false);
+#ifdef NUKED_SC55_ENGINE_88PRO
+			if (Is8850()) DotShow(false);
 #endif
 		}
 		QueueMidi(router.RouteSysEx(msg, s.port), msg.data(), msg.size(), 0, s.port);
@@ -2194,7 +2181,7 @@ void NukedSc55::HandleUiCommands()
 #endif
 		panel_button_bits = 0;
 	}
-	if ((cmd == 3 || cmd == 4) && kNumPorts <= 2) { // front-panel PART < / PART > on unit 0 (SC-8850: own panel)
+	if ((cmd == 3 || cmd == 4) && NumPorts() <= 2) { // front-panel PART < / PART > on unit 0 (SC-8850: own panel)
 		const uint32_t bit = (cmd == 3) ? (1u << 22) : (1u << 14);
 #ifdef NUKED_SC55_ENGINE_88PRO
 		auto& inst = instances[0];
@@ -2227,8 +2214,8 @@ void NukedSc55::HandleUiCommands()
 		return;
 	}
 #endif
-#ifdef NUKED_SC55_DEVICE_LA
-	if (cmd == 1 || cmd == 11) {
+#ifdef NUKED_SC55_ENGINE_88PRO
+	if (IsLa() && (cmd == 1 || cmd == 11)) {
 		// MT-32 / CM-32L: "All notes off" (the firmware ignores All Sound Off: notes released, hold
 		// pedal off, the queued MIDI dropped) and "Send Reset" (All parameters reset, as the
 		// firmware's own power-on initialization)
@@ -2242,7 +2229,7 @@ void NukedSc55::HandleUiCommands()
 	}
 #endif
 	if (cmd == 1) { // all sound off + all notes off + reset controllers
-		for (uint8_t port = 0; port < kNumPorts; ++port) {
+		for (uint8_t port = 0; port < NumPorts(); ++port) {
 			for (uint8_t ch = 0; ch < 16; ++ch) {
 				for (uint8_t cc : {120, 123}) {
 					const uint8_t m[3] = {uint8_t(0xb0 | ch), cc, 0};
@@ -2270,9 +2257,12 @@ void NukedSc55::HandleUiCommands()
 		case 7: msg = gm2; break;
 		case 8: msg = md1; system_mode = 0; break;
 		case 9: msg = md2; system_mode = 1; break;
-#ifdef NUKED_SC55_DEVICE_88PRO
-		case 12: msg = xgon; break; // SC-88 Pro: the real XG System On, the firmware does the rest
+		case 12: // SC-88 Pro: the real XG System On, the firmware does the rest
+#ifdef NUKED_SC55_ENGINE_88PRO
+			if (Is88Pro()) { msg = xgon; break; }
 #endif
+			msg = gs;
+			break;
 		default: msg = gs; break; // GS, and XG (a GS Reset, then XG mode: GM2 would switch the SC-8820 to its GM2 sound map)
 		}
 		if (cmd == 12 && HasXg()) xg.Enable();
@@ -2284,12 +2274,12 @@ void NukedSc55::HandleUiCommands()
 			state_log.AddSysEx(msg, port);
 			QueueMidi(router.RouteSysEx(msg, port), msg.data(), msg.size(), 0, port);
 		}
-#ifdef NUKED_SC55_DEVICE_8820
-		TrackGsGm(msg);
+#ifdef NUKED_SC55_ENGINE_88PRO
+		if (Is8820()) TrackGsGm(msg);
 #endif
 		UiResetParts();
-#ifdef NUKED_SC55_DEVICE_8850
-		DotShow(false);
+#ifdef NUKED_SC55_ENGINE_88PRO
+		if (Is8850()) DotShow(false);
 #endif
 		// The next host events wait until the firmware has finished the reset (measured with
 		// tools/test/reset26: notes are exact from 50-100 ms after GM/GS/GM2, from 150 ms
@@ -2311,8 +2301,8 @@ double NukedSc55::ResetSettleSeconds(const StateLog::Entry& e)
 
 bool NukedSc55::HasXgReset() const
 {
-#if defined(NUKED_SC55_DEVICE_8820) || defined(NUKED_SC55_DEVICE_88PRO)
-	return true;
+#ifdef NUKED_SC55_ENGINE_88PRO
+	return Is8820() || Is88Pro();
 #else
 	return false;
 #endif
@@ -2320,8 +2310,8 @@ bool NukedSc55::HasXgReset() const
 
 bool NukedSc55::HasXg() const
 {
-#ifdef NUKED_SC55_DEVICE_8820
-	return true;
+#ifdef NUKED_SC55_ENGINE_88PRO
+	return Is8820();
 #else
 	return false;
 #endif
@@ -2332,8 +2322,8 @@ void NukedSc55::EmitXg(const XgTranslate::Msg& m, const uint8_t port, const uint
 {
 	if (m.b[0] == 0xf0) {
 		const std::span<const uint8_t> msg{m.b.data(), m.n};
-#ifdef NUKED_SC55_DEVICE_8820
-		TrackGsGm(msg);
+#ifdef NUKED_SC55_ENGINE_88PRO
+		if (Is8820()) TrackGsGm(msg);
 #endif
 		state_log.AddSysEx(msg, port);
 		QueueMidi(router.RouteSysEx(msg, port), msg.data(), msg.size(), render_frame, port);
@@ -2403,12 +2393,19 @@ void NukedSc55::NotifyStateChanged()
 }
 
 // GAIN knob: -12 .. +12 dB plus the level matching of the model (SC-55: none, so 0 dB = 1.0)
+#ifdef NUKED_SC55_ENGINE_88PRO
+float NukedSc55::GainFactor(const float gain_db) const
+{
+	return std::pow(10.0f, (std::clamp(gain_db, kGainMinDb, kGainMaxDb) + LevelMatchDb()) / 20.0f);
+}
+#else
 float NukedSc55::GainFactor(const float gain_db)
 {
 	return std::pow(10.0f, (std::clamp(gain_db, kGainMinDb, kGainMaxDb) + kLevelMatchDb) / 20.0f);
 }
+#endif
 
-#ifdef NUKED_SC55_DEVICE_55E
+#ifdef NUKED_SC55_ENGINE_88PRO
 // SC-55 on 88emu: hand the ROM set to 88emu and find out which board it is for. Embedded (locations 0..4 =
 // on-chip ROM, program ROM, wave ROMs 1..3 as dumped; a 512 KiB program ROM is the mkII's) or from the
 // ROM folders (SC-55 v1.21 first, then the mkII).
@@ -2450,12 +2447,12 @@ bool NukedSc55::E55SetRoms()
 
 #ifdef NUKED_SC55_ENGINE_88PRO
 
-float NukedSc55::GainFromLegacyVolume(const int vol)
+float NukedSc55::GainFromLegacyVolume(const int vol) const
 {
 	// The old VOLUME knob: 0 = off, else -60 dB .. 0 dB without level matching
 	if (vol <= 0) return kGainMinDb;
 	const float old_db = (std::min(vol, 1000) / 1000.0f - 1.0f) * 60.0f;
-	return std::clamp(old_db - kLevelMatchDb, kGainMinDb, kGainMaxDb);
+	return std::clamp(old_db - LevelMatchDb(), kGainMinDb, kGainMaxDb);
 }
 
 // Boot one SC-88 Pro unit: create the device, set the selected tone map on its panel,
@@ -2469,23 +2466,16 @@ bool NukedSc55::E88BootUnit(const int i)
 			inst.ctx = nullptr;
 		}
 		inst.ctx = emu88_create_context();
-#if defined(NUKED_SC55_DEVICE_8850)
-		emu88_select_device(inst.ctx, EMU88_DEVICE_SC8850);
-#elif defined(NUKED_SC55_DEVICE_8820)
-		emu88_select_device(inst.ctx, EMU88_DEVICE_SC8820);
-#elif defined(NUKED_SC55_DEVICE_88)
-		emu88_select_device(inst.ctx, EMU88_DEVICE_SC88);
-#elif defined(NUKED_SC55_DEVICE_LA)
-		emu88_select_device(inst.ctx, kLaDeviceIds[std::clamp(la_active.load(), 0, kLaDevices - 1)]);
-#elif defined(NUKED_SC55_DEVICE_55E)
-		emu88_select_device(inst.ctx, e55_mk2 ? EMU88_DEVICE_SC55MK2 : EMU88_DEVICE_SC55);
-#else
-		emu88_select_device(inst.ctx, EMU88_DEVICE_SC88PRO);
-#endif
+		switch (D()) {
+		case Dev::Sc8850: emu88_select_device(inst.ctx, EMU88_DEVICE_SC8850); break;
+		case Dev::Sc8820: emu88_select_device(inst.ctx, EMU88_DEVICE_SC8820); break;
+		case Dev::Sc88: emu88_select_device(inst.ctx, EMU88_DEVICE_SC88); break;
+		case Dev::La: emu88_select_device(inst.ctx, kLaDeviceIds[std::clamp(la_active.load(), 0, kLaDevices - 1)]); break;
+		case Dev::Sc55E: emu88_select_device(inst.ctx, e55_mk2 ? EMU88_DEVICE_SC55MK2 : EMU88_DEVICE_SC55); break;
+		case Dev::Sc88Pro: emu88_select_device(inst.ctx, EMU88_DEVICE_SC88PRO); break;
+		}
 		emu88_set_stereo_output_samplerate(inst.ctx, 0); // device rate (32 kHz)
-#if defined(NUKED_SC55_DEVICE_LA)
-		emu88_set_fast_boot_seconds(inst.ctx, kLaBootSeconds);
-#endif
+		if (IsLa()) emu88_set_fast_boot_seconds(inst.ctx, kLaBootSeconds);
 		if (emu88_open_synth(inst.ctx) != EMU88_RC_OK) {
 			log("%s: open_synth failed (ROMs?)", ModelName());
 			emu88_free_context(inst.ctx);
@@ -2500,38 +2490,27 @@ bool NukedSc55::E88BootUnit(const int i)
 		inst.buf_l.reserve(1 << 16);
 		inst.buf_r.reserve(1 << 16);
 		inst.seq_len     = 0;
-#if defined(NUKED_SC55_DEVICE_LA) || defined(NUKED_SC55_DEVICE_55E)
-		inst.applied_map = 0; // no tone maps
-#elif defined(NUKED_SC55_DEVICE_8820) || defined(NUKED_SC55_DEVICE_8850)
-		inst.applied_map = 3; // boots with its own map (SC-8820 / SC-8850)
-#elif defined(NUKED_SC55_DEVICE_88)
-		inst.applied_map = 1; // boots with the SC-88 map
-#else
-		inst.applied_map = 2; // boots with the SC-88 Pro map
-#endif
+		// no tone maps (MT-32, SC-55), else it boots with its own map (SC-8820 / SC-8850, SC-88, SC-88 Pro)
+		inst.applied_map = DefaultToneMap();
 		E88ApplyMapSync(inst, tone_map.load());
-#ifdef NUKED_SC55_DEVICE_8850
-		if (i == 0) E88SyncBoot(inst); // what unit 0's panel can change, as booted
-#endif
-#ifdef NUKED_SC55_DEVICE_55E
-		// As the Nuked SC-55 plug-ins: a GS Reset after the boot (the units start in GS mode alike)
-		emu88_play_device_reset(inst.ctx);
-		E88RenderFrames(inst, static_cast<size_t>(emu88_get_device_samplerate(inst.ctx) * 0.1));
-		inst.buf_l.clear();
-		inst.buf_r.clear();
-		if (i == 0) { // unit 0's panel: parameter memory as booted
-			panel_seen_valid = false;
-			applied_buttons  = 0;
-			applied_mute55   = 0xffff;
+		if (Is8850() && i == 0) E88SyncBoot(inst); // what unit 0's panel can change, as booted
+		if (Is55E()) {
+			// As the Nuked SC-55 plug-ins: a GS Reset after the boot (the units start in GS mode alike)
+			emu88_play_device_reset(inst.ctx);
+			E88RenderFrames(inst, static_cast<size_t>(emu88_get_device_samplerate(inst.ctx) * 0.1));
+			inst.buf_l.clear();
+			inst.buf_r.clear();
+			if (i == 0) { // unit 0's panel: parameter memory as booted
+				panel_seen_valid = false;
+				applied_buttons  = 0;
+				applied_mute55   = 0xffff;
+			}
 		}
-#endif
-#if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
-		if (i == 0) { // panel edits are read from the end of the log as booted
+		if ((Is88() || Is88Pro()) && i == 0) { // panel edits are read from the end of the log as booted
 			edit_cursor     = -1;
 			applied_buttons = gui_buttons = 0;
 			all_eq_on       = true;
 		}
-#endif
 		E88RenderFrames(inst, 2048);
 		double sl = 0.0, sr = 0.0;
 		for (size_t f = 1024; f < 2048; ++f) {
@@ -2578,16 +2557,12 @@ void NukedSc55::InjectShort(const uint8_t s, const uint8_t d1, const uint8_t d2,
 // (boot = SC-88 Pro); nothing else presses these buttons and GS resets keep
 // the map. ALL (latching, LED 0) makes the press apply to all parts.
 // SC-88: its only map key INST MAP (same switch bit as SC-55 MAP) toggles SC-55 <-> SC-88.
-static uint32_t E88MapKey(const int from, const int to)
+static uint32_t E88MapKey(const bool sc88, const int from, const int to)
 {
-#ifdef NUKED_SC55_DEVICE_88
-	(void)from; (void)to;
-	return Btn55Map;
-#else
+	if (sc88) return Btn55Map;
 	if (to == 0) return Btn55Map;
 	if (to == 1) return Btn88Map;
 	return from == 0 ? Btn55Map : Btn88Map; // back to SC-88 Pro
-#endif
 }
 
 // Render frames into the unit's buffer; advances a pending panel sequence
@@ -2604,8 +2579,7 @@ void NukedSc55::E88RenderFrames(Instance& inst, size_t frames)
 			inst.buf_r.push_back(tmp[2 * k + 1]);
 		}
 		frames -= n;
-#ifdef NUKED_SC55_DEVICE_8820
-		{
+		if (Is8820()) {
 			const uint32_t l = emu88_get_panel_leds(inst.ctx);
 			if (inst.seq_len > 0 && inst.seq_pos % 2 == 1) inst.led_acc |= l; // released: map shown
 			inst.led_win |= l;
@@ -2615,26 +2589,19 @@ void NukedSc55::E88RenderFrames(Instance& inst, size_t frames)
 				inst.led_acc_frames = 0;
 			}
 		}
-#endif
 		if (inst.seq_len > 0 && (inst.seq_left = inst.seq_left > n ? inst.seq_left - n : 0) == 0) {
 			const double rate = emu88_get_device_samplerate(inst.ctx);
 			++inst.seq_pos;
 			if (inst.seq_pos >= inst.seq_len) {
-#ifdef NUKED_SC55_DEVICE_8820
-				if (const int shown = E8820ShownMap(inst.led_acc); shown >= 0) inst.applied_map = shown;
-#else
-				inst.applied_map = inst.seq_map;
-#endif
+				if (!Is8820()) inst.applied_map = inst.seq_map;
+				else if (const int shown = E8820ShownMap(inst.led_acc); shown >= 0) inst.applied_map = shown;
 				inst.seq_len     = 0;
 			} else if (inst.seq_pos % 2 == 1) { // release (switches the next step holds stay down)
 				const int step = inst.seq_pos / 2;
-#ifdef NUKED_SC55_DEVICE_8820
-				emu88_set_panel_buttons(inst.ctx, 0); // every press is released (same button again)
-				(void)step;
-#else
-				emu88_set_panel_buttons(inst.ctx, step + 1 < 4 && inst.seq_pos + 1 < inst.seq_len
-				                                      ? inst.seq_mask[step] & inst.seq_mask[step + 1] : 0);
-#endif
+				if (Is8820()) emu88_set_panel_buttons(inst.ctx, 0); // every press is released (same button again)
+				else
+					emu88_set_panel_buttons(inst.ctx, step + 1 < 4 && inst.seq_pos + 1 < inst.seq_len
+					                                      ? inst.seq_mask[step] & inst.seq_mask[step + 1] : 0);
 				inst.seq_left = static_cast<uint32_t>(rate * 0.35);
 			} else { // next press
 				emu88_set_panel_buttons(inst.ctx, inst.seq_mask[inst.seq_pos / 2]);
@@ -2647,13 +2614,12 @@ void NukedSc55::E88RenderFrames(Instance& inst, size_t frames)
 // Start a (non-blocking) panel sequence towards `map`.
 void NukedSc55::E88StartMapSequence(Instance& inst, const int map)
 {
-	if (!HasToneMap() && !kHas88Map) { // SC-8850: tone maps are part settings of its own panel
+	if (!HasToneMap() && !Is88()) { // SC-8850: tone maps are part settings of its own panel
 		inst.applied_map = map;
 		return;
 	}
 	if (inst.seq_len > 0 || map == inst.applied_map) return;
-#ifdef NUKED_SC55_DEVICE_8820
-	{
+	if (Is8820()) {
 		// INST MAP steps 8820 -> 88 Pro -> 88 -> 55 -> 8820. A press while the map is not shown only
 		// shows it. Closed loop: one press at a time; the map the unit then shows (read from its lamps
 		// while the button is released) becomes applied_map, and the caller presses again until it is
@@ -2667,13 +2633,12 @@ void NukedSc55::E88StartMapSequence(Instance& inst, const int map)
 		emu88_set_panel_buttons(inst.ctx, inst.seq_mask[0]);
 		return;
 	}
-#endif
 	// The map buttons act on all parts only in ALL mode: enter it for the press and leave it
 	// again, unless ALL was already on (the ALL view chosen on the panel stays)
 	const bool all_on = (emu88_get_panel_leds(inst.ctx) & 1u) != 0;
 	int k = 0;
 	if (!all_on) inst.seq_mask[k++] = BtnAll;
-	inst.seq_mask[k++] = E88MapKey(inst.applied_map, map);
+	inst.seq_mask[k++] = E88MapKey(Is88(), inst.applied_map, map);
 	if (!all_on) inst.seq_mask[k++] = BtnAll; // leave ALL mode again
 	inst.seq_map  = map;
 	inst.seq_len  = 2 * k; // press + release per button
@@ -2685,7 +2650,7 @@ void NukedSc55::E88StartMapSequence(Instance& inst, const int map)
 // Blocking variant (boot / background warmer only): renders until applied.
 void NukedSc55::E88ApplyMapSync(Instance& inst, const int map)
 {
-	for (int round = 0; round < kMapRounds && inst.applied_map != map; ++round) {
+	for (int round = 0; round < MapRounds() && inst.applied_map != map; ++round) {
 		E88StartMapSequence(inst, map);
 		while (inst.seq_len > 0) {
 			E88RenderFrames(inst, inst.seq_left);
@@ -2711,27 +2676,24 @@ void NukedSc55::E88Drain(Instance& inst, const size_t bytes, const double extra_
 }
 #endif
 
-#if defined(NUKED_SC55_ENGINE_88PRO) && !defined(NUKED_SC55_PANEL55)
+#ifdef NUKED_SC55_ENGINE_88PRO
 // Lamps of unit 0's front panel (SC-88 Pro: ALL view; SC-8850, SC-88: all switches)
 uint32_t NukedSc55::PanelLeds() const
 {
+	if (Is55E()) return ui_panel_leds.load(std::memory_order_relaxed); // SC-55: read in the audio thread
 	std::unique_lock lock(units_mx, std::try_to_lock);
 	if (!lock.owns_lock() || !lcd_ready.load() || instances.empty() || !instances[0].ctx) return 0;
-#if defined(NUKED_SC55_DEVICE_8820)
-	return ui_leds8820.load(std::memory_order_relaxed); // multiplexed: ORed over a short window
-#elif defined(NUKED_SC55_DEVICE_LA)
-	uint32_t leds = 0; // MIDI MESSAGE: every unit only lights for the notes it plays
-	for (int i = 0; i < NumInstances(); ++i)
-		if (instances[i].ctx && instances[i].booted->load(std::memory_order_acquire))
-			leds |= emu88_get_panel_leds(instances[i].ctx);
-	return leds;
-#else
+	if (Is8820()) return ui_leds8820.load(std::memory_order_relaxed); // multiplexed: ORed over a short window
+	if (IsLa()) {
+		uint32_t leds = 0; // MIDI MESSAGE: every unit only lights for the notes it plays
+		for (int i = 0; i < NumInstances(); ++i)
+			if (instances[i].ctx && instances[i].booted->load(std::memory_order_acquire))
+				leds |= emu88_get_panel_leds(instances[i].ctx);
+		return leds;
+	}
 	return emu88_get_panel_leds(instances[0].ctx);
-#endif
 }
-#endif
 
-#if defined(NUKED_SC55_DEVICE_8850) || defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
 //----------------------------------------------------------------------------
 // Front panel of unit 0 (SC-8850, SC-88, SC-88 Pro)
 //----------------------------------------------------------------------------
@@ -2745,15 +2707,10 @@ void NukedSc55::E88Forward(const uint8_t port, const uint8_t* msg, const size_t 
 	log("%s panel: %zu bytes to the other units", ModelName(), size);
 }
 
-#if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
 namespace {
 constexpr uint32_t kBtn88Select = 1u << 25, kBtn88InstL = 1u << 3, kBtn88All = 1u << 6;
-// Work RAM: MASTER TUNE (40 00 00..03 as a 16-bit value, 0x400 = 440 Hz)
-#ifdef NUKED_SC55_DEVICE_88
-constexpr uint32_t kRam88Tune = 0x8040;
-#else
-constexpr uint32_t kRam88Tune = 0x5040;
-#endif
+// Work RAM: MASTER TUNE (40 00 00..03 as a 16-bit value, 0x400 = 440 Hz) of the SC-88 / SC-88 Pro
+constexpr uint32_t kRam88Tune = 0x8040, kRam88pTune = 0x5040;
 constexpr double kPanel88Seconds = 0.6; // master tune is passed on until this long after the last switch
 } // namespace
 
@@ -2830,7 +2787,7 @@ void NukedSc55::E88PanelTune()
 	auto& inst = instances[0];
 	if (!inst.ctx) return;
 	uint8_t t[2] = {};
-	emu88_peek_work_ram(inst.ctx, kRam88Tune, t, 2);
+	emu88_peek_work_ram(inst.ctx, Is88() ? kRam88Tune : kRam88pTune, t, 2);
 	if (t[0] == tune_seen[0] && t[1] == tune_seen[1]) return;
 	tune_seen[0] = t[0];
 	tune_seen[1] = t[1];
@@ -2844,10 +2801,8 @@ void NukedSc55::E88PanelTune()
 	m[12] = static_cast<uint8_t>((128 - (sum & 0x7f)) & 0x7f);
 	E88Forward(0, m, sizeof(m));
 }
-#endif
 
 namespace {
-#ifdef NUKED_SC55_DEVICE_88
 // SC-88 (control ROM 1.01, the only one the builder accepts): switch bits (88emu sc88types.h)
 constexpr uint32_t kBtn88Eq      = 1u << 1;
 constexpr uint32_t kBtn88InstMap = 1u << 2;
@@ -2860,8 +2815,6 @@ constexpr uint32_t kRam88EditLog   = 0x03c2;
 constexpr uint32_t kRam88EditWrite = 0x03c0;
 constexpr int kRam88EditSize       = 0x100;
 constexpr uint32_t kRam88PanelFlags = 0xc06a; // bit 0: ALL + MUTE (everything muted)
-#endif
-#ifdef NUKED_SC55_DEVICE_88PRO
 // SC-88 Pro (control ROM 1.02): switch bits (88emu Sc88ProButton). In ALL mode INSTRUMENT
 // and MIDI CH change states of the whole unit without a GS parameter (all instruments,
 // device ID), which could not be passed on; they are not given to the firmware there.
@@ -2869,13 +2822,12 @@ constexpr uint32_t kBtn88pInst   = (1u << 3) | (1u << 4);
 constexpr uint32_t kBtn88pMidiCh = (1u << 8) | (1u << 9);
 // The same panel-edit log as on the SC-88 (same entry format), a ring of 400 bytes
 // (measured: the write pointer runs from 02C4 to 0454 and starts again at 02C4).
-constexpr uint32_t kRam88EditLog   = 0x02c4;
-constexpr uint32_t kRam88EditWrite = 0x02c0;
-constexpr int kRam88EditSize       = 0x190;
-#endif
+constexpr uint32_t kRam88pEditLog   = 0x02c4;
+constexpr uint32_t kRam88pEditWrite = 0x02c0;
+constexpr int kRam88pEditSize       = 0x190;
+constexpr int kRam88MaxEditSize     = std::max(kRam88EditSize, kRam88pEditSize);
 } // namespace
 
-#ifdef NUKED_SC55_DEVICE_8850
 namespace {
 // SC-8850 switches (88emu Sc8850Button bits) that never edit a parameter: PART < >, EXIT,
 // SHIFT, SOLO, MUTE (taken from the work RAM, E88PanelMutes), PREVIEW
@@ -2883,7 +2835,6 @@ constexpr uint32_t kBtn8850NoEdit = (1u << 1) | (1u << 2) | (1u << 7) | (1u << 9
 constexpr uint32_t kBtn8850Enter  = 1u << 8;
 constexpr uint32_t kLed8850Drum   = 1u << 1;
 } // namespace
-#endif
 
 // Audio thread, start of a block: GUI switches (and the SC-8850's VALUE detents) to unit 0
 void NukedSc55::E88PanelInput()
@@ -2891,10 +2842,8 @@ void NukedSc55::E88PanelInput()
 	auto& inst = instances[0];
 	if (!inst.ctx) return;
 	uint32_t buttons = ui_panel_buttons.load(std::memory_order_relaxed);
-#if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
-	E88PanelConfirm(buttons);
-#endif
-#ifdef NUKED_SC55_DEVICE_88
+	if (Is88() || Is88Pro()) E88PanelConfirm(buttons);
+	if (Is88()) {
 	// In ALL mode, EQ, INST MAP and MIDI CH change panel states of the whole unit that have no
 	// GS parameter (EQ off for everything, all tone maps, device ID) and could not be passed on.
 	// EQ is applied as the EQ switch of all 32 parts instead; the others stay on unit 0's panel.
@@ -2907,7 +2856,7 @@ void NukedSc55::E88PanelInput()
 	if (emu88_get_panel_leds(inst.ctx) & 1u) {
 		if (pressed & kBtn88Eq) {
 			all_eq_on = !all_eq_on;
-			for (int part = 0; part < kNumParts; ++part) {
+			for (int part = 0; part < NumParts(); ++part) {
 				const int x = part % 16, block = x == 9 ? 0 : (x < 9 ? x + 1 : x);
 				uint8_t msg[11] = {0xf0, 0x41, 0x10, 0x42, 0x12, static_cast<uint8_t>(part < 16 ? 0x40 : 0x50),
 				                   static_cast<uint8_t>(0x40 | block), 0x20, all_eq_on ? uint8_t(1) : uint8_t(0), 0, 0xf7};
@@ -2922,7 +2871,7 @@ void NukedSc55::E88PanelInput()
 	if (buttons == applied_buttons) return;
 	emu88_set_panel_buttons(inst.ctx, buttons);
 	applied_buttons = buttons;
-#elif defined(NUKED_SC55_DEVICE_88PRO)
+	} else if (Is88Pro()) {
 	// A panel sequence of the plugin (tone map, ALL, PART) has the switches; held ones follow it
 	if (inst.seq_len > 0) {
 		applied_buttons = ~0u;
@@ -2932,7 +2881,7 @@ void NukedSc55::E88PanelInput()
 	if (buttons == applied_buttons) return;
 	emu88_set_panel_buttons(inst.ctx, buttons);
 	applied_buttons = buttons;
-#else
+	} else { // SC-8850
 	const int detents = ui_encoder.exchange(0);
 	if (buttons == applied_buttons && detents == 0) return;
 	const uint32_t pressed = buttons & ~applied_buttons;
@@ -2948,16 +2897,14 @@ void NukedSc55::E88PanelInput()
 	if ((pressed & ~kBtn8850NoEdit) != 0 || detents != 0) {
 		uint8_t cur = 0;
 		emu88_peek_work_ram(inst.ctx, kRam8850CurPart, &cur, 1);
-		if (cur < kNumParts) sync_parts |= uint64_t{1} << cur;
+		if (cur < NumParts()) sync_parts |= uint64_t{1} << cur;
 		sync_drums |= (emu88_get_panel_leds(inst.ctx) & kLed8850Drum) != 0;
 		sync_full |= (pressed & kBtn8850Enter) != 0;
 		sync_dirty = true;
 	}
-#endif
+	}
 }
-#endif
 
-#if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
 //----------------------------------------------------------------------------
 // SC-88 / SC-88 Pro front panel: synchronisation of panel edits
 //----------------------------------------------------------------------------
@@ -2974,14 +2921,18 @@ void NukedSc55::E88EditPump()
 {
 	auto& inst = instances[0];
 	if (!inst.ctx) return;
+	// the panel-edit log of this device
+	const uint32_t kRam88EditLog   = Is88() ? ::kRam88EditLog : kRam88pEditLog;
+	const uint32_t kRam88EditWrite = Is88() ? ::kRam88EditWrite : kRam88pEditWrite;
+	const int kRam88EditSize       = Is88() ? ::kRam88EditSize : kRam88pEditSize;
 	uint8_t wp[2] = {};
 	emu88_peek_work_ram(inst.ctx, kRam88EditWrite, wp, 2);
 	const int w = wp[0] << 8 | wp[1];
 	if (w < static_cast<int>(kRam88EditLog) || w >= static_cast<int>(kRam88EditLog) + kRam88EditSize) return;
 	if (edit_cursor < 0) edit_cursor = w;
 	if (w == edit_cursor) return;
-	uint8_t ring[kRam88EditSize];
-	emu88_peek_work_ram(inst.ctx, kRam88EditLog, ring, sizeof(ring));
+	uint8_t ring[kRam88MaxEditSize];
+	emu88_peek_work_ram(inst.ctx, kRam88EditLog, ring, static_cast<uint32_t>(kRam88EditSize));
 	int pos   = edit_cursor - static_cast<int>(kRam88EditLog);
 	int avail = (w - edit_cursor + kRam88EditSize) % kRam88EditSize;
 	const auto at = [&](int k) { return ring[(pos + k) % kRam88EditSize]; };
@@ -3017,20 +2968,6 @@ void NukedSc55::E88EditPump()
 	edit_cursor = static_cast<int>(kRam88EditLog) + pos;
 }
 
-#ifdef NUKED_SC55_DEVICE_88
-// ALL + MUTE of unit 0's panel -> mute mask of all units
-void NukedSc55::E88PanelMutes()
-{
-	auto& inst = instances[0];
-	if (!inst.ctx) return;
-	uint8_t flags = 0;
-	emu88_peek_work_ram(inst.ctx, kRam88PanelFlags, &flags, 1);
-	mute_mask.store((flags & 1u) ? ~uint64_t{0} >> (64 - kNumParts) : 0, std::memory_order_relaxed);
-}
-#endif
-#endif
-
-#ifdef NUKED_SC55_DEVICE_8850
 //----------------------------------------------------------------------------
 // SC-8850 front panel (unit 0) and its synchronisation with the other units
 //----------------------------------------------------------------------------
@@ -3174,11 +3111,11 @@ void NukedSc55::E88SyncStart(const bool boot)
 	if (!boot && instances[0].ctx) {
 		uint8_t v = 0;
 		emu88_peek_work_ram(instances[0].ctx, kRam8850CurPart, &v, 1);
-		cur = (v < kNumParts) ? v : 0;
+		cur = (v < NumParts()) ? v : 0;
 	}
 	const bool all = boot || sync_full;
 	add_part(cur);
-	for (int part = 0; part < kNumParts; ++part)
+	for (int part = 0; part < NumParts(); ++part)
 		if (part != cur && (all || (sync_parts & (uint64_t{1} << part)))) add_part(part);
 	if (all || sync_drums)
 		for (int map = 0; map < 2; ++map)
@@ -3192,11 +3129,11 @@ void NukedSc55::E88SyncStart(const bool boot)
 // as a part differs from its baseline (the map the plug-in last set for all parts).
 void NukedSc55::E88MapTrack(const int part, const int value, const bool baseline)
 {
-	if (part < 0 || part >= kNumParts) return;
+	if (part < 0 || part >= NumParts()) return;
 	map_cur[part] = static_cast<int16_t>(value);
 	if (baseline || map_ref[part] < 0) map_ref[part] = static_cast<int16_t>(value);
 	bool mixed = false;
-	for (int i = 0; i < kNumParts; ++i)
+	for (int i = 0; i < NumParts(); ++i)
 		mixed |= map_ref[i] >= 0 && map_cur[i] >= 0 && map_ref[i] != map_cur[i];
 	ui_map_mixed.store(mixed, std::memory_order_relaxed);
 }
@@ -3210,10 +3147,10 @@ void NukedSc55::E88MapShown()
 	if (ui_map_mixed.load(std::memory_order_relaxed) && !instances.empty() && instances[0].ctx) {
 		uint8_t cur = 0;
 		emu88_peek_work_ram(instances[0].ctx, kRam8850CurPart, &cur, 1);
-		if (cur < kNumParts && map_cur[cur] >= 0) {
+		if (cur < NumParts() && map_cur[cur] >= 0) {
 			const int lsb = map_cur[cur] >> 8, inst = map_cur[cur] & 0xff;
 			const int m   = (lsb != 0 ? lsb : inst) - 1;
-			if (m >= 0 && m <= kMaxToneMap) shown = m;
+			if (m >= 0 && m <= MaxToneMap()) shown = m;
 		}
 	}
 	ui_map_shown.store(shown, std::memory_order_relaxed);
@@ -3241,7 +3178,7 @@ void NukedSc55::E88SyncAnswer(const SyncReq& req, const uint8_t* data, const int
 		// the answer can be older than what all units have now, so ask again a little later.
 		const uint64_t window = 3200; // 0.1 s
 		const auto recent     = [&](uint64_t f) { return f != 0 && f + window > render_frame_count; };
-		if (recent(host_change[kNumParts]) || (part >= 0 && recent(host_change[part]))) {
+		if (recent(host_change[kMaxParts]) || (part >= 0 && recent(host_change[part]))) {
 			SyncReq again = req;
 			++again.tries;
 			sync_queue.insert(sync_queue.begin(), again);
@@ -3358,7 +3295,7 @@ void NukedSc55::E88SyncPump(Instance& inst, const bool forward, const uint64_t n
 	// part's tone map as the new baseline for the "mixed" check
 	if (forward && map_probe_pending && now >= map_probe_at && sync_queue.empty() && sync_outstanding.empty()) {
 		map_probe_pending = false;
-		for (int part = kNumParts - 1; part >= 0; --part) {
+		for (int part = NumParts() - 1; part >= 0; --part) {
 			SyncReq r{static_cast<uint8_t>(part / 16), 0x40, static_cast<uint8_t>(0x40 | GsBlockOfChannel(part % 16)), 0x00, 2};
 			r.map_probe = true;
 			sync_queue.push_back(r);
@@ -3386,7 +3323,7 @@ void NukedSc55::E88SyncPump(Instance& inst, const bool forward, const uint64_t n
 // Boot of unit 0: read everything once (nothing to pass on yet).
 void NukedSc55::E88SyncBoot(Instance& inst)
 {
-	sync_base.assign(static_cast<size_t>(kNumPorts) * 2 * 128 * 128, -1);
+	sync_base.assign(static_cast<size_t>(NumPorts()) * 2 * 128 * 128, -1);
 	map_ref.fill(-1);
 	map_cur.fill(-1);
 	map_probe_pending = false;
@@ -3413,13 +3350,19 @@ void NukedSc55::E88SyncBoot(Instance& inst)
 	log("SC-8850: %d panel parameters read in %.2f s (device time)", known, now / 32000.0);
 }
 
-// MUTE / SOLO of unit 0's panel -> mute mask of all units
+// SC-8850: MUTE / SOLO of unit 0's panel -> mute mask of all units; SC-88: ALL + MUTE
 void NukedSc55::E88PanelMutes()
 {
 	auto& inst = instances[0];
 	if (!inst.ctx) return;
+	if (Is88()) {
+		uint8_t flags = 0;
+		emu88_peek_work_ram(inst.ctx, kRam88PanelFlags, &flags, 1);
+		mute_mask.store((flags & 1u) ? ~uint64_t{0} >> (64 - NumParts()) : 0, std::memory_order_relaxed);
+		return;
+	}
 	uint64_t mask = 0;
-	for (int part = 0; part < kNumParts; ++part) {
+	for (int part = 0; part < NumParts(); ++part) {
 		const uint32_t rec = kRam8850PartRec + static_cast<uint32_t>(Fw8850PartIndex(part)) * kRam8850PartSize;
 		uint8_t flags = 0xff, gate = 0x7f;
 		emu88_peek_work_ram(inst.ctx, rec, &flags, 1);
@@ -3458,14 +3401,12 @@ void NukedSc55::ReplayInto(Instance& inst, const std::vector<StateLog::Entry>& e
 	E88ApplyMapSync(inst, tone_map.load());
 	size_t bytes = 0;
 	for (const auto& e : entries) {
-#if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
-		if (StateLog::IsCm64Marker(e.bytes)) {
+		if ((Is88() || Is88Pro()) && StateLog::IsCm64Marker(e.bytes)) {
 			E88Drain(inst, bytes, 0.005);
 			bytes = 0;
 			E88Cm64Sync(inst);
 			continue;
 		}
-#endif
 		emu88_parse_stream_on_port(inst.ctx, e.port, e.bytes.data(), static_cast<uint32_t>(e.bytes.size()));
 		bytes += e.bytes.size();
 		if (e.is_reset) {
@@ -3651,22 +3592,25 @@ void NukedSc55::Sleep(const int i)
 // at once instead of fading out audibly after the replay. Keys the host
 // still holds stay down, as on the hardware.
 // Returns the bytes to send, per input port.
-std::array<std::vector<uint8_t>, NukedSc55::kNumPorts> NukedSc55::ReleaseMissedKeys(const int i)
+std::array<std::vector<uint8_t>, NukedSc55::kMaxPorts> NukedSc55::ReleaseMissedKeys(const int i)
 {
-	std::array<std::vector<uint8_t>, kNumPorts> out;
+	std::array<std::vector<uint8_t>, kMaxPorts> out;
 	auto& keys = instances[i].keys_at_sleep;
 	int last_lch = -1;
 	for (const auto key : keys) {
 		const int lch = key / 128, note = key % 128;
 		const int port = lch / 16;
-		if (port >= kNumPorts || router.OwnsKey(i, lch, note)) continue;
+		if (port >= NumPorts() || router.OwnsKey(i, lch, note)) continue;
 		const auto ch = static_cast<uint8_t>(lch % 16);
 		out[port].insert(out[port].end(), {uint8_t(0x80 | ch), uint8_t(note), 0});
-#ifndef NUKED_SC55_DEVICE_LA // (the LA firmware ignores All Sound Off)
-		if (lch != last_lch && !router.OwnsKeysOn(i, lch)) {
+#ifdef NUKED_SC55_ENGINE_88PRO
+		const bool la = IsLa(); // (the LA firmware ignores All Sound Off)
+#else
+		const bool la = false;
+#endif
+		if (!la && lch != last_lch && !router.OwnsKeysOn(i, lch)) {
 			out[port].insert(out[port].end(), {uint8_t(0xb0 | ch), 120, 0});
 		}
-#endif
 		last_lch = lch;
 	}
 	keys.clear();
@@ -3690,7 +3634,7 @@ void NukedSc55::Wake(const int i)
 	{
 		size_t bytes = 0;
 		const auto released = ReleaseMissedKeys(i);
-		for (int port = 0; port < kNumPorts; ++port) {
+		for (int port = 0; port < NumPorts(); ++port) {
 			if (released[port].empty()) continue;
 			emu88_parse_stream_on_port(inst.ctx, port, released[port].data(),
 			                           static_cast<uint32_t>(released[port].size()));
@@ -3698,14 +3642,12 @@ void NukedSc55::Wake(const int i)
 			replayed_bytes += static_cast<int>(released[port].size());
 		}
 		state_log.ForEachSince(inst.sleep_seq, [&](const StateLog::Entry& e) {
-#if defined(NUKED_SC55_DEVICE_88) || defined(NUKED_SC55_DEVICE_88PRO)
-			if (StateLog::IsCm64Marker(e.bytes)) {
+			if ((Is88() || Is88Pro()) && StateLog::IsCm64Marker(e.bytes)) {
 				E88Drain(inst, bytes, 0.005);
 				bytes = 0;
 				E88Cm64Sync(inst);
 				return;
 			}
-#endif
 			emu88_parse_stream_on_port(inst.ctx, e.port, e.bytes.data(), static_cast<uint32_t>(e.bytes.size()));
 			bytes += e.bytes.size();
 			replayed_bytes += static_cast<int>(e.bytes.size());
@@ -3719,6 +3661,10 @@ void NukedSc55::Wake(const int i)
 	// Map not yet on this unit (warmer did not get to it): switch it while
 	// it plays instead of blocking the audio thread.
 	E88StartMapSequence(inst, tone_map.load()); // no-op if already on the map
+	if (Is55E()) {
+		E55ApplyMutes(inst, applied_mute55); // panel MUTE flags are not part of the state log
+		E55ApplyRxSwitches(inst);            // nor the system menu's Rx switches
+	}
 #else
 	const auto step_until_drained = [&](double extra_seconds) {
 		DrainUnit(inst);
@@ -3962,7 +3908,7 @@ void NukedSc55::DispQueue(const std::span<const uint8_t> msg, const uint8_t port
 	disp_pending.push_back(d);
 }
 
-#ifdef NUKED_SC55_DEVICE_8820
+#ifdef NUKED_SC55_ENGINE_88PRO
 void NukedSc55::WireDecay() const
 {
 	if (render_frame_count > wire_frame) {
@@ -3979,12 +3925,10 @@ size_t NukedSc55::MidiBacklog(const int i) const
 #ifdef NUKED_SC55_ENGINE_88PRO
 	if (!inst.ctx) return 0;
 	size_t n = emu88_get_midi_in_backlog(inst.ctx);
-#ifdef NUKED_SC55_DEVICE_8820
-	if (i == 0) {
+	if (Is8820() && i == 0) {
 		WireDecay();
 		n = std::max(n, static_cast<size_t>(wire_bytes));
 	}
-#endif
 #else
 	const auto& mcu = inst.emu->GetMCU();
 	size_t n = (mcu.uart_write_ptr + uart_buffer_size - mcu.uart_read_ptr) % uart_buffer_size;
@@ -4019,7 +3963,7 @@ void NukedSc55::DispFeed()
 	disp_pending.erase(disp_pending.begin(), disp_pending.begin() + static_cast<std::ptrdiff_t>(n));
 }
 
-#ifdef NUKED_SC55_DEVICE_8820
+#ifdef NUKED_SC55_ENGINE_88PRO
 // ---- SC-8820 front panel: INST MAP and VOLUME push (PREVIEW) of unit 0 -------------------------
 // The GUI's switches go to unit 0 as on the hardware. When unit 0 shows the map (after a press),
 // that map becomes the plugin's tone map; the other units follow with their own presses.
@@ -4049,7 +3993,7 @@ void NukedSc55::E8820PanelInput()
 }
 #endif
 
-#ifdef NUKED_SC55_DEVICE_8820
+#ifdef NUKED_SC55_ENGINE_88PRO
 // ---- SC-8820, Pro interface: part display (issue #49) ------------------------------------------------
 // The SC-8820 has no display, but its firmware keeps every part's parameters and the name of the
 // tone it plays in work RAM (found by comparing RAM dumps before and after Program Change, Bank
@@ -4150,7 +4094,7 @@ void NukedSc55::E8820SendUiMidi()
 }
 #endif
 
-#ifdef NUKED_SC55_DEVICE_8820
+#ifdef NUKED_SC55_ENGINE_88PRO
 // Map shown by the PART B indicator (lamps ORed over a window), -1 if none is shown.
 int NukedSc55::E8820ShownMap(const uint32_t leds)
 {
@@ -4165,7 +4109,7 @@ int NukedSc55::E8820ShownMap(const uint32_t leds)
 }
 #endif
 
-#ifdef NUKED_SC55_DEVICE_LA
+#ifdef NUKED_SC55_ENGINE_88PRO
 //----------------------------------------------------------------------------
 // MT-32 / CM-32L (issue #69)
 //----------------------------------------------------------------------------

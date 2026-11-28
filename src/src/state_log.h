@@ -98,7 +98,8 @@ public:
 		       m[4] == 0x00 && m[5] == 0x00 && m[6] == 0x7e && m[7] == 0x00;
 	}
 
-	static bool IsReset(std::span<const uint8_t> m)
+	// xg_on_resets: XG System On initialises the module (SC-88 Pro, see SetXgOnResets)
+	static bool IsReset(std::span<const uint8_t> m, bool xg_on_resets)
 	{
 		const bool gm_on = m.size() >= 6 && m[1] == 0x7e && m[3] == 0x09;
 		const bool roland_dt1 = m.size() >= 10 && m[1] == 0x41 &&
@@ -108,13 +109,9 @@ public:
 #else
 		const bool mode_set = false; // ignored by the SC-55 firmware
 #endif
-#ifdef NUKED_SC55_DEVICE_88PRO
 		// XG System On: the SC-88 Pro firmware switches to its "MU80 compatible" fallback mode and initialises
 		// (the SC-8820 plug-in translates it to a GS Reset before it gets here)
-		const bool xg_on = IsXgSystemOn(m);
-#else
-		const bool xg_on = false;
-#endif
+		const bool xg_on = xg_on_resets && IsXgSystemOn(m);
 		return gm_on || mode_set || xg_on ||
 		       (roland_dt1 && m[5] == 0x40 && m[6] == 0x00 && m[7] == 0x7f);
 	}
@@ -141,6 +138,9 @@ public:
 	// GS Reset initialise only the part group of the MIDI IN they arrive on.
 	void SetTrackSystemMode(bool on) { track_mode = on; }
 	bool DoubleModule() const { return double_module; }
+	// SC-88 Pro: XG System On counts as a reset (set from the model, like SetTrackSystemMode)
+	void SetXgOnResets(bool on) { xg_on_resets = on; }
+	bool XgOnResets() const { return xg_on_resets; }
 
 	void AddSysEx(std::span<const uint8_t> m, int port = 0)
 	{
@@ -150,14 +150,14 @@ public:
 		const bool roland_dt1 = m.size() >= 10 && m[1] == 0x41 &&
 		                        m[3] == 0x42 && m[4] == 0x12;
 
-		if (const int mode = SystemModeOf(m); mode >= 0 && IsReset(m)) {
+		if (const int mode = SystemModeOf(m); mode >= 0 && IsReset(m, xg_on_resets)) {
 			// everything is initialised; the mode itself stays in the log for waking units
 			Clear();
 			double_module = track_mode && mode == 1;
 			Put(Key(5, 0, 0), m, true);
 			return;
 		}
-		if (IsReset(m) || IsCm64Marker(m)) {
+		if (IsReset(m, xg_on_resets) || IsCm64Marker(m)) {
 			if (double_module && !IsCm64Marker(m)) {
 				// Mode 2: only this MIDI IN's part group starts over
 				std::erase_if(entries, [&](const Entry& e) { return e.port == cur_port && (e.key >> 56) != 5; });
@@ -184,7 +184,7 @@ private:
 	std::vector<Entry> entries;
 	uint64_t seq = 0;
 	uint8_t cur_port = 0; // port of the message being added
-	bool track_mode = false, double_module = false;
+	bool track_mode = false, double_module = false, xg_on_resets = false;
 
 	void ClearChannels(int from, int to)
 	{
