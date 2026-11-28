@@ -68,5 +68,6 @@ Build-time options (CMake cache variable or compiler define):
 | `NUKED_SC55_ONLY_MODEL=<0..11>` | single-model build: 0 = v1.00, 1 = v1.10, 2 = v1.20, 3 = v1.21, 4 = v2.00, 5 = mk2 v1.01, 6 = SC-88 Pro, 7 = SC-8850, 8 = SC-88, 9 = SC-8820, 10 = MT-32 / CM-32L, 11 = SC-55 on 88emu (development variant, issue #142) |
 | `NUKED_SC55_DEVICE_55E` | with `NUKED_SC55_ENGINE_88PRO`: the SC-55 / SC-55mk2 on the 88emu SC-55 board instead of the Nuked core (see [Models](models.md#sc-55-engine-88emu-development-variant)) |
 | `NUKED_SC55_ENGINE_88PRO` | use the 88emu engine |
+| `NUKED_SC55_MULTI` | with `NUKED_SC55_ENGINE_88PRO`: all six 88emu models in one binary, chosen at run time by the plug-in ID (development state of issue #142, no embedded ROMs yet; see [Models](models.md#run-time-model-88emu-builds)) |
 | `NUKED_SC55_EMBED_ROMS` | embedded ROMs (with a source from `tools/gen_embedded_roms.py`) |
 | `NUKED_SC55_DISPLAY_NAME`, `NUKED_SC55_VST2_NAME`, `NUKED_SC55_VST2_ID` | names and VST2 unique ID |

@@ -1,5 +1,5 @@
 // Emu SC-88 Poly / Emu SC-88 Pro Poly - front panel (included by editor_win32.cpp in
-// NUKED_SC55_DEVICE_88 and NUKED_SC55_DEVICE_88PRO builds, after editor_sc88.inc).
+// 88emu builds, after editor_sc88.inc; used for the SC-88 and the SC-88 Pro).
 //
 // Background: the 88emu SC-88 / SC-88 Pro panel art (The Usual Suspects, GPLv3), prepared at
 // build time by tools/make_sc88orig_panel.py (918x280, branding replaced, playlist -> VOICES,
@@ -27,13 +27,10 @@ constexpr DWORD E88O_MIN_HOLD_MS = 80; // a short click still reaches the panel 
 constexpr int S88O_MODE = 0, S88O_PART = 16, S88O_PREVIEW = 20, S88O_PLAIN = 22, S88O_ROCKER = 26,
               S88O_SELECT_LED = 66, S88O_EDIT_LED = 72, S88O_KNOB = 74, S88O_EFX_GREEN = 105,
               S88O_EFX_AMBER = 106, S88O_COUNT = 107;
-#ifdef NUKED_SC55_DEVICE_88PRO
 // SC-88 Pro switches handled by the plugin itself (pressed tint only, not given to unit 0):
-// SC-88 MAP, SC-55 MAP, MUTE, PREVIEW
-constexpr uint32_t E88O_PLUGIN_BITS = (1u << 1) | (1u << 2) | (1u << 5) | (1u << E88O_BIT_PREVIEW);
-#else
-constexpr uint32_t E88O_PLUGIN_BITS = 0;
-#endif
+// SC-88 MAP, SC-55 MAP, MUTE, PREVIEW. The SC-88 gives every switch to the firmware.
+constexpr uint32_t E88O_PRO_PLUGIN_BITS = (1u << 1) | (1u << 2) | (1u << 5) | (1u << E88O_BIT_PREVIEW);
+inline uint32_t E88oPluginBits(const NukedSc55& p) { return p.Is88Pro() ? E88O_PRO_PLUGIN_BITS : 0u; }
 
 // Panel switches: box (dp, player skin), 88emu SC-88 button bit, lamp bit (-1 = none),
 // shape (0 = round, 1 = rocker half / plain key), first sprite (normal; +1 pressed)
@@ -185,32 +182,30 @@ void Draw88o(Editor& e, HDC dc)
 
     // Switches and lamps as the firmware lights them, darker while held
     uint32_t leds = p.PanelLeds();
-#ifdef NUKED_SC55_DEVICE_88PRO
-    {   // lamps of the plugin's own switches: MUTE of the selected part, the active tone map
+    if (p.Is88Pro()) { // lamps of the plugin's own switches: MUTE of the selected part, the active tone map
         const int tm = p.tone_map.load();
         leds &= ~0x0eu;
         if ((p.mute_mask.load() >> e.part) & 1u) leds |= 1u << 1;
         if (tm == 0) leds |= 1u << 2;
         if (tm == 1) leds |= 1u << 3;
     }
-#endif
     for (const auto& b : E88O_BTNS) {
         const bool held = ((e.held85 | e.latch85) >> b.bit) & 1u;
         const int lit   = (b.led >= 0 && ((leds >> b.led) & 1u)) ? 2 : 0;
         Blend88o(dc, b.sprite + lit + (held ? 1 : 0));
     }
     for (int i = 0; i < 3; ++i) Blend88o(dc, S88O_SELECT_LED + 2 * i + ((leds >> (4 + i)) & 1u));
-#ifdef NUKED_SC55_DEVICE_88PRO
-    // EFX lamp: bit 7 green, bit 8 red, both = amber (like the player)
-    switch ((leds >> 7) & 3u) {
-    case 1: Blend88o(dc, S88O_EFX_GREEN); break;
-    case 2: Blend88o(dc, S88O_EDIT_LED + 1); break;
-    case 3: Blend88o(dc, S88O_EFX_AMBER); break;
-    default: Blend88o(dc, S88O_EDIT_LED); break;
+    if (p.Is88Pro()) {
+        // EFX lamp: bit 7 green, bit 8 red, both = amber (like the player)
+        switch ((leds >> 7) & 3u) {
+        case 1: Blend88o(dc, S88O_EFX_GREEN); break;
+        case 2: Blend88o(dc, S88O_EDIT_LED + 1); break;
+        case 3: Blend88o(dc, S88O_EFX_AMBER); break;
+        default: Blend88o(dc, S88O_EDIT_LED); break;
+        }
+    } else {
+        Blend88o(dc, S88O_EDIT_LED + ((leds >> 7) & 1u));
     }
-#else
-    Blend88o(dc, S88O_EDIT_LED + ((leds >> 7) & 1u));
-#endif
     const float gain = p.gain_db.load();
     Blend88o(dc, S88O_KNOB + GainKnobFrame(gain));
     {   // GAIN readout under the knob
@@ -228,14 +223,14 @@ void Draw88o(Editor& e, HDC dc)
 bool Mouse88o(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     NukedSc55& p = *e.plugin;
-    const auto send = [&] { p.ui_panel_buttons = (e.held85 | e.latch85) & ~E88O_PLUGIN_BITS; };
+    const uint32_t plugin_bits = E88oPluginBits(p);
+    const auto send = [&] { p.ui_panel_buttons = (e.held85 | e.latch85) & ~plugin_bits; };
     switch (msg) {
     case WM_LBUTTONDOWN:
     case WM_LBUTTONDBLCLK: {
         const int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
         const int h = Hit88o(x, y);
-#ifdef NUKED_SC55_DEVICE_88PRO
-        if (h >= 1 && h <= E88O_NBTN && ((E88O_PLUGIN_BITS >> E88O_BTNS[h - 1].bit) & 1u)) {
+        if (h >= 1 && h <= E88O_NBTN && ((plugin_bits >> E88O_BTNS[h - 1].bit) & 1u)) {
             switch (E88O_BTNS[h - 1].bit) {
             case 2: // SC-55 MAP: toggles SC-55 <-> SC-88 Pro like the hardware
             case 1: { // SC-88 MAP: toggles SC-88 <-> SC-88 Pro
@@ -254,7 +249,6 @@ bool Mouse88o(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 break;
             }
         }
-#endif
         if (h >= 1 && h <= E88O_NBTN) {
             // a button still held only for the minimum time is released by the new press
             e.held85 = (e.release85 ? 0u : e.held85) | 1u << E88O_BTNS[h - 1].bit;
@@ -280,7 +274,7 @@ bool Mouse88o(Editor& e, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     }
     case WM_RBUTTONDOWN: { // right click: hold the switch until the next left-click switch (key combinations)
         const int h = Hit88o((short)LOWORD(lp), (short)HIWORD(lp));
-        if (h >= 1 && h <= E88O_NBTN && !((E88O_PLUGIN_BITS >> E88O_BTNS[h - 1].bit) & 1u)) {
+        if (h >= 1 && h <= E88O_NBTN && !((plugin_bits >> E88O_BTNS[h - 1].bit) & 1u)) {
             e.latch85 ^= 1u << E88O_BTNS[h - 1].bit;
             send();
         }

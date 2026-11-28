@@ -44,6 +44,8 @@ public:
 	// Packing: fill the lowest instance first (lets upper ones go idle and
 	// sleep); otherwise spread evenly.
 	void SetPacking(bool on) { packing = on; }
+	// SC-88 Pro: XG System On initialises the module like a GS Reset
+	void SetXgOnResets(bool on) { xg_on_resets = on; }
 	// Called when a note fits into no awake instance; should wake one
 	// instance (via SetAwake) and return true, or return false.
 	void SetWakeHandler(std::function<bool()> fn) { wake_handler = std::move(fn); }
@@ -203,7 +205,7 @@ private:
 	std::array<int, NumChannels> pinned{};
 	std::array<bool, NumChannels> mono{}, portamento{};
 	std::array<int, NumChannels> drum_home{};
-	bool track_mode = false, double_module = false;
+	bool track_mode = false, double_module = false, xg_on_resets = false;
 
 	// GS part state (part index 0..15 = part A01..A16, 16..31 = B01..B16);
 	// a part receives on its own port
@@ -350,15 +352,13 @@ private:
 			else Reset();
 			return;
 		}
-#ifdef NUKED_SC55_DEVICE_88PRO
 		// XG System On: the SC-88 Pro switches to its XG fallback mode and initialises like after a GS Reset
-		if (m.size() >= 9 && m[0] == 0xf0 && m[1] == 0x43 && (m[2] & 0xf0) == 0x10 && m[3] == 0x4c &&
+		if (xg_on_resets && m.size() >= 9 && m[0] == 0xf0 && m[1] == 0x43 && (m[2] & 0xf0) == 0x10 && m[3] == 0x4c &&
 		    m[4] == 0x00 && m[5] == 0x00 && m[6] == 0x7e && m[7] == 0x00) {
 			if (double_module) ResetPort(port);
 			else Reset();
 			return;
 		}
-#endif
 		// Roland GS DT1: F0 41 dev 42 12 aa bb cc data... sum F7
 		if (m.size() < 10 || m[0] != 0xf0 || m[1] != 0x41 || m[3] != 0x42 ||
 		    m[4] != 0x12)

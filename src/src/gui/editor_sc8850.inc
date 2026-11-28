@@ -1,5 +1,5 @@
 // Emu SC-8850 Poly - front panel (included by editor_win32.cpp in
-// NUKED_SC55_DEVICE_8850 builds, after editor_sc88.inc).
+// 88emu builds, after editor_sc88.inc; used for the SC-8850 model).
 //
 // Background: the 88emu SC-8850 panel art (The Usual Suspects, GPLv3), prepared
 // at build time by tools/make_sc8850_panel.py (918x280, branding replaced,

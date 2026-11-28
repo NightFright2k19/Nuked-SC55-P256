@@ -15,7 +15,9 @@
 constexpr auto NumPlugins = 6;
 
 // Product family in the plugin names (each build only contains its own family name)
-#if defined(NUKED_SC55_DEVICE_8850)
+#if defined(NUKED_SC55_MULTI)
+#define NUKED_PLUGIN_FAMILY "Emu SC Multi P256"
+#elif defined(NUKED_SC55_DEVICE_8850)
 #define NUKED_PLUGIN_FAMILY "Emu SC-8850 P256"
 #elif defined(NUKED_SC55_DEVICE_8820)
 #define NUKED_PLUGIN_FAMILY "Emu SC-8820 P256"
@@ -191,12 +193,13 @@ static const clap_plugin_descriptor_t plugin_descriptor_sc55e = {
 static const clap_plugin_note_ports_t extension_note_ports = {
         .count = [](const clap_plugin_t* plugin, bool is_input) -> uint32_t {
 	        // SC-88 Pro: MIDI IN A (parts A01-A16) and MIDI IN B (B01-B16); SC-8850: IN A..D
-	        return is_input ? NukedSc55::kNumPorts : 0;
+	        return is_input ? static_cast<uint32_t>(static_cast<NukedSc55*>(plugin->plugin_data)->NumPorts()) : 0;
         },
 
         .get = [](const clap_plugin_t* plugin, uint32_t index, bool is_input,
                   clap_note_port_info_t* info) -> bool {
-	        if (!is_input || index >= NukedSc55::kNumPorts) {
+	        const int ports = static_cast<NukedSc55*>(plugin->plugin_data)->NumPorts();
+	        if (!is_input || index >= static_cast<uint32_t>(ports)) {
 		        return false;
 	        }
 
@@ -207,7 +210,7 @@ static const clap_plugin_note_ports_t extension_note_ports = {
 	        info->supported_dialects = CLAP_NOTE_DIALECT_MIDI;
 	        info->preferred_dialect  = CLAP_NOTE_DIALECT_MIDI;
 
-	        if (NukedSc55::kNumPorts > 1) {
+	        if (ports > 1) {
 		        snprintf(info->name, sizeof(info->name), "MIDI IN %c", static_cast<char>('A' + index));
 	        } else {
 		        snprintf(info->name, sizeof(info->name), "%s", "Note Port");
@@ -812,6 +815,8 @@ static const clap_plugin_factory_t plugin_factory = {
         .get_plugin_count = [](const clap_plugin_factory* factory) -> uint32_t {
 #ifdef NUKED_SC55_ONLY_MODEL
 	        return 1;
+#elif defined(NUKED_SC55_MULTI)
+	        return 6; // the 88emu models 6..11 (development build, issue #142)
 #else
 	        return NumPlugins;
 #endif
@@ -825,7 +830,11 @@ static const clap_plugin_factory_t plugin_factory = {
 		        return nullptr;
 	        }
 	        index = NUKED_SC55_ONLY_MODEL;
-#ifdef NUKED_SC55_DISPLAY_NAME
+#elif defined(NUKED_SC55_MULTI)
+	        if (index >= 6) return nullptr;
+	        index += 6;
+#endif
+#if defined(NUKED_SC55_ONLY_MODEL) && defined(NUKED_SC55_DISPLAY_NAME)
 	        {
 		        // Single-model build with a custom display name. Built once, thread-safe: the
 		        // factory may be asked from several threads at the same time (CLAP requirement).
@@ -853,7 +862,6 @@ static const clap_plugin_factory_t plugin_factory = {
 		        }();
 		        return &renamed;
 	        }
-#endif
 #endif
 	        if (index == 0) {
 		        return &plugin_descriptor_sc55_v1_00;
@@ -902,6 +910,13 @@ static const clap_plugin_factory_t plugin_factory = {
 	        if (strcmp(plugin_id,
 	                   factory->get_plugin_descriptor(factory, 0)->id) != 0) {
 		        return nullptr;
+	        }
+#elif defined(NUKED_SC55_MULTI)
+	        {   // only the listed (88emu) models
+		        bool listed = false;
+		        for (uint32_t i = 0; i < factory->get_plugin_count(factory); ++i)
+			        listed |= strcmp(plugin_id, factory->get_plugin_descriptor(factory, i)->id) == 0;
+		        if (!listed) return nullptr;
 	        }
 #endif
 	        NukedSc55* the_plugin = nullptr;
